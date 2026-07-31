@@ -7,11 +7,11 @@ export const ALL_ROLES: Role[] = ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARI
 
 export const MODULE_PERMISSIONS = {
   dashboard: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO', 'CLIENTE'],
-  sped: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA'],
-  icms: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA'],
-  difal: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA'],
-  conciliacao: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA'],
-  auditorRtc: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA'],
+  sped: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  icms: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  difal: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  conciliacao: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  auditorRtc: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;
