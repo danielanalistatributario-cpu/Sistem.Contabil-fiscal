@@ -1,0 +1,376 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Perfis de acesso possíveis (não usamos "enum" do Prisma aqui porque o
+// conector SQLite não suporta enums nativos; a validação dos valores
+// permitidos é feita em código, em src/lib/permissions.ts).
+// Valores válidos: ADMINISTRADOR | GESTOR | ANALISTA | USUARIO | CLIENTE
+
+model User {
+  id           String          @id @default(cuid())
+  name         String
+  email        String          @unique
+  passwordHash String
+  createdAt    DateTime        @default(now())
+  memberships  Membership[]
+  activityLogs ActivityLog[]
+  resetTokens  PasswordReset[]
+}
+
+model Company {
+  id             String            @id @default(cuid())
+  name           String
+  cnpj           String            @unique
+  ufDestino      String            @default("PA") // UF do estabelecimento, usada como destino no cálculo do DIFAL
+  aliquotaInterna Float            @default(0.19) // alíquota interna de ICMS do estado (ufDestino)
+  createdAt      DateTime          @default(now())
+  memberships    Membership[]
+  spedFiles      SpedFile[]
+  icmsApuracoes  IcmsApuracao[]
+  difalApuracoes DifalApuracao[]
+  conciliacoes   ConciliacaoApuracao[]
+  conciliacoesBancarias ConciliacaoBancariaApuracao[]
+  auditoriasRtc  AuditorRtcApuracao[]
+  activityLog    ActivityLog[]
+}
+
+// Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String
+  role      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SpedFile {
+  id          String   @id @default(cuid())
+  companyId   String
+  fileName    String
+  competencia String?
+  totalLinhas Int
+  blocksJson  String // resumo por bloco/registro em JSON
+  uploadedAt  DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Uma "apuração" é o resultado de processar um período (mês) do ICMS
+// Antecipado Especial: cruza o relatório de notas de entrada com o relatório
+// de pagamentos SEFA do mês, e guarda os totais + cada nota calculada.
+model IcmsApuracao {
+  id                   String            @id @default(cuid())
+  companyId            String
+  periodo              String // ex: "05/2026", texto livre informado pelo usuário
+  semPagamento         Boolean           @default(false)
+  totalNF              Int
+  qtdPagas             Int
+  qtdPendentes         Int
+  valorPago            Float
+  valorPendente        Float
+  itensConsiderados    Int
+  itensDesconsiderados Int
+  qtdSemAliquota       Int
+  divergencias         Int
+  processedAt          DateTime          @default(now())
+  company              Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  notas                IcmsNotaApurada[]
+}
+
+model IcmsNotaApurada {
+  id               String       @id @default(cuid())
+  apuracaoId       String
+  docFiscal        String
+  fornecedor       String?
+  cnpj             String?
+  uf               String?
+  filial           String?
+  produto          String?
+  ncm              String?
+  tes              String?
+  chaveNfe         String?
+  dataEmissao      DateTime?
+  base             Float
+  valor            Float // ICMS Antecipado Especial calculado
+  status           String // PAGO | PENDENTE
+  valorPago        Float?
+  dataPagamento    DateTime?
+  divergencia      Float?
+  itensSemAliquota Int          @default(0)
+  apuracao         IcmsApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+}
+
+// Apuração do DIFAL (Diferencial de Alíquota), calculada a partir do
+// relatório de entradas (mesmo layout do relatório "NF-e de Entrada e Saída").
+// Método "por dentro", conforme Convênio ICMS 236/2021 — validado com dados
+// reais fornecidos pelo cliente.
+model DifalApuracao {
+  id                String      @id @default(cuid())
+  companyId         String
+  periodo           String // ex: "01/2026"
+  ufDestino         String
+  aliquotaInterna   Float
+  totalItens        Int
+  itensComDifal     Int
+  itensSemDados     Int // itens com dados insuficientes para calcular (inconsistências)
+  valorTotalDifal   Float
+  processedAt       DateTime    @default(now())
+  company           Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  itens             DifalItem[]
+}
+
+model DifalItem {
+  id              String        @id @default(cuid())
+  apuracaoId      String
+  docFiscal       String
+  fornecedor      String?
+  cnpj            String?
+  ufOrigem        String?
+  produto         String?
+  ncm             String?
+  cfop            String?
+  origemCodigo    String?
+  dataEmissao     DateTime?
+  quantidade      Float?
+  valorUnitario   Float?
+  frete           Float?
+  despesaIpi      Float?
+  desconto        Float?
+  valorTotal      Float
+  aliqInterestadual Float?
+  valorOrigem     Float?
+  baseIcms        Float?
+  icmsDestino     Float?
+  valorDifal      Float?
+  inconsistencia  String? // motivo pelo qual não foi possível calcular, se aplicável
+  apuracao        DifalApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+}
+
+// Conciliação Contábil: compara o Balancete (saldos por conta) com o Razão
+// (lançamentos individuais) de um período, identificando divergências,
+// duplicidades e lançamentos fora do padrão — sem uso de IA, só regras
+// determinísticas, por pedido do cliente.
+model ConciliacaoApuracao {
+  id                  String              @id @default(cuid())
+  companyId           String
+  periodo             String // ex: "06/2026"
+  modoAnalise         String   @default("BALANCETE") // BALANCETE (todas as contas) | CONTA_ESPECIFICA (só as contas do Razão importado)
+  contasAnalisadas    String? // lista de contas quando modoAnalise = CONTA_ESPECIFICA, separadas por vírgula
+  totalContas         Int
+  contasConciliadas   Int
+  contasDivergentes   Int
+  valorTotalDiferenca Float
+  processedAt         DateTime            @default(now())
+  company             Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contas              ConciliacaoConta[]
+}
+
+model ConciliacaoConta {
+  id                  String                @id @default(cuid())
+  apuracaoId          String
+  conta               String
+  descricao           String?
+  saldoInicial         Float
+  debitoBalancete     Float
+  creditoBalancete    Float
+  saldoFinalBalancete Float
+  debitoRazao         Float
+  creditoRazao        Float
+  saldoCalculado      Float
+  diferencaSaldo      Float
+  diferencaDebito     Float
+  diferencaCredito    Float
+  status              String // CONCILIADA | PENDENTE
+  semMovimentacao     Boolean               @default(false)
+  mesesSemMovimentacao Int                  @default(0) // períodos consecutivos anteriores também sem movimento
+  extratoSaldoFinal   Float? // saldo final do extrato bancário importado, quando aplicável
+  extratoDiferenca    Float? // diferença entre saldo calculado e saldo do extrato
+  observacoes         String? // texto com os alertas encontrados, separados por ;
+  apuracao            ConciliacaoApuracao   @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+  lancamentos         ConciliacaoLancamento[]
+}
+
+// Guarda apenas os lançamentos do Razão que geraram algum alerta (duplicado,
+// sem histórico, fora do padrão, possivelmente de outra conta, sem
+// correspondência no extrato bancário) — não todos os lançamentos, para
+// manter o banco leve.
+model ConciliacaoLancamento {
+  id           String            @id @default(cuid())
+  contaId      String
+  data         DateTime?
+  historico    String?
+  debito       Float
+  credito      Float
+  tipoAlerta   String // DUPLICADO | SEM_HISTORICO | FORA_DO_PADRAO | OUTRA_CONTA | SALDO_INVERTIDO | SEM_EXTRATO
+  conta        ConciliacaoConta  @relation(fields: [contaId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  companyId String?
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+}
+
+// Conciliação bancária: Razão da conta Banco x Extrato Bancário, com
+// comparação de saldo dia a dia e pareamento inteligente de lançamentos
+// (incluindo agrupamentos N:1 e 1:N) — sem IA, só regras determinísticas.
+model ConciliacaoBancariaApuracao {
+  id                  String                      @id @default(cuid())
+  companyId           String
+  periodo             String
+  contaRazao          String?
+  saldoInicial        Float
+  saldoFinalRazao     Float
+  saldoFinalExtrato   Float
+  diferencaSaldoFinal Float
+  totalRazao          Int
+  totalExtrato        Int
+  totalConciliados    Int
+  totalPendentes      Int
+  valorPendenteRazao  Float
+  valorPendenteExtrato Float
+  processedAt         DateTime                    @default(now())
+  company             Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  dias                ConciliacaoBancariaDia[]
+  itens               ConciliacaoBancariaItem[]
+}
+
+// Comparação de saldo dia a dia — o primeiro ponto de conferência do
+// contador, segundo o cliente.
+model ConciliacaoBancariaDia {
+  id          String                       @id @default(cuid())
+  apuracaoId  String
+  data        DateTime
+  saldoRazao  Float?
+  saldoExtrato Float?
+  diferenca   Float?
+  apuracao    ConciliacaoBancariaApuracao  @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+}
+
+model ConciliacaoBancariaItem {
+  id          String                       @id @default(cuid())
+  apuracaoId  String
+  origem      String // RAZAO | EXTRATO
+  data        DateTime?
+  historico   String?
+  valor       Float
+  status      String // CONCILIADO | CONCILIADO_GRUPO | DIF_COMPETENCIA | PENDENTE
+  grupoRef    String? // liga lançamentos que foram conciliados em grupo (N:1 ou 1:N)
+  duplicadoSuspeito Boolean @default(false)
+  observacao  String?
+  apuracao    ConciliacaoBancariaApuracao  @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+}
+
+// Auditor RTC: valida XMLs de NF-e quanto aos grupos IBS/CBS da Reforma
+// Tributária (NT 2025.002). O XML é processado inteiramente no navegador —
+// só o resultado calculado (não o XML bruto) é enviado para persistência.
+model AuditorRtcApuracao {
+  id                String            @id @default(cuid())
+  companyId         String
+  periodo           String?
+  totalNfes         Int
+  totalItens        Int
+  canceladas        Int
+  denegadas         Int
+  validas           Int
+  comAlertas        Int
+  inconsistentes    Int
+  pctConformidade   Float
+  semIBS            Int
+  semCBS            Int
+  arquivosComErro   Int               @default(0)
+  processedAt       DateTime          @default(now())
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nfes              AuditorRtcNfe[]
+}
+
+model AuditorRtcNfe {
+  id             String              @id @default(cuid())
+  apuracaoId     String
+  fileName       String
+  chave          String?
+  nNF            String?
+  serie          String?
+  dhEmi          String?
+  cnpjEmit       String?
+  xNomeEmit      String?
+  status         String // Autorizada | Cancelada | Denegada | Outro | Sem protocolo
+  statusDetail   String?
+  situacao       String // Válido | Válido com alertas | Inconsistente | Cancelada | Denegada
+  itemCount      Int
+  itensErro      Int      @default(0)
+  itensAlerta    Int      @default(0)
+  itensSemIBS    Int      @default(0)
+  itensSemCBS    Int      @default(0)
+  observacoes    String?
+  nProt          String?
+  synthetic      Boolean  @default(false)
+  apuracao       AuditorRtcApuracao  @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+  itens          AuditorRtcItem[]
+}
+
+model AuditorRtcItem {
+  id            String        @id @default(cuid())
+  nfeId         String
+  nItem         String?
+  xProd         String?
+  cProd         String?
+  ncm           String?
+  cfop          String?
+  tes           String?
+  cClassTrib    String?
+  cst           String?
+  groupType     String?
+  qCom          Float?
+  vUnCom        Float?
+  vProd         Float?
+  vDesc         Float?
+  vFrete        Float?
+  vSeg          Float?
+  vOutro        Float?
+  vBC           Float?
+  pIBSUF        Float?
+  vIBSUF        Float?
+  pIBSMun       Float?
+  vIBSMun       Float?
+  pIBSTotal     Float?
+  vIBS          Float?
+  pCBS          Float?
+  vCBS          Float?
+  hasIBS        Boolean       @default(false)
+  hasCBS        Boolean       @default(false)
+  cstPis        String?
+  pPis          Float?
+  vPis          Float?
+  cstCofins     String?
+  pCofins       Float?
+  vCofins       Float?
+  situacao      String
+  missingLabel  String?
+  alertLabel    String?
+  nfe           AuditorRtcNfe @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+}

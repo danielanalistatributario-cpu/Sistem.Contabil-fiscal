@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+<NFe>
+<infNFe Id="NFe35260612345678000199550010000001231000001238" versao="4.00">
+<ide>
+<cUF>35</cUF>
+<nNF>123</nNF>
+<serie>1</serie>
+<dhEmi>2026-06-10T10:00:00-03:00</dhEmi>
+<tpNF>1</tpNF>
+</ide>
+<emit>
+<CNPJ>12345678000199</CNPJ>
+<xNome>FORT FRUIT HORTIFRUTIGRANJEIROS LTDA</xNome>
+</emit>
+<det nItem="1">
+<prod>
+<cProd>001</cProd>
+<xProd>CAIXA PLASTICA HORTIFRUTI 40L</xProd>
+<NCM>39231000</NCM>
+<CFOP>5102</CFOP>
+<qCom>10.0000</qCom>
+<vUnCom>45.500000</vUnCom>
+<vProd>455.00</vProd>
+<vDesc>0.00</vDesc>
+<vFrete>0.00</vFrete>
+<vSeg>0.00</vSeg>
+<vOutro>0.00</vOutro>
+<infAdProd>TES: 501</infAdProd>
+</prod>
+<imposto>
+<PIS>
+<PISAliq>
+<CST>01</CST>
+<vBC>455.00</vBC>
+<pPIS>1.65</pPIS>
+<vPIS>7.51</vPIS>
+</PISAliq>
+</PIS>
+<COFINS>
+<COFINSAliq>
+<CST>01</CST>
+<vBC>455.00</vBC>
+<pCOFINS>7.60</pCOFINS>
+<vCOFINS>34.58</vCOFINS>
+</COFINSAliq>
+</COFINS>
+<IBSCBS>
+<CST>000</CST>
+<cClassTrib>000001</cClassTrib>
+<gIBSCBS>
+<vBC>455.00</vBC>
+<gIBSUF>
+<pIBSUF>9.4000</pIBSUF>
+<vIBSUF>42.77</vIBSUF>
+</gIBSUF>
+<gIBSMun>
+<pIBSMun>2.6000</pIBSMun>
+<vIBSMun>11.83</vIBSMun>
+</gIBSMun>
+<vIBS>54.60</vIBS>
+<gCBS>
+<pCBS>0.9000</pCBS>
+<vCBS>4.10</vCBS>
+</gCBS>
+</gIBSCBS>
+</IBSCBS>
+</imposto>
+</det>
+</infNFe>
+</NFe>
+<protNFe versao="4.00">
+<infProt>
+<chNFe>35260612345678000199550010000001231000001238</chNFe>
+<dhRecbto>2026-06-10T10:01:00-03:00</dhRecbto>
+<nProt>135260000001234</nProt>
+<cStat>100</cStat>
+<xMotivo>Autorizado o uso da NF-e</xMotivo>
+</infProt>
+</protNFe>
+</nfeProc>

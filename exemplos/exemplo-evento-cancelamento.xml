@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<procEventoNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">
+<evento versao="1.00">
+<infEvento Id="ID1101110352606123456780001995500100000012710000012341">
+<cOrgao>35</cOrgao>
+<chNFe>35260612345678000199550010000001271000001234</chNFe>
+<dhEvento>2026-06-14T11:00:00-03:00</dhEvento>
+<tpEvento>110111</tpEvento>
+<nSeqEvento>1</nSeqEvento>
+<detEvento versao="1.00">
+<descEvento>Cancelamento</descEvento>
+<xJust>Erro de digitacao no valor da nota, nota reemitida</xJust>
+</detEvento>
+</infEvento>
+</evento>
+<retEvento versao="1.00">
+<infEvento>
+<cStat>135</cStat>
+<xMotivo>Evento registrado e vinculado a NF-e</xMotivo>
+<chNFe>35260612345678000199550010000001271000001234</chNFe>
+<tpEvento>110111</tpEvento>
+<nSeqEvento>1</nSeqEvento>
+<dhRegEvento>2026-06-14T11:00:30-03:00</dhRegEvento>
+<nProt>135260000009999</nProt>
+</infEvento>
+</retEvento>
+</procEventoNFe>

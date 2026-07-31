@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+<NFe>
+<infNFe Id="NFe35260612345678000199550010000001241000001245" versao="4.00">
+<ide>
+<cUF>35</cUF>
+<nNF>124</nNF>
+<serie>1</serie>
+<dhEmi>2026-06-11T14:30:00-03:00</dhEmi>
+<tpNF>1</tpNF>
+</ide>
+<emit>
+<CNPJ>12345678000199</CNPJ>
+<xNome>FORT FRUIT HORTIFRUTIGRANJEIROS LTDA</xNome>
+</emit>
+<det nItem="1">
+<prod>
+<cProd>002</cProd>
+<xProd>SACOLA PLASTICA REFORCADA</xProd>
+<NCM>39232190</NCM>
+<CFOP>5102</CFOP>
+<qCom>50.0000</qCom>
+<vUnCom>3.200000</vUnCom>
+<vProd>160.00</vProd>
+<vDesc>0.00</vDesc>
+<vFrete>0.00</vFrete>
+<vSeg>0.00</vSeg>
+<vOutro>0.00</vOutro>
+</prod>
+<imposto>
+<PIS>
+<PISAliq>
+<CST>01</CST>
+<vBC>160.00</vBC>
+<pPIS>1.65</pPIS>
+<vPIS>2.64</vPIS>
+</PISAliq>
+</PIS>
+<COFINS>
+<COFINSAliq>
+<CST>01</CST>
+<vBC>160.00</vBC>
+<pCOFINS>7.60</pCOFINS>
+<vCOFINS>12.16</vCOFINS>
+</COFINSAliq>
+</COFINS>
+<IBSCBS>
+<CST>000</CST>
+<cClassTrib>000001</cClassTrib>
+<gIBSCBS>
+<vBC>160.00</vBC>
+<gIBSUF>
+<pIBSUF>9.4000</pIBSUF>
+<vIBSUF>15.04</vIBSUF>
+</gIBSUF>
+<vIBS>15.04</vIBS>
+<gCBS>
+<pCBS>0.9000</pCBS>
+<vCBS>1.44</vCBS>
+</gCBS>
+</gIBSCBS>
+</IBSCBS>
+</imposto>
+</det>
+<det nItem="2">
+<prod>
+<cProd>003</cProd>
+<xProd>ETIQUETA ADESIVA PRECIFICACAO</xProd>
+<NCM>48211000</NCM>
+<CFOP>5102</CFOP>
+<qCom>20.0000</qCom>
+<vUnCom>8.000000</vUnCom>
+<vProd>160.00</vProd>
+<vDesc>0.00</vDesc>
+<vFrete>0.00</vFrete>
+<vSeg>0.00</vSeg>
+<vOutro>0.00</vOutro>
+</prod>
+<imposto>
+<IBSCBS>
+<CST>000</CST>
+<cClassTrib>000001</cClassTrib>
+<gIBSCBS>
+<vBC>160.00</vBC>
+<gIBSUF>
+<pIBSUF>9.4000</pIBSUF>
+<vIBSUF>15.04</vIBSUF>
+</gIBSUF>
+<gIBSMun>
+<pIBSMun>2.6000</pIBSMun>
+<vIBSMun>4.16</vIBSMun>
+</gIBSMun>
+<vIBS>19.20</vIBS>
+<gCBS>
+<pCBS>0.9000</pCBS>
+<vCBS>50.00</vCBS>
+</gCBS>
+</gIBSCBS>
+</IBSCBS>
+</imposto>
+</det>
+</infNFe>
+</NFe>
+<protNFe versao="4.00">
+<infProt>
+<chNFe>35260612345678000199550010000001241000001245</chNFe>
+<dhRecbto>2026-06-11T14:31:00-03:00</dhRecbto>
+<nProt>135260000001235</nProt>
+<cStat>100</cStat>
+<xMotivo>Autorizado o uso da NF-e</xMotivo>
+</infProt>
+</protNFe>
+</nfeProc>
