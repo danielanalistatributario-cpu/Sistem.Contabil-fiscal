@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   titleCell.value = 'NF-e de Entrada e Saída';
   titleCell.font = { name: 'Courier New', size: 6, color: { argb: 'FFFFFFFF' } };
   titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-  titleCell.alignment = { horizontal: 'center', vertical: 'center' };
+  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
   // Linha 2: cabeçalho, igual ao modelo (fundo azul, fonte branca, Courier New 6pt)
   const headerRow = sheet.getRow(2);
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     cell.value = c.header;
     cell.font = { name: 'Courier New', size: 6, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F81BD' } };
-    cell.alignment = { horizontal: 'center', vertical: 'center' };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
     cell.border = {
       right: { style: 'thin', color: { argb: 'FFB8CCE4' } },
       bottom: { style: 'thin', color: { argb: 'FFB8CCE4' } },

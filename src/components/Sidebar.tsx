@@ -6,13 +6,14 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, Users, Settings,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { Role } from '@/lib/permissions';
 import { canAccess } from '@/lib/permissions';
 
 type NavItem = {
   href: string;
   label: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  icon: LucideIcon;
   moduleKey: Parameters<typeof canAccess>[1];
   accent: string; // tailwind text color class for the icon when active
 };
