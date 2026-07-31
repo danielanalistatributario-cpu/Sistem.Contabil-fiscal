@@ -3,13 +3,13 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Perfis de acesso possíveis (não usamos "enum" do Prisma aqui porque o
-// conector SQLite não suporta enums nativos; a validação dos valores
-// permitidos é feita em código, em src/lib/permissions.ts).
+// Perfis de acesso possíveis (mantido como String em vez de "enum" do Prisma
+// para não exigir migration de dados; a validação dos valores permitidos é
+// feita em código, em src/lib/permissions.ts).
 // Valores válidos: ADMINISTRADOR | GESTOR | ANALISTA | USUARIO | CLIENTE
 
 model User {
