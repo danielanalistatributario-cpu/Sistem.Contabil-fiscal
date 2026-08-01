@@ -39,6 +39,8 @@ model Company {
   conciliacoesBancarias ConciliacaoBancariaApuracao[]
   auditoriasRtc  AuditorRtcApuracao[]
   activityLog    ActivityLog[]
+  perfisProdutos PerfilProduto[]
+  validacoesCadastro ValidacaoCadastroApuracao[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -374,4 +376,58 @@ model AuditorRtcItem {
   missingLabel  String?
   alertLabel    String?
   nfe           AuditorRtcNfe @relation(fields: [nfeId], references: [id], onDelete: Cascade)
+}
+
+// Perfil de Produto: classificação tributária de referência (ex: "Produtos Isentos",
+// "Combustíveis") cadastrada previamente, contendo a lista de códigos de produto
+// que pertencem a ela — usada para auditar o cadastro de produtos da empresa.
+model PerfilProduto {
+  id        String              @id @default(cuid())
+  companyId String
+  nome      String
+  descricao String?
+  createdAt DateTime            @default(now())
+  company   Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  itens     PerfilProdutoItem[]
+
+  @@unique([companyId, nome])
+}
+
+model PerfilProdutoItem {
+  id        String        @id @default(cuid())
+  perfilId  String
+  codigo    String
+  descricao String?
+  perfil    PerfilProduto @relation(fields: [perfilId], references: [id], onDelete: Cascade)
+
+  @@unique([perfilId, codigo])
+}
+
+// Status possíveis de ValidacaoCadastroItem.status:
+// OK | DIVERGENTE | SEM_PERFIL | DUPLICADO
+model ValidacaoCadastroApuracao {
+  id              String                  @id @default(cuid())
+  companyId       String
+  periodo         String?
+  totalItens      Int
+  totalOk         Int
+  totalDivergente Int
+  totalSemPerfil  Int
+  totalDuplicado  Int
+  processedAt     DateTime                @default(now())
+  company         Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  itens           ValidacaoCadastroItem[]
+}
+
+model ValidacaoCadastroItem {
+  id                String                    @id @default(cuid())
+  apuracaoId        String
+  codigo            String
+  descricao         String?
+  perfilAtual       String?
+  perfilEncontrado  String?
+  perfisEncontrados String?
+  status            String
+  observacao        String?
+  apuracao          ValidacaoCadastroApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
 }

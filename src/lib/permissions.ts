@@ -12,6 +12,7 @@ export const MODULE_PERMISSIONS = {
   difal: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   conciliacao: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   auditorRtc: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  validacaoCadastro: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;

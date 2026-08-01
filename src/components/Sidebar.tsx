@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, Users, Settings,
+  LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, PackageSearch, Users, Settings,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from '@/lib/permissions';
@@ -34,6 +34,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/conciliacao', label: 'Conciliação Contábil', icon: BookOpenCheck, moduleKey: 'conciliacao', accent: 'text-pink' },
       { href: '/dashboard/conciliacao/bancaria', label: 'Conciliação Bancária', icon: Landmark, moduleKey: 'conciliacao', accent: 'text-pink' },
       { href: '/dashboard/auditor-rtc', label: 'Auditor RTC (IBS/CBS)', icon: ShieldCheck, moduleKey: 'auditorRtc', accent: 'text-teal' },
+      { href: '/dashboard/validacao-cadastro', label: 'Validação de Cadastro', icon: PackageSearch, moduleKey: 'validacaoCadastro', accent: 'text-ruby' },
     ],
   },
   {
