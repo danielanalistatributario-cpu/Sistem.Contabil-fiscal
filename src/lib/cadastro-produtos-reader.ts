@@ -15,7 +15,7 @@ type CampoDef = { key: string; keywords: string[]; required: boolean };
 const CAMPOS_CADASTRO_PRODUTO: CampoDef[] = [
   { key: 'codigo', keywords: ['codigo do produto', 'cod. produto', 'cod produto', 'codigo', 'sku'], required: true },
   { key: 'descricao', keywords: ['descricao', 'descrição', 'nome do produto', 'produto'], required: true },
-  { key: 'perfilAtual', keywords: ['perfil de produto', 'perfil do produto', 'perfil', 'classificacao tributaria', 'classificacao', 'grupo tributario', 'grupo'], required: true },
+  { key: 'perfilAtual', keywords: ['perfil de produto', 'perfil do produto', 'perfil', 'classificacao tributaria', 'classificacao', 'grupo tributario', 'grupo'], required: false },
 ];
 
 function findHeaderRow(aoa: unknown[][], campos: CampoDef[]): number {

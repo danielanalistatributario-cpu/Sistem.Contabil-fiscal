@@ -44,7 +44,9 @@ export function compararCadastro(itens: ItemCadastro[], perfis: PerfilRef[]): Re
     }
 
     const perfil = encontrados[0].nome;
-    const divergente = normalize(item.perfilAtual) !== normalize(perfil);
+    // Sem perfilAtual declarado na planilha importada, não há o que comparar
+    // — reporta o perfil encontrado no Protheus como OK, sem marcar divergência.
+    const divergente = !!item.perfilAtual && normalize(item.perfilAtual) !== normalize(perfil);
     return {
       codigo: item.codigo,
       descricao: item.descricao ?? null,

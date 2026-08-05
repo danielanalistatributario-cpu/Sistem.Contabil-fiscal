@@ -30,6 +30,7 @@ model Company {
   cnpj           String            @unique
   ufDestino      String            @default("PA") // UF do estabelecimento, usada como destino no cálculo do DIFAL
   aliquotaInterna Float            @default(0.19) // alíquota interna de ICMS do estado (ufDestino)
+  protheusSufixo String?           // sufixo das tabelas desta empresa no Protheus (ex: "140"), valida ^[0-9]{2,4}$
   createdAt      DateTime          @default(now())
   memberships    Membership[]
   spedFiles      SpedFile[]

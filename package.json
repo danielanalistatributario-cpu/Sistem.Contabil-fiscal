@@ -10,30 +10,32 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "next": "14.2.5",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
     "@prisma/client": "5.17.0",
     "bcryptjs": "2.4.3",
-    "jsonwebtoken": "9.0.2",
-    "xlsx": "0.18.5",
-    "pdfkit": "0.15.0",
-    "recharts": "2.12.7",
     "exceljs": "4.4.0",
-    "lucide-react": "0.383.0"
+    "jsonwebtoken": "9.0.2",
+    "lucide-react": "0.383.0",
+    "mssql": "^12.7.0",
+    "next": "14.2.5",
+    "pdfkit": "0.15.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "recharts": "2.12.7",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
-    "typescript": "5.5.4",
-    "@types/node": "20.14.11",
-    "@types/react": "18.3.3",
-    "@types/react-dom": "18.3.0",
     "@types/bcryptjs": "2.4.6",
     "@types/jsonwebtoken": "9.0.6",
+    "@types/mssql": "^12.3.0",
+    "@types/node": "20.14.11",
     "@types/pdfkit": "0.13.4",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "autoprefixer": "10.4.19",
+    "postcss": "8.4.39",
     "prisma": "5.17.0",
     "tailwindcss": "3.4.6",
-    "postcss": "8.4.39",
-    "autoprefixer": "10.4.19",
-    "tsx": "4.16.2"
+    "tsx": "4.16.2",
+    "typescript": "5.5.4"
   }
 }

@@ -5,3 +5,5 @@ dev.db-journal
 .env
 .env.local
 *.log
+tsconfig.tsbuildinfo
+.claude/

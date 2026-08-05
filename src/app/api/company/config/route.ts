@@ -14,8 +14,14 @@ export async function GET() {
   return NextResponse.json({
     ufDestino: company.ufDestino,
     aliquotaInterna: company.aliquotaInterna,
+    protheusSufixo: company.protheusSufixo,
   });
 }
+
+// Sufixo vira nome de tabela numa query SQL (F24${sufixo}), que não pode ser
+// parametrizado como valor — por isso a validação estrita aqui é a única
+// barreira contra SQL injection nesse campo.
+const PROTHEUS_SUFIXO_REGEX = /^[0-9]{2,4}$/;
 
 export async function PATCH(req: NextRequest) {
   const session = await getSession();
@@ -29,6 +35,8 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const ufDestino = String(body?.ufDestino || '').trim().toUpperCase();
   const aliquotaInterna = Number(body?.aliquotaInterna);
+  const protheusSufixoRaw = String(body?.protheusSufixo || '').trim();
+  const protheusSufixo = protheusSufixoRaw === '' ? null : protheusSufixoRaw;
 
   if (ufDestino.length !== 2 || Number.isNaN(aliquotaInterna) || aliquotaInterna <= 0 || aliquotaInterna >= 1) {
     return NextResponse.json(
@@ -36,18 +44,28 @@ export async function PATCH(req: NextRequest) {
       { status: 400 }
     );
   }
+  if (protheusSufixo !== null && !PROTHEUS_SUFIXO_REGEX.test(protheusSufixo)) {
+    return NextResponse.json(
+      { error: 'Sufixo do Protheus inválido — informe só os dígitos do sufixo da tabela (ex: 140).' },
+      { status: 400 }
+    );
+  }
 
   const company = await prisma.company.update({
     where: { id: session.currentCompanyId },
-    data: { ufDestino, aliquotaInterna },
+    data: { ufDestino, aliquotaInterna, protheusSufixo },
   });
 
   await logActivity(
     session.id,
     'ATUALIZOU_CONFIG_FISCAL',
-    `UF destino: ${ufDestino}, alíquota interna: ${(aliquotaInterna * 100).toFixed(2)}%`,
+    `UF destino: ${ufDestino}, alíquota interna: ${(aliquotaInterna * 100).toFixed(2)}%, sufixo Protheus: ${protheusSufixo || '(não configurado)'}`,
     session.currentCompanyId
   );
 
-  return NextResponse.json({ ufDestino: company.ufDestino, aliquotaInterna: company.aliquotaInterna });
+  return NextResponse.json({
+    ufDestino: company.ufDestino,
+    aliquotaInterna: company.aliquotaInterna,
+    protheusSufixo: company.protheusSufixo,
+  });
 }

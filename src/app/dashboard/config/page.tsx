@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 export default function ConfigPage() {
   const [ufDestino, setUfDestino] = useState('');
   const [aliquotaInterna, setAliquotaInterna] = useState('');
+  const [protheusSufixo, setProtheusSufixo] = useState('');
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -17,6 +18,7 @@ export default function ConfigPage() {
       const data = await res.json();
       setUfDestino(data.ufDestino);
       setAliquotaInterna((data.aliquotaInterna * 100).toString());
+      setProtheusSufixo(data.protheusSufixo || '');
     }
     setLoading(false);
   }, []);
@@ -33,7 +35,11 @@ export default function ConfigPage() {
     const res = await fetch('/api/company/config', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ufDestino, aliquotaInterna: parseFloat(aliquotaInterna) / 100 }),
+      body: JSON.stringify({
+        ufDestino,
+        aliquotaInterna: parseFloat(aliquotaInterna) / 100,
+        protheusSufixo,
+      }),
     });
     const data = await res.json();
     setSalvando(false);
@@ -79,6 +85,20 @@ export default function ConfigPage() {
                 className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-24"
                 required
               />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Sufixo da tabela no Protheus (ex: 140)</label>
+              <input
+                value={protheusSufixo}
+                onChange={(e) => setProtheusSufixo(e.target.value.replace(/\D/g, ''))}
+                maxLength={4}
+                placeholder="140"
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-24"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Identifica qual tabela do Protheus pertence a esta empresa (ex: F24140). Usado pela Validação de
+                Cadastro para consultar só os dados desta empresa.
+              </p>
             </div>
             {erro && <p className="text-sm text-red-600">{erro}</p>}
             {msg && <p className="text-sm text-green-700">{msg}</p>}

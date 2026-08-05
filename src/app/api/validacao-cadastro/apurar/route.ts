@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
-import { compararCadastro, type ItemCadastro, type PerfilRef } from '@/lib/validacao-cadastro-rules';
+import { compararCadastro, type ItemCadastro } from '@/lib/validacao-cadastro-rules';
+import { buscarPerfisPorCodigos } from '@/lib/protheus/perfil-produto';
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -21,24 +22,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Envie o cadastro de produtos a ser validado.' }, { status: 400 });
   }
 
-  const perfisCadastrados = await prisma.perfilProduto.findMany({
-    where: { companyId: session.currentCompanyId },
-    include: { itens: { select: { codigo: true } } },
-  });
-
-  if (perfisCadastrados.length === 0) {
+  const company = await prisma.company.findUnique({ where: { id: session.currentCompanyId } });
+  if (!company?.protheusSufixo) {
     return NextResponse.json(
-      { error: 'Nenhum Perfil de Produto cadastrado ainda. Cadastre os perfis antes de validar o cadastro de produtos.' },
+      { error: 'Configure o sufixo do Protheus desta empresa em Configurações antes de validar o cadastro.' },
       { status: 400 }
     );
   }
 
-  const perfis: PerfilRef[] = perfisCadastrados.map((p) => ({
-    nome: p.nome,
-    codigos: new Set(p.itens.map((i) => i.codigo)),
-  }));
+  let perfis, perfisComTodos;
+  try {
+    ({ perfis, perfisComTodos } = await buscarPerfisPorCodigos(
+      itensRaw.map((i) => i.codigo),
+      company.protheusSufixo
+    ));
+  } catch (err) {
+    console.error('Falha ao consultar Perfis de Produto no Protheus:', err);
+    return NextResponse.json(
+      { error: 'Não foi possível consultar os Perfis de Produto no Protheus. Verifique a conexão com o banco.' },
+      { status: 502 }
+    );
+  }
 
-  const resultado = compararCadastro(itensRaw, perfis);
+  const resultado = compararCadastro(itensRaw, perfis).map((item) => {
+    if (item.status !== 'SEM_PERFIL' || perfisComTodos.length === 0) return item;
+    return {
+      ...item,
+      observacao: `${item.observacao ? item.observacao + ' ' : ''}Perfil(is) com regra "TODOS" no Protheus (aplicação genérica, não confirmada): ${perfisComTodos.join(', ')} — verificar manualmente.`,
+    };
+  });
 
   const totais = resultado.reduce(
     (acc, item) => {

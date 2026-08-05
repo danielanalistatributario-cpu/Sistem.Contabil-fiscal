@@ -2,9 +2,11 @@ import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { ROLE_LABELS } from '@/lib/permissions';
 import Link from 'next/link';
+import EmpresaSwitchCard from '@/components/EmpresaSwitchCard';
 import {
   FileSpreadsheet, Calculator, Percent, BookOpenCheck, ArrowUpRight, FileUp,
   LogIn, KeyRound, Building2, UserPlus, ShieldCheck, RefreshCw, Trash2, Settings2, Sparkles,
+  PackageSearch,
 } from 'lucide-react';
 
 export default async function DashboardHome() {
@@ -57,6 +59,7 @@ export default async function DashboardHome() {
     teal: { bg: 'bg-teal/10', text: 'text-teal' },
     pink: { bg: 'bg-pink/10', text: 'text-pink' },
     lime: { bg: 'bg-lime/10', text: 'text-lime' },
+    ruby: { bg: 'bg-ruby/10', text: 'text-ruby' },
   };
 
   const quickActions = [
@@ -64,6 +67,7 @@ export default async function DashboardHome() {
     { href: '/dashboard/icms', label: 'Apurar ICMS Antecipado', icon: Calculator, color: 'accent' },
     { href: '/dashboard/difal', label: 'Calcular DIFAL', icon: Percent, color: 'teal' },
     { href: '/dashboard/conciliacao', label: 'Nova Conciliação', icon: BookOpenCheck, color: 'pink' },
+    { href: '/dashboard/validacao-cadastro/exportar-perfis', label: 'Exportar Perfis do Protheus', icon: PackageSearch, color: 'ruby' },
   ];
 
   const companyName = session.memberships.find((m) => m.companyId === companyId)?.companyName;
@@ -108,6 +112,7 @@ export default async function DashboardHome() {
         <div className="lg:col-span-2 card-surface p-5">
           <h2 className="font-display font-semibold text-brand mb-4 text-sm">Atalhos rápidos</h2>
           <div className="grid grid-cols-2 gap-3">
+            <EmpresaSwitchCard memberships={session.memberships} currentCompanyId={companyId} />
             {quickActions.map((a) => {
               const Icon = a.icon;
               const colors = colorMap[a.color];
@@ -191,6 +196,7 @@ function formatAction(action: string) {
     EXCLUIU_CONCILIACAO_BANCARIA: 'excluiu uma conciliação bancária',
     PROCESSOU_AUDITORIA_RTC: 'processou uma auditoria RTC (IBS/CBS)',
     EXCLUIU_AUDITORIA_RTC: 'excluiu uma auditoria RTC',
+    EXPORTOU_PERFIS_PROTHEUS: 'exportou os Perfis de Produto do Protheus',
     ADICIONOU_USUARIO: 'adicionou um usuário',
     ALTEROU_PERFIL_USUARIO: 'alterou o perfil de um usuário',
     REMOVEU_ACESSO_USUARIO: 'removeu o acesso de um usuário',

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { History, Settings2 } from 'lucide-react';
+import { History, PackageSearch } from 'lucide-react';
 import { ImportHero } from '@/components/ImportHero';
 import * as XLSX from 'xlsx';
 import { lerCadastroProdutos } from '@/lib/cadastro-produtos-reader';
@@ -65,21 +65,10 @@ function ValidacaoCadastroInner() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [apuracao, setApuracao] = useState<ApuracaoDB | null>(null);
-  const [temPerfis, setTemPerfis] = useState<boolean | null>(null);
   const [filtro, setFiltro] = useState<'TODOS' | StatusItem>('TODOS');
   const [perfilSelecionado, setPerfilSelecionado] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    (async () => {
-      const res = await fetch('/api/validacao-cadastro/perfis');
-      if (res.ok) {
-        const data = await res.json();
-        setTemPerfis((data.perfis || []).length > 0);
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     if (!apuracaoIdParam) return;
@@ -191,21 +180,21 @@ function ValidacaoCadastroInner() {
         <ImportHero
           eyebrow="Auditoria de cadastro · Perfis de Produtos"
           titleParts={['Validação de', { text: 'Cadastro', accent: true }, 'de Produtos']}
-          description="Importe o cadastro de produtos da empresa e o sistema confronta automaticamente cada item com os Perfis de Produtos cadastrados, apontando divergências, produtos sem perfil e códigos duplicados entre perfis."
-          badges={['Comparação por código do produto', 'Detecta classificação incorreta']}
+          description="Importe o cadastro de produtos da empresa e o sistema consulta em tempo real o Perfil de Produto de cada item direto no Protheus, apontando divergências, produtos sem perfil e produtos vinculados a mais de um perfil."
+          badges={['Consulta ao vivo no Protheus', 'Detecta classificação incorreta']}
         />
       ) : (
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-display font-semibold text-brand">Validação de Cadastro de Produtos</h1>
             <p className="text-gray-500 text-sm mt-1">
-              Auditoria do cadastro de produtos contra os Perfis de Produtos cadastrados.
+              Auditoria do cadastro de produtos contra os Perfis de Produtos do Protheus (consulta ao vivo).
             </p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
-            <Link href="/dashboard/validacao-cadastro/perfis" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
-              <Settings2 size={15} />
-              Perfis de Produtos
+            <Link href="/dashboard/validacao-cadastro/exportar-perfis" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+              <PackageSearch size={15} />
+              Exportar Perfis
             </Link>
             <Link href="/dashboard/validacao-cadastro/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <History size={15} />
@@ -220,9 +209,9 @@ function ValidacaoCadastroInner() {
 
       {!apuracao && (
         <div className="flex justify-end gap-4">
-          <Link href="/dashboard/validacao-cadastro/perfis" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
-            <Settings2 size={15} />
-            Gerenciar Perfis de Produtos
+          <Link href="/dashboard/validacao-cadastro/exportar-perfis" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+            <PackageSearch size={15} />
+            Exportar Perfis do Protheus
           </Link>
           <Link href="/dashboard/validacao-cadastro/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
             <History size={15} />
@@ -231,23 +220,13 @@ function ValidacaoCadastroInner() {
         </div>
       )}
 
-      {temPerfis === false && !apuracao && (
-        <div className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
-          Nenhum Perfil de Produto cadastrado ainda. Cadastre ao menos um perfil em{' '}
-          <Link href="/dashboard/validacao-cadastro/perfis" className="underline font-medium">
-            Perfis de Produtos
-          </Link>{' '}
-          antes de validar o cadastro.
-        </div>
-      )}
-
       {erro && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erro}</p>}
 
       {!apuracao && (
         <div className="card-surface p-5 space-y-3">
           <p className="text-xs text-gray-500">
-            Envie o cadastro de produtos da empresa (Excel/CSV) contendo, no mínimo, as colunas Código, Descrição e
-            Perfil/Classificação atual usada no ERP.
+            Envie o cadastro de produtos da empresa (Excel/CSV) contendo, no mínimo, as colunas Código e Descrição.
+            O Perfil de Produto de cada item é consultado automaticamente no Protheus.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <input
@@ -266,7 +245,7 @@ function ValidacaoCadastroInner() {
             />
             <button
               onClick={handleProcessar}
-              disabled={!file || loading || temPerfis === false}
+              disabled={!file || loading}
               className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {loading ? 'Processando...' : 'Validar Cadastro'}
