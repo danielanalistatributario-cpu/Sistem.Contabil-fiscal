@@ -20,6 +20,12 @@
 //   um campo de valor unitário separado.
 // - "UF da NF" é derivada do código de município (COD_MUN) do participante,
 //   usando os dois primeiros dígitos do código do IBGE.
+// - Documentos sem C170 (comum em NFC-e/modelo 65 escriturada de forma
+//   consolidada, sem detalhamento por item): geram 1 linha por registro C190
+//   (resumo por CST/CFOP) associado ao documento, já que é a única
+//   informação disponível. Quando o documento TEM C170, os C190 dele são
+//   ignorados (são só o resumo analítico dos itens já lançados, senão a
+//   nota seria contada em dobro).
 
 const UF_POR_PREFIXO_IBGE: Record<string, string> = {
   '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
@@ -133,7 +139,7 @@ export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
 
   const rows: RelatorioNFeRow[] = [];
 
-  // estado do documento (C100) atualmente "aberto", enquanto iteramos os C170 filhos
+  // estado do documento (C100) atualmente "aberto", enquanto iteramos os C170/C190 filhos
   let docAtual: {
     indOper: string;
     codPart: string;
@@ -148,6 +154,62 @@ export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
     vlSeg: number;
     vlOutDa: number;
   } | null = null;
+  let docTeveC170 = false;
+  let c190Buffer: { cst: string; cfop: string; aliq: number; vlOpr: number; vlBcIcms: number; vlIcms: number }[] = [];
+
+  // Emite 1 linha por C190 acumulado do documento atual, só quando ele não
+  // teve nenhum C170 (ver nota de premissas no topo do arquivo).
+  function flushC190SemC170() {
+    if (!docAtual || docTeveC170 || c190Buffer.length === 0) return;
+    const participante = participantes[docAtual.codPart];
+    for (const c190 of c190Buffer) {
+      const { baseIsento, baseOutros, baseNaoTrib } = classificarBaseIcms(c190.cst, c190.vlBcIcms || c190.vlOpr);
+      const proporcao = docAtual.vlMerc > 0 ? c190.vlOpr / docAtual.vlMerc : 0;
+      rows.push({
+        filial: cnpjEstabelecimento,
+        notaFiscal: docAtual.numDoc,
+        serieNF: docAtual.ser,
+        modelo: docAtual.codMod,
+        especie: MODELO_LABELS[docAtual.codMod] || docAtual.codMod,
+        itemNF: '',
+        tipoNF: docAtual.indOper === '0' ? 'Entrada' : 'Saída',
+        movto: docAtual.indOper === '0' ? 'Entrada' : 'Saída',
+        emissao: docAtual.dtDoc,
+        data: docAtual.dtES,
+        cnpjCpf: participante ? participante.cnpj || participante.cpf : '',
+        fornecCliente: participante ? participante.nome : '',
+        ufDaNF: participante ? participante.uf : '',
+        produto: '',
+        tipo: '',
+        ncm: '',
+        origem: c190.cst.slice(0, -2) || c190.cst.charAt(0) || '',
+        cfop: c190.cfop,
+        cstIcms: c190.cst.slice(-2),
+        cstPis: '',
+        cstCofins: '',
+        qtde: 0,
+        unitario: 0,
+        total: c190.vlOpr,
+        desconto: 0,
+        frete: docAtual.vlFrt * proporcao,
+        despesa: docAtual.vlOutDa * proporcao,
+        seguro: docAtual.vlSeg * proporcao,
+        baseIcms: c190.vlBcIcms,
+        aliqIcms: c190.aliq,
+        valorIcms: c190.vlIcms,
+        baseIsento,
+        baseOutros,
+        baseNaoTrib,
+        baseCofins: 0,
+        aliqCofins: 0,
+        valorCofins: 0,
+        basePis: 0,
+        aliqPis: 0,
+        valorPis: 0,
+        chaveNF: docAtual.chvNfe,
+      });
+    }
+  }
 
   for (const linhaRaw of linhas) {
     const trimmed = linhaRaw.trim();
@@ -179,6 +241,9 @@ export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
         break;
       }
       case 'C100': {
+        flushC190SemC170();
+        docTeveC170 = false;
+        c190Buffer = [];
         docAtual = {
           indOper: c[1] || '',
           codPart: c[3] || '',
@@ -197,6 +262,7 @@ export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
       }
       case 'C170': {
         if (!docAtual) break;
+        docTeveC170 = true;
         const numItem = c[1] || '';
         const codItem = c[2] || '';
         const qtd = parseNum(c[4]);
@@ -268,10 +334,23 @@ export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
         });
         break;
       }
+      case 'C190': {
+        if (!docAtual) break;
+        c190Buffer.push({
+          cst: c[1] || '',
+          cfop: c[2] || '',
+          aliq: parseNum(c[3]),
+          vlOpr: parseNum(c[4]),
+          vlBcIcms: parseNum(c[5]),
+          vlIcms: parseNum(c[6]),
+        });
+        break;
+      }
       default:
         break;
     }
   }
+  flushC190SemC170();
 
   return rows;
 }
