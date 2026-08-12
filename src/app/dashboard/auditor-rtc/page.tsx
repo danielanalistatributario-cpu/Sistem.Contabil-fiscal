@@ -244,7 +244,7 @@ function AuditorRtcInner() {
       const rowStatus = tab === 'resumo' ? row.status : row.docStatus;
       if (filtroStatus && rowStatus !== filtroStatus) return false;
       if (!q) return true;
-      const hay = [row.chave, row.nNF, row.cnpjEmit, row.xNomeEmit, row.xProd, row.ncm, row.fileName].filter(Boolean).join(' ').toLowerCase();
+      const hay = [row.chave, row.nNF, row.cnpjEmit, row.xNomeEmit, row.cProd, row.xProd, row.ncm, row.fileName].filter(Boolean).join(' ').toLowerCase();
       return hay.includes(q);
     });
   }, [tab, nfes, items, busca, filtroStatus, filtroSituacao]);
@@ -256,7 +256,7 @@ function AuditorRtcInner() {
   function exportarCSV() {
     const cols = tab === 'resumo'
       ? ['nNF', 'serie', 'chave', 'dhEmi', 'cnpjEmit', 'xNomeEmit', 'status', 'itemCount', 'itensErro', 'itensAlerta', 'itensSemIBS', 'itensSemCBS', 'situacao', 'observacoes']
-      : ['nNF', 'serie', 'chave', 'xNomeEmit', 'xProd', 'ncm', 'cfop', 'tes', 'cClassTrib', 'cst', 'qCom', 'vUnCom', 'vProd', 'vBC', 'pIBSTotal', 'pCBS', 'vIBS', 'vCBS', 'cstPis', 'pPis', 'vPis', 'cstCofins', 'pCofins', 'vCofins', 'situacao', 'missingLabel', 'alertLabel'];
+      : ['nNF', 'serie', 'chave', 'xNomeEmit', 'cProd', 'xProd', 'ncm', 'cfop', 'tes', 'cClassTrib', 'cst', 'qCom', 'vUnCom', 'vProd', 'vBC', 'pIBSTotal', 'pCBS', 'vIBS', 'vCBS', 'cstPis', 'pPis', 'vPis', 'cstCofins', 'pCofins', 'vCofins', 'situacao', 'missingLabel', 'alertLabel'];
     const header = cols.join(';');
     const rows = dadosFiltrados.map((row) => cols.map((c) => `"${String(row[c] ?? '').replace(/"/g, '""')}"`).join(';'));
     const csv = '\uFEFF' + [header, ...rows].join('\r\n');
@@ -498,6 +498,7 @@ function AuditorRtcInner() {
                     ) : (
                       <>
                         <th className="px-3 py-2">NF-e</th>
+                        <th className="px-3 py-2">Código</th>
                         <th className="px-3 py-2">Produto</th>
                         <th className="px-3 py-2">NCM</th>
                         <th className="px-3 py-2">CST</th>
@@ -526,6 +527,7 @@ function AuditorRtcInner() {
                       ) : (
                         <>
                           <td className="px-3 py-1.5">{row.nNF}/{row.serie}</td>
+                          <td className="px-3 py-1.5 font-mono">{row.cProd}</td>
                           <td className="px-3 py-1.5 max-w-[220px] truncate">{row.xProd}</td>
                           <td className="px-3 py-1.5 font-mono">{row.ncm}</td>
                           <td className="px-3 py-1.5 font-mono">{row.cst}</td>
@@ -614,6 +616,7 @@ function DetalheItem({ item }: { item: any }) {
         <span className={`text-[10px] px-2 py-0.5 rounded-full ${SITUACAO_BADGE[item.situacao] || 'bg-gray-100'}`}>{item.situacao}</span>
       </div>
       <dl className="grid grid-cols-[140px_1fr] gap-2 text-xs mt-4">
+        <dt className="text-gray-400">Código do produto</dt><dd className="font-mono">{item.cProd || '—'}</dd>
         <dt className="text-gray-400">NF-e / Série</dt><dd>{item.nNF} / {item.serie}</dd>
         <dt className="text-gray-400">Chave</dt><dd className="font-mono break-all">{item.chave}</dd>
         <dt className="text-gray-400">NCM / CFOP / TES</dt><dd className="font-mono">{item.ncm} / {item.cfop} / {item.tes || '—'}</dd>
