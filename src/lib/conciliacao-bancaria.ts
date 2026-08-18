@@ -13,11 +13,16 @@
 //    o total movimentado no próprio dia, o problema não se propaga.
 // 2. Pareamento de lançamentos: exato (mesma data e valor), por competência
 //    (mesmo valor, data próxima), e por agrupamento — um lançamento de um
-//    lado corresponde à soma de vários do outro lado. O agrupamento tenta
-//    primeiro pelo código de "Documento" do banco (quando a fonte tiver essa
-//    coluna — vários lançamentos do mesmo lote/documento somando um
-//    lançamento do Razão), e só recorre à busca por soma de subconjunto
-//    (meet-in-the-middle, com teto de segurança) quando isso não resolve.
+//    lado corresponde à soma de vários do outro lado. O agrupamento tem 3
+//    fases, da mais confiável pra mais arriscada: (a) por código de
+//    "Documento" do banco, quando a fonte tiver essa coluna; (b) por
+//    fechamento do dia inteiro — quando o total de todos os lançamentos não
+//    pareados do dia (mesma direção: só entrada ou só saída) bate exato dos
+//    dois lados, agrupa tudo de uma vez, sem limite de itens (ex: dezenas de
+//    PIX recebidos batendo com dezenas de baixas de título, sem nenhuma
+//    outra pista em comum além do total do dia fechar); (c) busca por soma
+//    de subconjunto (meet-in-the-middle, com teto de segurança) para o que
+//    sobrar, dentro de uma janela de dias.
 // 3. Lançamentos que sobraram sem par são classificados e, no caso do
 //    extrato, têm a natureza provável sugerida por palavra-chave no
 //    histórico (tarifa, PIX, TED, IOF, juros, etc.).
@@ -117,6 +122,10 @@ function diffDias(a: Date, b: Date): number {
   return Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24);
 }
 
+function fmtDataCurta(d: Date): string {
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
 type PoolItem = {
   idx: number;
   data: Date | null;
@@ -178,12 +187,61 @@ function agruparPorDocumento(alvoPool: PoolItem[], docPool: PoolItem[]): { alvo:
   return achados;
 }
 
-// Fase C2 do agrupamento — busca por soma de subconjunto quando o Documento
-// não resolveu. Usa meet-in-the-middle sobre centavos inteiros (evita deriva
-// de ponto flutuante, e o custo é exponencial só no número de candidatos da
-// janela — não no valor em R$). CAP_JANELA_GRUPO garante que nunca trava,
-// mesmo em arquivos grandes: acima do teto, simplesmente não tenta combinar
-// (os itens ficam como pendentes individuais, revisáveis manualmente).
+// Fase C2 do agrupamento — fechamento do dia inteiro por direção. Quando o
+// total de TODOS os lançamentos ainda não pareados de um dia — só as
+// entradas, ou só as saídas — bate exato dos dois lados, agrupa tudo de uma
+// vez, sem limite de itens. É seguro mesmo sem nenhuma outra pista em comum
+// (nem Documento, nem valor individual) porque a evidência é o total do dia
+// inteiro fechando exato — o mesmo raciocínio que um contador faz na mão ao
+// conferir "todos os PIX recebidos hoje somam o mesmo tanto que todas as
+// baixas de título lançadas hoje", mesmo que a quantidade de lançamentos
+// não bata dos dois lados.
+function agruparPorDiaEDirecao(razaoPool: PoolItem[], extratoPool: PoolItem[]): { grupoRazao: PoolItem[]; grupoExtrato: PoolItem[] }[] {
+  type Baldes = { razaoEntrada: PoolItem[]; razaoSaida: PoolItem[]; extratoEntrada: PoolItem[]; extratoSaida: PoolItem[] };
+  const porDia = new Map<string, Baldes>();
+  const balde = (chave: string): Baldes => {
+    let b = porDia.get(chave);
+    if (!b) {
+      b = { razaoEntrada: [], razaoSaida: [], extratoEntrada: [], extratoSaida: [] };
+      porDia.set(chave, b);
+    }
+    return b;
+  };
+  for (const r of razaoPool) {
+    if (r.matched || !r.data) continue;
+    const b = balde(r.data.toISOString().slice(0, 10));
+    (r.valor > 0 ? b.razaoEntrada : b.razaoSaida).push(r);
+  }
+  for (const e of extratoPool) {
+    if (e.matched || !e.data) continue;
+    const b = balde(e.data.toISOString().slice(0, 10));
+    (e.valor > 0 ? b.extratoEntrada : b.extratoSaida).push(e);
+  }
+
+  const achados: { grupoRazao: PoolItem[]; grupoExtrato: PoolItem[] }[] = [];
+  for (const b of porDia.values()) {
+    for (const [gr, ge] of [
+      [b.razaoEntrada, b.extratoEntrada],
+      [b.razaoSaida, b.extratoSaida],
+    ] as const) {
+      // exige pelo menos 2 de cada lado — pareamento simples de 1:1 já teria
+      // sido resolvido nos passos A/B antes de chegar aqui.
+      if (gr.length < 2 || ge.length < 2) continue;
+      const somaR = gr.reduce((s, i) => s + Math.round(i.valor * 100), 0);
+      const somaE = ge.reduce((s, i) => s + Math.round(i.valor * 100), 0);
+      if (somaR === somaE) achados.push({ grupoRazao: gr, grupoExtrato: ge });
+    }
+  }
+  return achados;
+}
+
+// Fase C3 do agrupamento — busca por soma de subconjunto quando Documento e
+// fechamento do dia não resolveram. Usa meet-in-the-middle sobre centavos
+// inteiros (evita deriva de ponto flutuante, e o custo é exponencial só no
+// número de candidatos da janela — não no valor em R$). CAP_JANELA_GRUPO
+// garante que nunca trava, mesmo em arquivos grandes: acima do teto,
+// simplesmente não tenta combinar (os itens ficam como pendentes
+// individuais, revisáveis manualmente).
 function buscarGrupoRapido(candidatos: PoolItem[], alvoData: Date | null, alvoValor: number): PoolItem[] | null {
   const mesmoSinal = (v: number) => (alvoValor >= 0 ? v > 0 : v < 0);
   const janela = candidatos.filter(
@@ -380,7 +438,22 @@ export function processarConciliacaoBancaria(
     grupo.forEach((g) => definirItem('EXTRATO', g, 'CONCILIADO_GRUPO', ref, `Faz parte de um lote (Documento ${doc}) que soma um lançamento do Razão (${ref}).`));
   }
 
-  // C2: por soma de subconjunto (janela de dias, sem Documento ou quando ele não resolveu)
+  // C2: fechamento do dia inteiro por direção (entrada ou saída) — quando o
+  // total de tudo que sobrou no dia bate exato dos dois lados, mesmo sem
+  // nenhuma outra pista em comum e sem limite de quantidade de itens.
+  for (const { grupoRazao, grupoExtrato } of agruparPorDiaEDirecao(razaoPool, extratoPool)) {
+    if (grupoRazao.some((g) => g.matched) || grupoExtrato.some((g) => g.matched)) continue;
+    grupoContador++;
+    const ref = `G${grupoContador}`;
+    grupoRazao.forEach((g) => (g.matched = true));
+    grupoExtrato.forEach((g) => (g.matched = true));
+    const dataStr = grupoRazao[0].data ? fmtDataCurta(grupoRazao[0].data) : '';
+    const obs = `Fechamento do dia ${dataStr}: total de ${grupoRazao.length} lançamento(s) do Razão bate exato com o total de ${grupoExtrato.length} lançamento(s) do Extrato.`;
+    grupoRazao.forEach((g) => definirItem('RAZAO', g, 'CONCILIADO_GRUPO', ref, obs));
+    grupoExtrato.forEach((g) => definirItem('EXTRATO', g, 'CONCILIADO_GRUPO', ref, obs));
+  }
+
+  // C3: por soma de subconjunto (janela de dias, para o que sobrar)
   for (const r of razaoPool) {
     if (r.matched) continue;
     const grupo = buscarGrupoRapido(extratoPool, r.data, r.valor);
