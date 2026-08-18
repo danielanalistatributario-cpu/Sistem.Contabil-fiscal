@@ -268,16 +268,20 @@ model ConciliacaoBancariaApuracao {
   itens               ConciliacaoBancariaItem[]
 }
 
-// Comparação de saldo dia a dia — o primeiro ponto de conferência do
-// contador, segundo o cliente.
+// Comparação da movimentação diária (total de entrada/saída por dia,
+// Razão x Extrato) — não usa saldo corrente, que é cumulativo e propaga
+// divergência de um dia pendente para todos os dias seguintes.
 model ConciliacaoBancariaDia {
-  id          String                       @id @default(cuid())
-  apuracaoId  String
-  data        DateTime
-  saldoRazao  Float?
-  saldoExtrato Float?
-  diferenca   Float?
-  apuracao    ConciliacaoBancariaApuracao  @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+  id               String                       @id @default(cuid())
+  apuracaoId       String
+  data             DateTime
+  entradaRazao     Float                        @default(0)
+  saidaRazao       Float                        @default(0)
+  entradaExtrato   Float                        @default(0)
+  saidaExtrato     Float                        @default(0)
+  diferencaEntrada Float                        @default(0)
+  diferencaSaida   Float                        @default(0)
+  apuracao         ConciliacaoBancariaApuracao  @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
 }
 
 model ConciliacaoBancariaItem {

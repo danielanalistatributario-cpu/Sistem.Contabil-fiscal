@@ -53,9 +53,12 @@ export async function POST(req: NextRequest) {
       dias: {
         create: resultado.dias.map((d) => ({
           data: d.data,
-          saldoRazao: d.saldoRazao,
-          saldoExtrato: d.saldoExtrato,
-          diferenca: d.diferenca,
+          entradaRazao: d.entradaRazao,
+          saidaRazao: d.saidaRazao,
+          entradaExtrato: d.entradaExtrato,
+          saidaExtrato: d.saidaExtrato,
+          diferencaEntrada: d.diferencaEntrada,
+          diferencaSaida: d.diferencaSaida,
         })),
       },
       itens: {

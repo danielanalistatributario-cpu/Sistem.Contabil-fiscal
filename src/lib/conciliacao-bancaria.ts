@@ -6,7 +6,11 @@
 // 0. (Opcional) Reconhecimento de aplicação financeira automática (ex:
 //    resgate/aplicação diária de um fundo tipo CONTAMAX) — lançamentos do
 //    Razão que normalmente não aparecem detalhados no extrato bancário.
-// 1. Comparação de saldo dia a dia (o primeiro ponto que o contador confere).
+// 1. Comparação da movimentação diária (total de entrada e de saída de cada
+//    dia, Razão x Extrato) — não usa o saldo corrente dia a dia, porque esse
+//    saldo é cumulativo: um único lançamento pendente faz todos os dias
+//    seguintes parecerem divergentes mesmo estando corretos. Comparando só
+//    o total movimentado no próprio dia, o problema não se propaga.
 // 2. Pareamento de lançamentos: exato (mesma data e valor), por competência
 //    (mesmo valor, data próxima), e por agrupamento — um lançamento de um
 //    lado corresponde à soma de vários do outro lado. O agrupamento tenta
@@ -47,9 +51,12 @@ export type ItemConciliado = {
 
 export type DiaComparado = {
   data: Date;
-  saldoRazao: number | null;
-  saldoExtrato: number | null;
-  diferenca: number | null;
+  entradaRazao: number;
+  saidaRazao: number;
+  entradaExtrato: number;
+  saidaExtrato: number;
+  diferencaEntrada: number;
+  diferencaSaida: number;
 };
 
 export type ResultadoConciliacaoBancaria = {
@@ -248,24 +255,48 @@ export function processarConciliacaoBancaria(
   saldoInicialInformado: number | null,
   opcoes?: { incluirAplicacaoAutomatica?: boolean }
 ): ResultadoConciliacaoBancaria {
-  // --- 1. Saldo dia a dia ---
-  const saldoPorDiaRazao = new Map<string, number>();
-  razao.forEach((l) => {
-    if (l.data && l.saldo !== null) saldoPorDiaRazao.set(l.data.toISOString().slice(0, 10), l.saldo);
-  });
-  const saldoPorDiaExtrato = new Map<string, number>();
-  extrato.forEach((l) => {
-    if (l.data && l.saldo !== null) saldoPorDiaExtrato.set(l.data.toISOString().slice(0, 10), l.saldo);
-  });
-  const todasDatas = Array.from(new Set([...saldoPorDiaRazao.keys(), ...saldoPorDiaExtrato.keys()])).sort();
+  // --- 1. Movimentação diária (total de entrada/saída por dia) ---
+  function agruparPorDia(lancamentos: LancamentoConta[]): Map<string, { entrada: number; saida: number }> {
+    const mapa = new Map<string, { entrada: number; saida: number }>();
+    for (const l of lancamentos) {
+      if (!l.data) continue;
+      const chave = l.data.toISOString().slice(0, 10);
+      const atual = mapa.get(chave) ?? { entrada: 0, saida: 0 };
+      if (l.valor > 0) atual.entrada += l.valor;
+      else if (l.valor < 0) atual.saida += l.valor;
+      mapa.set(chave, atual);
+    }
+    return mapa;
+  }
+  // Quando o toggle de aplicação automática está ligado, os lançamentos de
+  // resgate/aplicação (ex: CONTAMAX) também saem da comparação diária — do
+  // contrário a movimentação diária mostraria a mesma divergência que o
+  // reconhecimento automático já resolveu no nível de lançamento.
+  const razaoParaMovimento = opcoes?.incluirAplicacaoAutomatica
+    ? razao.filter((l) => !detectarAplicacaoAutomatica(l.historico))
+    : razao;
+  const movRazao = agruparPorDia(razaoParaMovimento);
+  const movExtrato = agruparPorDia(extrato);
+  const todasDatas = Array.from(new Set([...movRazao.keys(), ...movExtrato.keys()])).sort();
   const dias: DiaComparado[] = todasDatas.map((d) => {
-    const sr = saldoPorDiaRazao.get(d) ?? null;
-    const se = saldoPorDiaExtrato.get(d) ?? null;
-    return { data: new Date(d), saldoRazao: sr, saldoExtrato: se, diferenca: sr !== null && se !== null ? sr - se : null };
+    const r = movRazao.get(d) ?? { entrada: 0, saida: 0 };
+    const e = movExtrato.get(d) ?? { entrada: 0, saida: 0 };
+    return {
+      data: new Date(d),
+      entradaRazao: r.entrada,
+      saidaRazao: r.saida,
+      entradaExtrato: e.entrada,
+      saidaExtrato: e.saida,
+      diferencaEntrada: r.entrada - e.entrada,
+      diferencaSaida: r.saida - e.saida,
+    };
   });
 
-  const saldoFinalRazao = dias.length > 0 ? dias[dias.length - 1].saldoRazao ?? 0 : 0;
-  const saldoFinalExtrato = dias.length > 0 ? dias[dias.length - 1].saldoExtrato ?? 0 : 0;
+  // Saldo final vem direto do último lançamento com saldo informado na fonte
+  // (não da agregação dia a dia) — é uma conferência de fechamento de
+  // período, independente da comparação diária acima.
+  const saldoFinalRazao = [...razao].reverse().find((l) => l.saldo !== null)?.saldo ?? 0;
+  const saldoFinalExtrato = [...extrato].reverse().find((l) => l.saldo !== null)?.saldo ?? 0;
   const saldoInicial = saldoInicialInformado ?? 0;
 
   // --- 2. Pareamento de lançamentos ---

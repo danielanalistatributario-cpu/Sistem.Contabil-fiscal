@@ -20,7 +20,16 @@ type ItemDB = {
   observacao: string | null;
 };
 
-type DiaDB = { id: string; data: string; saldoRazao: number | null; saldoExtrato: number | null; diferenca: number | null };
+type DiaDB = {
+  id: string;
+  data: string;
+  entradaRazao: number;
+  saidaRazao: number;
+  entradaExtrato: number;
+  saidaExtrato: number;
+  diferencaEntrada: number;
+  diferencaSaida: number;
+};
 
 type ApuracaoDB = {
   id: string;
@@ -180,11 +189,14 @@ function ConciliacaoBancariaInner() {
 
     const diasRows = apuracao.dias.map((d) => ({
       Data: fmtDate(d.data),
-      'Saldo Razão': d.saldoRazao,
-      'Saldo Extrato': d.saldoExtrato,
-      Diferença: d.diferenca,
+      'Entrada Razão': d.entradaRazao,
+      'Entrada Extrato': d.entradaExtrato,
+      'Dif. Entrada': d.diferencaEntrada,
+      'Saída Razão': d.saidaRazao,
+      'Saída Extrato': d.saidaExtrato,
+      'Dif. Saída': d.diferencaSaida,
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(diasRows), 'Saldo dia a dia');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(diasRows), 'Movimentação diária');
 
     const itensRows = apuracao.itens.map((i) => ({
       Origem: i.origem === 'RAZAO' ? 'Razão' : 'Extrato',
@@ -222,10 +234,10 @@ function ConciliacaoBancariaInner() {
     <div className="space-y-6">
       {!apuracao ? (
         <ImportHero
-          eyebrow="Razão × Extrato · Saldo dia a dia"
+          eyebrow="Razão × Extrato · Movimentação diária"
           titleParts={['Conciliação', { text: 'Bancária', accent: true }, 'inteligente']}
-          description="Envie o Razão da conta Banco e o Extrato Bancário do mesmo período. O sistema confere o saldo dia a dia, pareia lançamentos (inclusive agrupamentos de vários lançamentos que somam um só do outro lado) e sugere a natureza do que ainda não foi contabilizado."
-          badges={['Saldo dia a dia', 'Agrupamentos N:1 e 1:N', 'Sugestão por palavra-chave']}
+          description="Envie o Razão da conta Banco e o Extrato Bancário do mesmo período. O sistema confere o total de entrada e saída de cada dia, pareia lançamentos (inclusive agrupamentos de vários lançamentos que somam um só do outro lado) e sugere a natureza do que ainda não foi contabilizado."
+          badges={['Total de entrada/saída por dia', 'Agrupamentos N:1 e 1:N', 'Sugestão por palavra-chave']}
         />
       ) : (
         <div className="flex items-center justify-between">
@@ -352,36 +364,50 @@ function ConciliacaoBancariaInner() {
                 onClick={() => setView(v)}
                 className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${view === v ? 'border-brand text-brand' : 'border-transparent text-gray-500'}`}
               >
-                {v === 'diagnostico' ? 'Saldo dia a dia' : v === 'pendentesExtrato' ? `Não contabilizado (${pendentesExtrato.length})` : v === 'pendentesRazao' ? `Não localizado no banco (${pendentesRazao.length})` : 'Todos os lançamentos'}
+                {v === 'diagnostico' ? 'Movimentação diária' : v === 'pendentesExtrato' ? `Não contabilizado (${pendentesExtrato.length})` : v === 'pendentesRazao' ? `Não localizado no banco (${pendentesRazao.length})` : 'Todos os lançamentos'}
               </button>
             ))}
           </div>
 
           {view === 'diagnostico' && (
             <div className="card-surface p-5">
-              <h2 className="font-display font-semibold text-brand mb-1">Saldo dia a dia</h2>
-              <p className="text-xs text-gray-500 mb-4">O primeiro ponto de conferência — dias com diferença precisam de atenção.</p>
+              <h2 className="font-display font-semibold text-brand mb-1">Movimentação diária</h2>
+              <p className="text-xs text-gray-500 mb-4">
+                Total de entrada e saída de cada dia, Razão × Extrato — não usa saldo acumulado, para não propagar a
+                divergência de um dia pendente para os dias seguintes.
+              </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-gray-400 border-b border-gray-100">
                       <th className="py-1.5 pr-3">Data</th>
-                      <th className="py-1.5 pr-3">Saldo Razão</th>
-                      <th className="py-1.5 pr-3">Saldo Extrato</th>
-                      <th className="py-1.5 pr-3">Diferença</th>
+                      <th className="py-1.5 pr-3">Entrada Razão</th>
+                      <th className="py-1.5 pr-3">Entrada Extrato</th>
+                      <th className="py-1.5 pr-3">Dif. Entrada</th>
+                      <th className="py-1.5 pr-3">Saída Razão</th>
+                      <th className="py-1.5 pr-3">Saída Extrato</th>
+                      <th className="py-1.5 pr-3">Dif. Saída</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {apuracao.dias.map((d) => (
-                      <tr key={d.id} className={`border-b border-gray-50 ${d.diferenca !== null && Math.abs(d.diferenca) > 0.01 ? 'bg-ruby/5' : ''}`}>
-                        <td className="py-1.5 pr-3 font-medium">{fmtDate(d.data)}</td>
-                        <td className="py-1.5 pr-3 font-mono">{d.saldoRazao !== null ? fmtBRL(d.saldoRazao) : '—'}</td>
-                        <td className="py-1.5 pr-3 font-mono">{d.saldoExtrato !== null ? fmtBRL(d.saldoExtrato) : '—'}</td>
-                        <td className={`py-1.5 pr-3 font-mono ${d.diferenca !== null && Math.abs(d.diferenca) > 0.01 ? 'text-ruby font-semibold' : 'text-gray-400'}`}>
-                          {d.diferenca !== null ? fmtBRL(d.diferenca) : '—'}
-                        </td>
-                      </tr>
-                    ))}
+                    {apuracao.dias.map((d) => {
+                      const temDivergencia = Math.abs(d.diferencaEntrada) > 0.01 || Math.abs(d.diferencaSaida) > 0.01;
+                      return (
+                        <tr key={d.id} className={`border-b border-gray-50 ${temDivergencia ? 'bg-ruby/5' : ''}`}>
+                          <td className="py-1.5 pr-3 font-medium">{fmtDate(d.data)}</td>
+                          <td className="py-1.5 pr-3 font-mono">{fmtBRL(d.entradaRazao)}</td>
+                          <td className="py-1.5 pr-3 font-mono">{fmtBRL(d.entradaExtrato)}</td>
+                          <td className={`py-1.5 pr-3 font-mono ${Math.abs(d.diferencaEntrada) > 0.01 ? 'text-ruby font-semibold' : 'text-gray-400'}`}>
+                            {fmtBRL(d.diferencaEntrada)}
+                          </td>
+                          <td className="py-1.5 pr-3 font-mono">{fmtBRL(d.saidaRazao)}</td>
+                          <td className="py-1.5 pr-3 font-mono">{fmtBRL(d.saidaExtrato)}</td>
+                          <td className={`py-1.5 pr-3 font-mono ${Math.abs(d.diferencaSaida) > 0.01 ? 'text-ruby font-semibold' : 'text-gray-400'}`}>
+                            {fmtBRL(d.diferencaSaida)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
