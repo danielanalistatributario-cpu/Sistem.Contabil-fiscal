@@ -257,6 +257,11 @@ model ConciliacaoBancariaApuracao {
   totalPendentes      Int
   valorPendenteRazao  Float
   valorPendenteExtrato Float
+  totalEntradaRazao   Float                       @default(0)
+  totalSaidaRazao     Float                       @default(0)
+  totalEntradaExtrato Float                       @default(0)
+  totalSaidaExtrato   Float                       @default(0)
+  aplicacaoAutomaticaIncluida Boolean             @default(false)
   processedAt         DateTime                    @default(now())
   company             Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   dias                ConciliacaoBancariaDia[]
@@ -282,7 +287,7 @@ model ConciliacaoBancariaItem {
   data        DateTime?
   historico   String?
   valor       Float
-  status      String // CONCILIADO | CONCILIADO_GRUPO | DIF_COMPETENCIA | PENDENTE
+  status      String // CONCILIADO | CONCILIADO_GRUPO | DIF_COMPETENCIA | APLICACAO_AUTOMATICA | PENDENTE
   grupoRef    String? // liga lançamentos que foram conciliados em grupo (N:1 ou 1:N)
   duplicadoSuspeito Boolean @default(false)
   observacao  String?

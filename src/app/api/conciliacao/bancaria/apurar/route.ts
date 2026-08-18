@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
   const periodo = String(body?.periodo || '').trim() || '—';
   const contaRazao = body?.contaRazao ? String(body.contaRazao).trim() : null;
   const saldoInicialInformado = body?.saldoInicial !== undefined && body?.saldoInicial !== null ? Number(body.saldoInicial) : null;
+  const incluirAplicacaoAutomatica = body?.incluirAplicacaoAutomatica === true;
   const razaoRaw: (LancamentoConta & { data: string | null })[] = Array.isArray(body?.razao) ? body.razao : [];
   const extratoRaw: (LancamentoConta & { data: string | null })[] = Array.isArray(body?.extrato) ? body.extrato : [];
 
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
   const razao: LancamentoConta[] = razaoRaw.map((r) => ({ ...r, data: r.data ? new Date(r.data) : null }));
   const extrato: LancamentoConta[] = extratoRaw.map((e) => ({ ...e, data: e.data ? new Date(e.data) : null }));
 
-  const resultado = processarConciliacaoBancaria(razao, extrato, saldoInicialInformado);
+  const resultado = processarConciliacaoBancaria(razao, extrato, saldoInicialInformado, { incluirAplicacaoAutomatica });
 
   const apuracao = await prisma.conciliacaoBancariaApuracao.create({
     data: {
@@ -44,6 +45,11 @@ export async function POST(req: NextRequest) {
       totalPendentes: resultado.totais.totalPendentes,
       valorPendenteRazao: resultado.totais.valorPendenteRazao,
       valorPendenteExtrato: resultado.totais.valorPendenteExtrato,
+      totalEntradaRazao: resultado.totais.totalEntradaRazao,
+      totalSaidaRazao: resultado.totais.totalSaidaRazao,
+      totalEntradaExtrato: resultado.totais.totalEntradaExtrato,
+      totalSaidaExtrato: resultado.totais.totalSaidaExtrato,
+      aplicacaoAutomaticaIncluida: incluirAplicacaoAutomatica,
       dias: {
         create: resultado.dias.map((d) => ({
           data: d.data,

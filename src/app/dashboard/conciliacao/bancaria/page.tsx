@@ -14,7 +14,7 @@ type ItemDB = {
   data: string | null;
   historico: string | null;
   valor: number;
-  status: 'CONCILIADO' | 'CONCILIADO_GRUPO' | 'DIF_COMPETENCIA' | 'PENDENTE';
+  status: 'CONCILIADO' | 'CONCILIADO_GRUPO' | 'DIF_COMPETENCIA' | 'APLICACAO_AUTOMATICA' | 'PENDENTE';
   grupoRef: string | null;
   duplicadoSuspeito: boolean;
   observacao: string | null;
@@ -36,6 +36,11 @@ type ApuracaoDB = {
   totalPendentes: number;
   valorPendenteRazao: number;
   valorPendenteExtrato: number;
+  totalEntradaRazao: number;
+  totalSaidaRazao: number;
+  totalEntradaExtrato: number;
+  totalSaidaExtrato: number;
+  aplicacaoAutomaticaIncluida: boolean;
   processedAt: string;
   dias: DiaDB[];
   itens: ItemDB[];
@@ -54,12 +59,14 @@ const STATUS_LABEL: Record<string, string> = {
   CONCILIADO: 'Conciliado',
   CONCILIADO_GRUPO: 'Conciliado (grupo)',
   DIF_COMPETENCIA: 'Diferença de competência',
+  APLICACAO_AUTOMATICA: 'Aplicação automática',
   PENDENTE: 'Pendente',
 };
 const STATUS_COLOR: Record<string, string> = {
   CONCILIADO: 'bg-green-100 text-green-700',
   CONCILIADO_GRUPO: 'bg-teal/10 text-teal',
   DIF_COMPETENCIA: 'bg-amber-100 text-amber-700',
+  APLICACAO_AUTOMATICA: 'bg-blue-100 text-blue-700',
   PENDENTE: 'bg-red-100 text-red-700',
 };
 
@@ -81,6 +88,7 @@ function ConciliacaoBancariaInner() {
   const [periodo, setPeriodo] = useState('');
   const [contaRazao, setContaRazao] = useState('');
   const [saldoInicial, setSaldoInicial] = useState('');
+  const [incluirAplicacaoAutomatica, setIncluirAplicacaoAutomatica] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [apuracao, setApuracao] = useState<ApuracaoDB | null>(null);
@@ -132,6 +140,7 @@ function ConciliacaoBancariaInner() {
           periodo,
           contaRazao: contaRazao || null,
           saldoInicial: saldoInicial ? parseFloat(saldoInicial.replace(',', '.')) : null,
+          incluirAplicacaoAutomatica,
           razao: leituraRazao.rows.map((r) => ({ ...r, data: r.data ? r.data.toISOString() : null })),
           extrato: leituraExtrato.rows.map((e) => ({ ...e, data: e.data ? e.data.toISOString() : null })),
         }),
@@ -158,6 +167,7 @@ function ConciliacaoBancariaInner() {
     setPeriodo('');
     setContaRazao('');
     setSaldoInicial('');
+    setIncluirAplicacaoAutomatica(false);
     setErro(null);
     if (razaoRef.current) razaoRef.current.value = '';
     if (extratoRef.current) extratoRef.current.value = '';
@@ -195,6 +205,10 @@ function ConciliacaoBancariaInner() {
       { Indicador: 'Diferença de saldo final', Valor: apuracao.diferencaSaldoFinal },
       { Indicador: 'Total conciliados', Valor: apuracao.totalConciliados },
       { Indicador: 'Total pendentes', Valor: apuracao.totalPendentes },
+      { Indicador: 'Total entradas (Razão)', Valor: apuracao.totalEntradaRazao },
+      { Indicador: 'Total saídas (Razão)', Valor: apuracao.totalSaidaRazao },
+      { Indicador: 'Total entradas (Extrato)', Valor: apuracao.totalEntradaExtrato },
+      { Indicador: 'Total saídas (Extrato)', Valor: apuracao.totalSaidaExtrato },
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), 'Resumo');
 
@@ -269,6 +283,15 @@ function ConciliacaoBancariaInner() {
               <label className="block text-xs text-gray-500 mb-1">Saldo inicial (opcional)</label>
               <input type="text" placeholder="deixe em branco para usar o do Razão" value={saldoInicial} onChange={(e) => setSaldoInicial(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56" />
             </div>
+            <label className="flex items-center gap-2 text-xs text-gray-600 pb-1.5">
+              <input
+                type="checkbox"
+                checked={incluirAplicacaoAutomatica}
+                onChange={(e) => setIncluirAplicacaoAutomatica(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Incluir aplicação automática (resgates/aplicações que não aparecem no extrato)
+            </label>
             <button
               onClick={handleProcessar}
               disabled={!razaoFile || !extratoFile || loading}
@@ -282,7 +305,7 @@ function ConciliacaoBancariaInner() {
 
       {apuracao && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className={`card-surface p-5 ${Math.abs(apuracao.diferencaSaldoFinal) > 0.01 ? 'border border-ruby/40' : ''}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Landmark size={16} className="text-brand" />
@@ -305,6 +328,19 @@ function ConciliacaoBancariaInner() {
               <p className={`text-2xl font-mono font-semibold mt-1 ${apuracao.totalPendentes > 0 ? 'text-ruby' : 'text-gray-800'}`}>{apuracao.totalPendentes}</p>
               <p className="text-xs text-gray-400 mt-1">
                 Razão {fmtBRL(apuracao.valorPendenteRazao)} · Extrato {fmtBRL(apuracao.valorPendenteExtrato)}
+              </p>
+            </div>
+            <div className="card-surface p-5">
+              <p className="text-[11px] uppercase tracking-wide text-gray-400">Total do período</p>
+              <p className="text-xs text-gray-600 mt-1.5 space-y-0.5">
+                <span className="block">
+                  Razão: <span className="font-mono text-green-600">+{fmtBRL(apuracao.totalEntradaRazao)}</span>{' '}
+                  <span className="font-mono text-ruby">{fmtBRL(apuracao.totalSaidaRazao)}</span>
+                </span>
+                <span className="block">
+                  Extrato: <span className="font-mono text-green-600">+{fmtBRL(apuracao.totalEntradaExtrato)}</span>{' '}
+                  <span className="font-mono text-ruby">{fmtBRL(apuracao.totalSaidaExtrato)}</span>
+                </span>
               </p>
             </div>
           </div>

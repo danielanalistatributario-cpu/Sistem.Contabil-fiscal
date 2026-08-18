@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "ConciliacaoBancariaApuracao" ADD COLUMN     "aplicacaoAutomaticaIncluida" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "totalEntradaExtrato" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "totalEntradaRazao" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "totalSaidaExtrato" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "totalSaidaRazao" DOUBLE PRECISION NOT NULL DEFAULT 0;

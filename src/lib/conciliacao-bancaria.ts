@@ -3,28 +3,36 @@
 // contador no fechamento — sem IA, só regras determinísticas e explicáveis.
 //
 // Etapas (nesta ordem):
+// 0. (Opcional) Reconhecimento de aplicação financeira automática (ex:
+//    resgate/aplicação diária de um fundo tipo CONTAMAX) — lançamentos do
+//    Razão que normalmente não aparecem detalhados no extrato bancário.
 // 1. Comparação de saldo dia a dia (o primeiro ponto que o contador confere).
 // 2. Pareamento de lançamentos: exato (mesma data e valor), por competência
-//    (mesmo valor, data próxima), e por agrupamento (um lançamento de um
-//    lado corresponde à soma de vários do outro lado — ex: uma venda de
-//    R$100 registrada como um lançamento no Razão mas recebida em duas
-//    parcelas de R$50 no extrato).
+//    (mesmo valor, data próxima), e por agrupamento — um lançamento de um
+//    lado corresponde à soma de vários do outro lado. O agrupamento tenta
+//    primeiro pelo código de "Documento" do banco (quando a fonte tiver essa
+//    coluna — vários lançamentos do mesmo lote/documento somando um
+//    lançamento do Razão), e só recorre à busca por soma de subconjunto
+//    (meet-in-the-middle, com teto de segurança) quando isso não resolve.
 // 3. Lançamentos que sobraram sem par são classificados e, no caso do
 //    extrato, têm a natureza provável sugerida por palavra-chave no
 //    histórico (tarifa, PIX, TED, IOF, juros, etc.).
 
+import { normalize } from './icms-rules';
+
 export const TOLERANCIA_VALOR = 0.01;
 const JANELA_DIAS_COMPETENCIA = 3; // diferença de datas aceitável para "mesma competência"
-const TAMANHO_MAX_GRUPO = 4; // máximo de itens somados ao procurar um agrupamento N:1
+const CAP_JANELA_GRUPO = 24; // trava de segurança: nunca busca combinação em janelas maiores que isso (evita travamento)
 
 export type LancamentoConta = {
   data: Date | null;
   historico: string;
   valor: number; // positivo = entrada (aumenta o saldo), negativo = saída
   saldo: number | null; // saldo corrente após o lançamento, se disponível na fonte
+  documento?: string | null; // código de lote/documento do banco, quando a fonte tiver essa coluna (ex: Santander)
 };
 
-export type StatusItem = 'CONCILIADO' | 'CONCILIADO_GRUPO' | 'DIF_COMPETENCIA' | 'PENDENTE';
+export type StatusItem = 'CONCILIADO' | 'CONCILIADO_GRUPO' | 'DIF_COMPETENCIA' | 'APLICACAO_AUTOMATICA' | 'PENDENTE';
 
 export type ItemConciliado = {
   origem: 'RAZAO' | 'EXTRATO';
@@ -58,6 +66,10 @@ export type ResultadoConciliacaoBancaria = {
     totalPendentes: number;
     valorPendenteRazao: number;
     valorPendenteExtrato: number;
+    totalEntradaRazao: number;
+    totalSaidaRazao: number;
+    totalEntradaExtrato: number;
+    totalSaidaExtrato: number;
   };
 };
 
@@ -81,6 +93,19 @@ function sugerirCategoria(historico: string): string | null {
   return null;
 }
 
+// Reconhece lançamentos de resgate/aplicação automática de fundo de
+// investimento (ex: CONTAMAX no Santander, mas o padrão é genérico o
+// suficiente para outros bancos/fundos) — tipicamente uma movimentação
+// interna entre a conta corrente e uma aplicação automática do próprio
+// banco, que não aparece detalhada no extrato (só o rendimento diário
+// aparece, como um lançamento pequeno separado).
+function detectarAplicacaoAutomatica(historico: string): 'RESGATE' | 'APLICACAO' | null {
+  const h = normalize(historico);
+  if (h.startsWith('resgate') && h.includes('automat')) return 'RESGATE';
+  if (h.startsWith('aplicacao')) return 'APLICACAO';
+  return null;
+}
+
 function diffDias(a: Date, b: Date): number {
   return Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24);
 }
@@ -90,6 +115,7 @@ type PoolItem = {
   data: Date | null;
   historico: string;
   valor: number;
+  documento: string | null;
   matched: boolean;
 };
 
@@ -108,31 +134,119 @@ function marcarDuplicados(pool: PoolItem[]): Set<number> {
   return duplicados;
 }
 
-// procura uma combinação de até TAMANHO_MAX_GRUPO itens não pareados, dentro
-// da janela de dias, cuja soma bata com o alvo (tolerância de 1 centavo)
-function buscarGrupo(candidatos: PoolItem[], alvoData: Date | null, alvoValor: number): PoolItem[] | null {
-  const janela = candidatos.filter(
-    (c) => !c.matched && (!alvoData || !c.data || diffDias(alvoData, c.data) <= JANELA_DIAS_COMPETENCIA)
-  );
-  if (janela.length < 2) return null;
-
-  function combinar(inicio: number, atuais: PoolItem[], soma: number): PoolItem[] | null {
-    if (atuais.length > 1 && Math.abs(soma - alvoValor) < TOLERANCIA_VALOR) return atuais;
-    if (atuais.length >= TAMANHO_MAX_GRUPO) return null;
-    for (let i = inicio; i < janela.length; i++) {
-      const encontrado = combinar(i + 1, [...atuais, janela[i]], soma + janela[i].valor);
-      if (encontrado) return encontrado;
-    }
-    return null;
+// Fase C1 do agrupamento — por código de "Documento" do banco (determinístico,
+// ~O(n)): vários lançamentos de um lado que compartilham o mesmo Documento
+// (ex: um lote de boletos pagos juntos) e cuja soma bate com um lançamento
+// ainda não pareado do outro lado. Só é útil quando a fonte tem essa coluna
+// (hoje: Extrato); quando não tem, simplesmente não encontra nada e a
+// Fase C2 assume sozinha, como já acontecia antes.
+function agruparPorDocumento(alvoPool: PoolItem[], docPool: PoolItem[]): { alvo: PoolItem; grupo: PoolItem[] }[] {
+  const buckets = new Map<string, PoolItem[]>();
+  for (const item of docPool) {
+    if (item.matched || !item.documento) continue;
+    const lista = buckets.get(item.documento) ?? [];
+    lista.push(item);
+    buckets.set(item.documento, lista);
   }
 
-  return combinar(0, [], 0);
+  const porValor = new Map<number, PoolItem[]>();
+  for (const item of alvoPool) {
+    if (item.matched) continue;
+    const chave = Math.round(item.valor * 100);
+    const lista = porValor.get(chave) ?? [];
+    lista.push(item);
+    porValor.set(chave, lista);
+  }
+
+  const achados: { alvo: PoolItem; grupo: PoolItem[] }[] = [];
+  for (const itens of buckets.values()) {
+    if (itens.length < 2) continue;
+    const somaCents = itens.reduce((s, i) => s + Math.round(i.valor * 100), 0);
+    const candidatos = (porValor.get(somaCents) ?? []).filter((c) => !c.matched);
+    if (candidatos.length === 0) continue;
+    const dataMediaMs = itens.reduce((s, i) => s + (i.data?.getTime() ?? 0), 0) / itens.length;
+    candidatos.sort((a, b) => Math.abs((a.data?.getTime() ?? 0) - dataMediaMs) - Math.abs((b.data?.getTime() ?? 0) - dataMediaMs));
+    achados.push({ alvo: candidatos[0], grupo: itens });
+  }
+  return achados;
+}
+
+// Fase C2 do agrupamento — busca por soma de subconjunto quando o Documento
+// não resolveu. Usa meet-in-the-middle sobre centavos inteiros (evita deriva
+// de ponto flutuante, e o custo é exponencial só no número de candidatos da
+// janela — não no valor em R$). CAP_JANELA_GRUPO garante que nunca trava,
+// mesmo em arquivos grandes: acima do teto, simplesmente não tenta combinar
+// (os itens ficam como pendentes individuais, revisáveis manualmente).
+function buscarGrupoRapido(candidatos: PoolItem[], alvoData: Date | null, alvoValor: number): PoolItem[] | null {
+  const mesmoSinal = (v: number) => (alvoValor >= 0 ? v > 0 : v < 0);
+  const janela = candidatos.filter(
+    (c) => !c.matched && mesmoSinal(c.valor) && (!alvoData || !c.data || diffDias(alvoData, c.data) <= JANELA_DIAS_COMPETENCIA)
+  );
+  if (janela.length < 2 || janela.length > CAP_JANELA_GRUPO) return null;
+
+  const alvoCents = Math.round(alvoValor * 100);
+  const meio = Math.ceil(janela.length / 2);
+  const esq = janela.slice(0, meio);
+  const dir = janela.slice(meio);
+
+  // Teto de QUALIDADE (distinto do CAP_JANELA_GRUPO, que é só de performance):
+  // quanto maior a janela de candidatos, maior a chance de um subconjunto
+  // grande bater por coincidência com o valor alvo (confirmado na prática:
+  // sem este teto, um resgate de aplicação de R$ 64.673,29 "casou" com 9
+  // lançamentos de extrato completamente não relacionados que somavam o
+  // mesmo valor). Mantém o mesmo limite conservador de 4 pernas que o
+  // algoritmo original já usava, mas agora combinado com busca eficiente.
+  const TAMANHO_MAX_GRUPO_FALLBACK = 4;
+
+  function todasSomas(itens: PoolItem[]): Map<number, { mask: number; bits: number }> {
+    const mapa = new Map<number, { mask: number; bits: number }>();
+    for (let mask = 1; mask < 1 << itens.length; mask++) {
+      let soma = 0;
+      let bits = 0;
+      for (let i = 0; i < itens.length; i++) {
+        if (mask & (1 << i)) {
+          soma += Math.round(itens[i].valor * 100);
+          bits++;
+        }
+      }
+      if (bits > TAMANHO_MAX_GRUPO_FALLBACK) continue;
+      const atual = mapa.get(soma);
+      if (!atual || atual.bits > bits) mapa.set(soma, { mask, bits });
+    }
+    return mapa;
+  }
+  const toItens = (mask: number, itens: PoolItem[]) => itens.filter((_, i) => mask & (1 << i));
+
+  const somasEsq = todasSomas(esq);
+  const somasDir = todasSomas(dir);
+
+  // Entre todas as combinações válidas (dentro do teto de pernas), escolhe a
+  // de menor número de itens — resultado determinístico e o mais provável de
+  // ser o agrupamento real, não uma coincidência.
+  const candidatosValidos: { itens: PoolItem[]; bits: number }[] = [];
+  const considerar = (itens: PoolItem[], bits: number) => {
+    if (bits >= 2 && bits <= TAMANHO_MAX_GRUPO_FALLBACK) candidatosValidos.push({ itens, bits });
+  };
+
+  const soEsq = somasEsq.get(alvoCents);
+  if (soEsq) considerar(toItens(soEsq.mask, esq), soEsq.bits);
+  const soDir = somasDir.get(alvoCents);
+  if (soDir) considerar(toItens(soDir.mask, dir), soDir.bits);
+  for (const [somaE, e] of somasEsq) {
+    const d = somasDir.get(alvoCents - somaE);
+    if (d) considerar([...toItens(e.mask, esq), ...toItens(d.mask, dir)], e.bits + d.bits);
+  }
+
+  if (candidatosValidos.length === 0) return null;
+  candidatosValidos.sort((a, b) => a.bits - b.bits);
+  return candidatosValidos[0].itens;
 }
 
 export function processarConciliacaoBancaria(
   razao: LancamentoConta[],
   extrato: LancamentoConta[],
-  saldoInicialInformado: number | null
+  saldoInicialInformado: number | null,
+  opcoes?: { incluirAplicacaoAutomatica?: boolean }
 ): ResultadoConciliacaoBancaria {
   // --- 1. Saldo dia a dia ---
   const saldoPorDiaRazao = new Map<string, number>();
@@ -155,8 +269,8 @@ export function processarConciliacaoBancaria(
   const saldoInicial = saldoInicialInformado ?? 0;
 
   // --- 2. Pareamento de lançamentos ---
-  const razaoPool: PoolItem[] = razao.map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, matched: false }));
-  const extratoPool: PoolItem[] = extrato.map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, matched: false }));
+  const razaoPool: PoolItem[] = razao.map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, documento: l.documento ?? null, matched: false }));
+  const extratoPool: PoolItem[] = extrato.map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, documento: l.documento ?? null, matched: false }));
 
   const duplicadosRazao = marcarDuplicados(razaoPool);
   const duplicadosExtrato = marcarDuplicados(extratoPool);
@@ -176,6 +290,21 @@ export function processarConciliacaoBancaria(
       duplicadoSuspeito,
       observacao,
     });
+  }
+
+  // Passo A0 — reconhecimento de aplicação financeira automática (opcional)
+  if (opcoes?.incluirAplicacaoAutomatica) {
+    for (const r of razaoPool) {
+      if (r.matched) continue;
+      const tipo = detectarAplicacaoAutomatica(r.historico);
+      if (!tipo) continue;
+      r.matched = true;
+      const obs =
+        tipo === 'RESGATE'
+          ? 'Reconhecido automaticamente como resgate de aplicação financeira automática — movimentação interna que normalmente não aparece detalhada no extrato bancário.'
+          : 'Reconhecido automaticamente como aplicação financeira automática — movimentação interna que normalmente não aparece detalhada no extrato bancário.';
+      definirItem('RAZAO', r, 'APLICACAO_AUTOMATICA', null, obs);
+    }
   }
 
   // Passo A — pareamento exato (mesma data, mesmo valor)
@@ -206,10 +335,24 @@ export function processarConciliacaoBancaria(
     }
   }
 
-  // Passo C — agrupamento N:1 e 1:N (dentro da janela de dias)
+  // Passo C — agrupamento N:1 e 1:N
+  // C1: por Documento do Extrato (determinístico) — resolve lotes de
+  // pagamento que somam um lançamento do Razão.
+  for (const { alvo, grupo } of agruparPorDocumento(razaoPool, extratoPool)) {
+    if (alvo.matched || grupo.some((g) => g.matched)) continue;
+    grupoContador++;
+    const ref = `G${grupoContador}`;
+    alvo.matched = true;
+    grupo.forEach((g) => (g.matched = true));
+    const doc = grupo[0].documento;
+    definirItem('RAZAO', alvo, 'CONCILIADO_GRUPO', ref, `Lançamentos do Extrato com o mesmo Documento (${doc}) somam este lançamento do Razão.`);
+    grupo.forEach((g) => definirItem('EXTRATO', g, 'CONCILIADO_GRUPO', ref, `Faz parte de um lote (Documento ${doc}) que soma um lançamento do Razão (${ref}).`));
+  }
+
+  // C2: por soma de subconjunto (janela de dias, sem Documento ou quando ele não resolveu)
   for (const r of razaoPool) {
     if (r.matched) continue;
-    const grupo = buscarGrupo(extratoPool, r.data, r.valor);
+    const grupo = buscarGrupoRapido(extratoPool, r.data, r.valor);
     if (grupo) {
       grupoContador++;
       const ref = `G${grupoContador}`;
@@ -222,7 +365,7 @@ export function processarConciliacaoBancaria(
   }
   for (const e of extratoPool) {
     if (e.matched) continue;
-    const grupo = buscarGrupo(razaoPool, e.data, e.valor);
+    const grupo = buscarGrupoRapido(razaoPool, e.data, e.valor);
     if (grupo) {
       grupoContador++;
       const ref = `G${grupoContador}`;
@@ -260,10 +403,17 @@ export function processarConciliacaoBancaria(
 
   const itens = Array.from(resultadoItens.values()).sort((a, b) => (a.data && b.data ? a.data.getTime() - b.data.getTime() : 0));
 
-  const totalConciliados = itens.filter((i) => i.status === 'CONCILIADO' || i.status === 'CONCILIADO_GRUPO' || i.status === 'DIF_COMPETENCIA').length;
+  const totalConciliados = itens.filter(
+    (i) => i.status === 'CONCILIADO' || i.status === 'CONCILIADO_GRUPO' || i.status === 'DIF_COMPETENCIA' || i.status === 'APLICACAO_AUTOMATICA'
+  ).length;
   const pendentes = itens.filter((i) => i.status === 'PENDENTE');
   const valorPendenteRazao = pendentes.filter((i) => i.origem === 'RAZAO').reduce((s, i) => s + i.valor, 0);
   const valorPendenteExtrato = pendentes.filter((i) => i.origem === 'EXTRATO').reduce((s, i) => s + i.valor, 0);
+
+  const totalEntradaRazao = razao.filter((l) => l.valor > 0).reduce((s, l) => s + l.valor, 0);
+  const totalSaidaRazao = razao.filter((l) => l.valor < 0).reduce((s, l) => s + l.valor, 0);
+  const totalEntradaExtrato = extrato.filter((l) => l.valor > 0).reduce((s, l) => s + l.valor, 0);
+  const totalSaidaExtrato = extrato.filter((l) => l.valor < 0).reduce((s, l) => s + l.valor, 0);
 
   return {
     saldoInicial,
@@ -279,6 +429,10 @@ export function processarConciliacaoBancaria(
       totalPendentes: pendentes.length,
       valorPendenteRazao,
       valorPendenteExtrato,
+      totalEntradaRazao,
+      totalSaidaRazao,
+      totalEntradaExtrato,
+      totalSaidaExtrato,
     },
   };
 }

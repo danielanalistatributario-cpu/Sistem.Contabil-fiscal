@@ -189,6 +189,23 @@ const CAMPOS_EXTRATO: CampoDef[] = [
   { key: 'credito', keywords: ['credito', 'entrada'], required: false },
 ];
 
+// Alguns extratos (confirmado em exportação real do Santander) guardam
+// Débito/Crédito já com o sinal econômico embutido — Débito como entrada
+// positiva, Crédito como saída já negativa — em vez da convenção padrão de
+// magnitudes positivas (Débito = saída, Crédito = entrada, valor = credito -
+// debito). Detecta isso olhando se algum valor bruto de Débito ou Crédito é
+// negativo: nesse caso as colunas já vêm assinadas e a soma direta
+// (debito + credito) é o valor correto; senão, mantém a convenção padrão.
+function temValoresPreAssinados(aoa: unknown[][], headerRowIdx: number, colDebito: number, colCredito: number): boolean {
+  for (let r = headerRowIdx + 1; r < aoa.length; r++) {
+    const row = aoa[r];
+    if (!row) continue;
+    if (colDebito >= 0 && parseValorNumerico(row[colDebito]) < 0) return true;
+    if (colCredito >= 0 && parseValorNumerico(row[colCredito]) < 0) return true;
+  }
+  return false;
+}
+
 export function lerExtratoBancario(aoa: unknown[][]): { rows: ExtratoRow[]; erro: string | null } {
   const headerRowIdx = findHeaderRow(aoa, CAMPOS_EXTRATO);
   if (headerRowIdx < 0) {
@@ -201,6 +218,7 @@ export function lerExtratoBancario(aoa: unknown[][]): { rows: ExtratoRow[]; erro
   if (colunas['valor'] < 0 && colunas['debito'] < 0 && colunas['credito'] < 0) {
     return { rows: [], erro: 'O Extrato Bancário precisa ter uma coluna de Valor, ou de Débito/Crédito separados.' };
   }
+  const preAssinado = colunas['valor'] < 0 && temValoresPreAssinados(aoa, headerRowIdx, colunas['debito'], colunas['credito']);
 
   const rows: ExtratoRow[] = [];
   for (let r = headerRowIdx + 1; r < aoa.length; r++) {
@@ -213,7 +231,7 @@ export function lerExtratoBancario(aoa: unknown[][]): { rows: ExtratoRow[]; erro
     } else {
       const debito = colunas['debito'] >= 0 ? parseValorNumerico(row[colunas['debito']]) : 0;
       const credito = colunas['credito'] >= 0 ? parseValorNumerico(row[colunas['credito']]) : 0;
-      valor = credito - debito; // entrada positiva, saída negativa
+      valor = preAssinado ? debito + credito : credito - debito; // entrada positiva, saída negativa
     }
     if (valor === 0 && !data) continue;
     rows.push({
@@ -298,8 +316,12 @@ export function lerExtratoBancarioComSaldo(aoa: unknown[][]): { rows: Lancamento
     return { rows: [], erro: 'O Extrato Bancário precisa ter uma coluna de Valor, ou de Débito/Crédito separados.' };
   }
   const colSaldo = mapearColunas(aoa[headerRowIdx] as unknown[], [{ key: 'saldo', keywords: ['saldo'], required: false }])['saldo'];
+  const colDocumento = mapearColunas(aoa[headerRowIdx] as unknown[], [
+    { key: 'documento', keywords: ['documento', 'nosso numero', 'nosso número', 'num documento', 'n documento'], required: false },
+  ])['documento'];
+  const preAssinado = colunas['valor'] < 0 && temValoresPreAssinados(aoa, headerRowIdx, colunas['debito'], colunas['credito']);
 
-  const brutos: { data: Date | null; historico: string; valor: number; saldo: number | null }[] = [];
+  const brutos: { data: Date | null; historico: string; valor: number; saldo: number | null; documento: string | null }[] = [];
   for (let r = headerRowIdx + 1; r < aoa.length; r++) {
     const row = aoa[r];
     if (!row) continue;
@@ -310,7 +332,7 @@ export function lerExtratoBancarioComSaldo(aoa: unknown[][]): { rows: Lancamento
     } else {
       const debito = colunas['debito'] >= 0 ? parseValorNumerico(row[colunas['debito']]) : 0;
       const credito = colunas['credito'] >= 0 ? parseValorNumerico(row[colunas['credito']]) : 0;
-      valor = credito - debito;
+      valor = preAssinado ? debito + credito : credito - debito;
     }
     if (valor === 0 && !data) continue;
     brutos.push({
@@ -318,6 +340,7 @@ export function lerExtratoBancarioComSaldo(aoa: unknown[][]): { rows: Lancamento
       historico: colunas['historico'] >= 0 ? String(row[colunas['historico']] ?? '').trim() : '',
       valor,
       saldo: colSaldo >= 0 ? parseValorNumerico(row[colSaldo]) : null,
+      documento: colDocumento >= 0 ? String(row[colDocumento] ?? '').trim() || null : null,
     });
   }
 
