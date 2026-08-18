@@ -61,7 +61,10 @@ function fmtBRL(n: number | null | undefined) {
 function fmtDate(v: string | null) {
   if (!v) return '';
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+  // timeZone: 'UTC' — as datas são gravadas como meia-noite UTC; sem fixar o
+  // fuso, o navegador converte pro horário local (Brasil = UTC-3) e a data
+  // exibida fica um dia atrasada.
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
 const STATUS_LABEL: Record<string, string> = {

@@ -70,7 +70,7 @@ function fmtNum(n: number) {
 function fmtDate(v: string | null) {
   if (!v) return '';
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('pt-BR');
+  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
 export default function IcmsPage() {

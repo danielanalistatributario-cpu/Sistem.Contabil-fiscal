@@ -59,7 +59,7 @@ function fmtBRL(n: number | null | undefined) {
 function fmtDate(v: string | null) {
   if (!v) return '';
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR');
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
 const ALERTA_LABEL: Record<string, string> = {
