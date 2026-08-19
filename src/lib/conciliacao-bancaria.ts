@@ -11,18 +11,21 @@
 //    saldo é cumulativo: um único lançamento pendente faz todos os dias
 //    seguintes parecerem divergentes mesmo estando corretos. Comparando só
 //    o total movimentado no próprio dia, o problema não se propaga.
-// 2. Pareamento de lançamentos: exato (mesma data e valor), por competência
-//    (mesmo valor, data próxima), e por agrupamento — um lançamento de um
-//    lado corresponde à soma de vários do outro lado. O agrupamento tem 3
-//    fases, da mais confiável pra mais arriscada: (a) por código de
-//    "Documento" do banco, quando a fonte tiver essa coluna; (b) por
-//    fechamento do dia inteiro — quando o total de todos os lançamentos não
-//    pareados do dia (mesma direção: só entrada ou só saída) bate exato dos
-//    dois lados, agrupa tudo de uma vez, sem limite de itens (ex: dezenas de
-//    PIX recebidos batendo com dezenas de baixas de título, sem nenhuma
-//    outra pista em comum além do total do dia fechar); (c) busca por soma
-//    de subconjunto (meet-in-the-middle, com teto de segurança) para o que
-//    sobrar, dentro de uma janela de dias.
+// 2. Pareamento de lançamentos, nesta ordem — da pista mais forte/específica
+//    pra mais fraca/genérica, de propósito: (a) exato (mesma data e mesmo
+//    valor); (b) por código de "Documento" do banco, quando a fonte tiver
+//    essa coluna; (c) fechamento do dia inteiro — quando o total de todos os
+//    lançamentos não pareados do dia (mesma direção: só entrada ou só saída)
+//    bate exato dos dois lados, agrupa tudo de uma vez, sem limite de itens
+//    (ex: dezenas de PIX recebidos batendo com dezenas de baixas de título,
+//    sem nenhuma outra pista em comum além do total do dia fechar); (d) por
+//    competência (mesmo valor, data próxima) — roda só depois dos
+//    agrupamentos fortes porque, sozinho, "mesmo valor" pode achar o par
+//    errado em outro dia quando há muitos lançamentos de valor parecido
+//    (ex: vários PIX de clientes diferentes), o que já "roubou" um item de
+//    um fechamento de dia em um caso real; (e) busca por soma de subconjunto
+//    (meet-in-the-middle, com teto de segurança) para o que sobrar, dentro
+//    de uma janela de dias.
 // 3. Lançamentos que sobraram sem par são classificados e, no caso do
 //    extrato, têm a natureza provável sugerida por palavra-chave no
 //    histórico (tarifa, PIX, TED, IOF, juros, etc.).
@@ -456,22 +459,6 @@ export function processarConciliacaoBancaria(
     }
   }
 
-  // Passo B — mesma valor, data próxima (diferença de competência)
-  for (const r of razaoPool) {
-    if (r.matched) continue;
-    const par = extratoPool.find(
-      (e) => !e.matched && r.data && e.data && diffDias(r.data, e.data) > 0 && diffDias(r.data, e.data) <= JANELA_DIAS_COMPETENCIA && Math.abs(e.valor - r.valor) < TOLERANCIA_VALOR
-    );
-    if (par) {
-      r.matched = true;
-      par.matched = true;
-      const dias_diff = r.data && par.data ? Math.round(diffDias(r.data, par.data)) : 0;
-      const obs = `Mesmo valor, com ${dias_diff} dia(s) de diferença entre Razão e Extrato — provável diferença de competência.`;
-      definirItem('RAZAO', r, 'DIF_COMPETENCIA', null, obs);
-      definirItem('EXTRATO', par, 'DIF_COMPETENCIA', null, obs);
-    }
-  }
-
   // Passo C — agrupamento N:1 e 1:N
   // C1: por Documento do Extrato (determinístico) — resolve lotes de
   // pagamento que somam um lançamento do Razão.
@@ -499,6 +486,29 @@ export function processarConciliacaoBancaria(
     const obs = `Fechamento do dia ${dataStr}: total de ${grupoRazao.length} lançamento(s) do Razão bate exato com o total de ${grupoExtrato.length} lançamento(s) do Extrato.`;
     grupoRazao.forEach((g) => definirItem('RAZAO', g, 'CONCILIADO_GRUPO', ref, obs));
     grupoExtrato.forEach((g) => definirItem('EXTRATO', g, 'CONCILIADO_GRUPO', ref, obs));
+  }
+
+  // Passo B — mesma valor, data próxima (diferença de competência). Roda só
+  // depois de C1/C2 de propósito: como só exige "mesmo valor" (sem outra
+  // pista), com muitos lançamentos de valor parecido/repetido (ex: vários
+  // PIX de clientes diferentes) ele pode achar o par errado em outro dia
+  // dentro da janela, "roubando" um item que pertencia a um grupo maior do
+  // dia certo e impedindo o fechamento do dia de bater — confirmado num
+  // caso real (um item de R$ 262,95 casava com outro dia por coincidência
+  // de valor e travava o fechamento do dia inteiro).
+  for (const r of razaoPool) {
+    if (r.matched) continue;
+    const par = extratoPool.find(
+      (e) => !e.matched && r.data && e.data && diffDias(r.data, e.data) > 0 && diffDias(r.data, e.data) <= JANELA_DIAS_COMPETENCIA && Math.abs(e.valor - r.valor) < TOLERANCIA_VALOR
+    );
+    if (par) {
+      r.matched = true;
+      par.matched = true;
+      const dias_diff = r.data && par.data ? Math.round(diffDias(r.data, par.data)) : 0;
+      const obs = `Mesmo valor, com ${dias_diff} dia(s) de diferença entre Razão e Extrato — provável diferença de competência.`;
+      definirItem('RAZAO', r, 'DIF_COMPETENCIA', null, obs);
+      definirItem('EXTRATO', par, 'DIF_COMPETENCIA', null, obs);
+    }
   }
 
   // C3: por soma de subconjunto (janela de dias, para o que sobrar)
