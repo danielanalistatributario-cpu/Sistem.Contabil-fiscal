@@ -187,6 +187,31 @@ function agruparPorDocumento(alvoPool: PoolItem[], docPool: PoolItem[]): { alvo:
   return achados;
 }
 
+// Máximo de itens "resíduo" que podem ser excluídos de um lado para o
+// fechamento do dia bater — cobre casos como um rendimento isolado do
+// extrato sem contrapartida no Razão, sem precisar reconhecer cada padrão
+// de ruído por palavra-chave.
+const MAX_RESIDUO_FECHAMENTO_DIA = 3;
+
+// Busca um subconjunto de até `maxTamanho` itens cuja soma (em centavos)
+// bate exata com o alvo — usado para achar o "resíduo" que, uma vez
+// excluído, faz o fechamento do dia bater. Busca por força bruta: seguro
+// aqui porque os baldes de um único dia costumam ter poucas dezenas de
+// itens, bem longe do necessário para justificar meet-in-the-middle.
+function encontrarResiduo(itens: PoolItem[], alvoCents: number, maxTamanho: number): PoolItem[] | null {
+  const n = itens.length;
+  function tentar(inicio: number, atuais: PoolItem[], soma: number): PoolItem[] | null {
+    if (atuais.length > 0 && soma === alvoCents) return atuais;
+    if (atuais.length >= maxTamanho) return null;
+    for (let i = inicio; i < n; i++) {
+      const achou = tentar(i + 1, [...atuais, itens[i]], soma + Math.round(itens[i].valor * 100));
+      if (achou) return achou;
+    }
+    return null;
+  }
+  return tentar(0, [], 0);
+}
+
 // Fase C2 do agrupamento — fechamento do dia inteiro por direção. Quando o
 // total de TODOS os lançamentos ainda não pareados de um dia — só as
 // entradas, ou só as saídas — bate exato dos dois lados, agrupa tudo de uma
@@ -196,6 +221,13 @@ function agruparPorDocumento(alvoPool: PoolItem[], docPool: PoolItem[]): { alvo:
 // conferir "todos os PIX recebidos hoje somam o mesmo tanto que todas as
 // baixas de título lançadas hoje", mesmo que a quantidade de lançamentos
 // não bata dos dois lados.
+//
+// Quando o total não bate na primeira tentativa, tenta achar um pequeno
+// resíduo (até MAX_RESIDUO_FECHAMENTO_DIA itens) do lado que está "sobrando"
+// cuja exclusão zera a diferença — ex: um rendimento de aplicação isolado no
+// extrato, sem contrapartida no Razão, que sozinho impediria o dia inteiro
+// de fechar mesmo com todo o resto batendo certinho. O resíduo excluído
+// continua como pendente individual, pra revisão manual.
 function agruparPorDiaEDirecao(razaoPool: PoolItem[], extratoPool: PoolItem[]): { grupoRazao: PoolItem[]; grupoExtrato: PoolItem[] }[] {
   type Baldes = { razaoEntrada: PoolItem[]; razaoSaida: PoolItem[]; extratoEntrada: PoolItem[]; extratoSaida: PoolItem[] };
   const porDia = new Map<string, Baldes>();
@@ -229,7 +261,23 @@ function agruparPorDiaEDirecao(razaoPool: PoolItem[], extratoPool: PoolItem[]): 
       if (gr.length < 2 || ge.length < 2) continue;
       const somaR = gr.reduce((s, i) => s + Math.round(i.valor * 100), 0);
       const somaE = ge.reduce((s, i) => s + Math.round(i.valor * 100), 0);
-      if (somaR === somaE) achados.push({ grupoRazao: gr, grupoExtrato: ge });
+      if (somaR === somaE) {
+        achados.push({ grupoRazao: gr, grupoExtrato: ge });
+        continue;
+      }
+
+      // não bateu de primeira: tenta achar um resíduo pequeno do lado que
+      // está sobrando (o de maior soma) cuja exclusão zera a diferença.
+      const diferenca = somaE - somaR;
+      const ladoComExcesso = diferenca > 0 ? ge : gr;
+      const residuo = encontrarResiduo(ladoComExcesso, Math.abs(diferenca), MAX_RESIDUO_FECHAMENTO_DIA);
+      if (!residuo) continue;
+      const residuoSet = new Set(residuo);
+      const grFinal = diferenca > 0 ? gr : gr.filter((i) => !residuoSet.has(i));
+      const geFinal = diferenca > 0 ? ge.filter((i) => !residuoSet.has(i)) : ge;
+      if (grFinal.length >= 2 && geFinal.length >= 2) {
+        achados.push({ grupoRazao: grFinal, grupoExtrato: geFinal });
+      }
     }
   }
   return achados;
