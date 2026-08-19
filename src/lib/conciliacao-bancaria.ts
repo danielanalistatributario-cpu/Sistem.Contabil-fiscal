@@ -159,6 +159,12 @@ function marcarDuplicados(pool: PoolItem[]): Set<number> {
 // ainda não pareado do outro lado. Só é útil quando a fonte tem essa coluna
 // (hoje: Extrato); quando não tem, simplesmente não encontra nada e a
 // Fase C2 assume sozinha, como já acontecia antes.
+//
+// Exige o candidato dentro da janela de dias da data média do lote — sem
+// isso, "mesma soma" sozinho pode casar por coincidência com um lançamento
+// de outro dia bem distante (confirmado num caso real: um lote de Documento
+// de dois PIX em 17/07 somando R$ 629,96 "roubou" um lançamento do Razão de
+// 01/07 com o mesmo valor, 16 dias antes).
 function agruparPorDocumento(alvoPool: PoolItem[], docPool: PoolItem[]): { alvo: PoolItem; grupo: PoolItem[] }[] {
   const buckets = new Map<string, PoolItem[]>();
   for (const item of docPool) {
@@ -181,9 +187,12 @@ function agruparPorDocumento(alvoPool: PoolItem[], docPool: PoolItem[]): { alvo:
   for (const itens of buckets.values()) {
     if (itens.length < 2) continue;
     const somaCents = itens.reduce((s, i) => s + Math.round(i.valor * 100), 0);
-    const candidatos = (porValor.get(somaCents) ?? []).filter((c) => !c.matched);
-    if (candidatos.length === 0) continue;
     const dataMediaMs = itens.reduce((s, i) => s + (i.data?.getTime() ?? 0), 0) / itens.length;
+    const dataMedia = new Date(dataMediaMs);
+    const candidatos = (porValor.get(somaCents) ?? []).filter(
+      (c) => !c.matched && (!c.data || diffDias(dataMedia, c.data) <= JANELA_DIAS_COMPETENCIA)
+    );
+    if (candidatos.length === 0) continue;
     candidatos.sort((a, b) => Math.abs((a.data?.getTime() ?? 0) - dataMediaMs) - Math.abs((b.data?.getTime() ?? 0) - dataMediaMs));
     achados.push({ alvo: candidatos[0], grupo: itens });
   }
