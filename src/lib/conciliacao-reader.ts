@@ -15,7 +15,12 @@ function normalizar(v: unknown): string {
 function parseValorNumerico(v: unknown): number {
   if (typeof v === 'number') return v;
   if (!v) return 0;
-  const n = parseFloat(String(v).replace(',', '.'));
+  let s = String(v).trim();
+  s = s.replace(/\s*[DC]$/i, ''); // sufixo devedor/credor (ex: "334.256,10 D")
+  if (/,\d{1,2}$/.test(s)) {
+    s = s.replace(/\./g, '').replace(',', '.'); // formato BR: milhar com ponto, decimal com vírgula
+  }
+  const n = parseFloat(s);
   return Number.isNaN(n) ? 0 : n;
 }
 
@@ -183,7 +188,7 @@ export function lerRazao(aoa: unknown[][]): { rows: RazaoRow[]; erro: string | n
 
 const CAMPOS_EXTRATO: CampoDef[] = [
   { key: 'data', keywords: ['data'], required: true },
-  { key: 'historico', keywords: ['historico', 'descricao', 'complemento'], required: false },
+  { key: 'historico', keywords: ['historico', 'descricao', 'complemento', 'lancamento'], required: false },
   { key: 'valor', keywords: ['valor'], required: false },
   { key: 'debito', keywords: ['debito', 'saida', 'saída'], required: false },
   { key: 'credito', keywords: ['credito', 'entrada'], required: false },

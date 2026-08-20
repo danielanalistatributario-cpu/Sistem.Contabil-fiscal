@@ -268,9 +268,14 @@ function agruparPorDiaEDirecao(razaoPool: PoolItem[], extratoPool: PoolItem[]): 
       [b.razaoEntrada, b.extratoEntrada],
       [b.razaoSaida, b.extratoSaida],
     ] as const) {
-      // exige pelo menos 2 de cada lado — pareamento simples de 1:1 já teria
-      // sido resolvido nos passos A/B antes de chegar aqui.
-      if (gr.length < 2 || ge.length < 2) continue;
+      // exige pelo menos 1 de cada lado, mas bloqueia o caso 1:1 puro — esse
+      // já teria sido resolvido nos passos A/B antes de chegar aqui. N:1 e
+      // 1:N (várias linhas de um lado somando uma única do outro — ex: vários
+      // títulos recebidos no Razão batendo com um único lançamento de
+      // "boletos recebidos" consolidado no Extrato) são o caso normal desta
+      // fase e não podem ser bloqueados.
+      if (gr.length === 0 || ge.length === 0) continue;
+      if (gr.length === 1 && ge.length === 1) continue;
       const somaR = gr.reduce((s, i) => s + Math.round(i.valor * 100), 0);
       const somaE = ge.reduce((s, i) => s + Math.round(i.valor * 100), 0);
       if (somaR === somaE) {
@@ -279,15 +284,23 @@ function agruparPorDiaEDirecao(razaoPool: PoolItem[], extratoPool: PoolItem[]): 
       }
 
       // não bateu de primeira: tenta achar um resíduo pequeno do lado que
-      // está sobrando (o de maior soma) cuja exclusão zera a diferença.
+      // está sobrando (o de maior soma em módulo) cuja exclusão zera a
+      // diferença. Usa módulo pra decidir qual lado tem o excesso (o sinal
+      // de somaE - somaR sozinho é enganoso em baldes de saída, onde "sobrar
+      // mais" é uma soma mais negativa, não uma diferença positiva) — mas o
+      // alvo passado pra encontrarResiduo precisa manter o sinal correto,
+      // porque a soma de itens de saída é sempre negativa e nunca bateria
+      // contra um alvo em módulo.
       const diferenca = somaE - somaR;
-      const ladoComExcesso = diferenca > 0 ? ge : gr;
-      const residuo = encontrarResiduo(ladoComExcesso, Math.abs(diferenca), MAX_RESIDUO_FECHAMENTO_DIA);
+      const excessoNoExtrato = Math.abs(somaE) > Math.abs(somaR);
+      const ladoComExcesso = excessoNoExtrato ? ge : gr;
+      const alvoResiduo = excessoNoExtrato ? diferenca : -diferenca;
+      const residuo = encontrarResiduo(ladoComExcesso, alvoResiduo, MAX_RESIDUO_FECHAMENTO_DIA);
       if (!residuo) continue;
       const residuoSet = new Set(residuo);
-      const grFinal = diferenca > 0 ? gr : gr.filter((i) => !residuoSet.has(i));
-      const geFinal = diferenca > 0 ? ge.filter((i) => !residuoSet.has(i)) : ge;
-      if (grFinal.length >= 2 && geFinal.length >= 2) {
+      const grFinal = excessoNoExtrato ? gr : gr.filter((i) => !residuoSet.has(i));
+      const geFinal = excessoNoExtrato ? ge.filter((i) => !residuoSet.has(i)) : ge;
+      if (grFinal.length >= 1 && geFinal.length >= 1) {
         achados.push({ grupoRazao: grFinal, grupoExtrato: geFinal });
       }
     }
@@ -418,8 +431,15 @@ export function processarConciliacaoBancaria(
   const saldoInicial = saldoInicialInformado ?? 0;
 
   // --- 2. Pareamento de lançamentos ---
-  const razaoPool: PoolItem[] = razao.map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, documento: l.documento ?? null, matched: false }));
-  const extratoPool: PoolItem[] = extrato.map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, documento: l.documento ?? null, matched: false }));
+  // Lançamentos com valor zero (ex: "SALDO ANTERIOR", "SALDO TOTAL DISPONÍVEL
+  // DIA") não têm impacto financeiro — servem só pra rastrear o saldo
+  // corrente (usado acima) e não devem virar pendência.
+  const razaoPool: PoolItem[] = razao
+    .map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, documento: l.documento ?? null, matched: false }))
+    .filter((l) => l.valor !== 0);
+  const extratoPool: PoolItem[] = extrato
+    .map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, documento: l.documento ?? null, matched: false }))
+    .filter((l) => l.valor !== 0);
 
   const duplicadosRazao = marcarDuplicados(razaoPool);
   const duplicadosExtrato = marcarDuplicados(extratoPool);
