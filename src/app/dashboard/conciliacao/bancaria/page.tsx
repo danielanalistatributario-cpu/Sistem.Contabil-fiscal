@@ -207,6 +207,7 @@ function ConciliacaoBancariaInner() {
       Histórico: i.historico,
       Valor: i.valor,
       Status: STATUS_LABEL[i.status],
+      Grupo: i.grupoRef || '',
       'Possível duplicado': i.duplicadoSuspeito ? 'Sim' : '',
       Observação: i.observacao || '',
     }));
