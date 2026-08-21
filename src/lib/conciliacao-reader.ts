@@ -69,9 +69,20 @@ function mapearColunas(headerRow: unknown[], campos: CampoDef[]): Record<string,
   campos.forEach((f) => {
     let idx = -1;
     for (const k of f.keywords) {
+      // prioriza correspondência exata sobre substring — evita que uma
+      // coluna tipo "Tipo do Lançamento" seja confundida com "Lançamento"
+      // só porque uma contém o texto da outra.
       for (let i = 0; i < header.length; i++) {
         if (usados.has(i)) continue;
-        if (header[i] === k || header[i].includes(k)) {
+        if (header[i] === k) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx >= 0) break;
+      for (let i = 0; i < header.length; i++) {
+        if (usados.has(i)) continue;
+        if (header[i].includes(k)) {
           idx = i;
           break;
         }
@@ -238,12 +249,8 @@ export function lerExtratoBancario(aoa: unknown[][]): { rows: ExtratoRow[]; erro
       const credito = colunas['credito'] >= 0 ? parseValorNumerico(row[colunas['credito']]) : 0;
       valor = preAssinado ? debito + credito : credito - debito; // entrada positiva, saída negativa
     }
-    if (valor === 0 && !data) continue;
-    rows.push({
-      data,
-      historico: colunas['historico'] >= 0 ? String(row[colunas['historico']] ?? '').trim() : '',
-      valor,
-    });
+    if (!data) continue; // sem data não é um lançamento real — provável linha de total/rodapé da planilha
+    rows.push({ data, historico: colunas['historico'] >= 0 ? String(row[colunas['historico']] ?? '').trim() : '', valor });
   }
   return { rows, erro: null };
 }
@@ -293,8 +300,10 @@ export function lerRazaoBancario(aoa: unknown[][]): { rows: LancamentoConta[]; e
     const debito = parseValorNumerico(row[colunas['debito']]);
     const credito = parseValorNumerico(row[colunas['credito']]);
     if (debito === 0 && credito === 0) continue;
+    const dataLinha = colunas['data'] >= 0 ? parseDataCell(row[colunas['data']]) : null;
+    if (!dataLinha) continue; // sem data não é um lançamento real — provável linha de total/rodapé da planilha
     brutos.push({
-      data: colunas['data'] >= 0 ? parseDataCell(row[colunas['data']]) : null,
+      data: dataLinha,
       historico: colunas['historico'] >= 0 ? String(row[colunas['historico']] ?? '').trim() : '',
       valor: debito - credito, // positivo = entrada (debito em conta de Ativo aumenta o saldo)
       saldo: colunas['saldo'] >= 0 ? parseValorNumerico(row[colunas['saldo']]) : null,
@@ -339,7 +348,7 @@ export function lerExtratoBancarioComSaldo(aoa: unknown[][]): { rows: Lancamento
       const credito = colunas['credito'] >= 0 ? parseValorNumerico(row[colunas['credito']]) : 0;
       valor = preAssinado ? debito + credito : credito - debito;
     }
-    if (valor === 0 && !data) continue;
+    if (!data) continue; // sem data não é um lançamento real — provável linha de total/rodapé da planilha
     brutos.push({
       data,
       historico: colunas['historico'] >= 0 ? String(row[colunas['historico']] ?? '').trim() : '',

@@ -121,6 +121,16 @@ function detectarAplicacaoAutomatica(historico: string): 'RESGATE' | 'APLICACAO'
   return null;
 }
 
+// Algumas exportações de extrato (confirmado no Safra) colocam o valor do
+// saldo do dia direto na coluna "Valor" de linhas informativas como "SALDO
+// TOTAL", "SALDO APLIC AUTOMATICA", "SALDO CONTA CORRENTE" — não são
+// lançamentos reais, só um resumo do dia, com o mesmo formato de uma linha
+// de movimentação normal. Fica no array bruto (usado pro saldo final), mas
+// não pode entrar no pareamento — senão vira uma pendência gigante e falsa.
+function ehLinhaDeSaldo(historico: string): boolean {
+  return normalize(historico).startsWith('saldo');
+}
+
 function diffDias(a: Date, b: Date): number {
   return Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24);
 }
@@ -390,7 +400,7 @@ export function processarConciliacaoBancaria(
   function agruparPorDia(lancamentos: LancamentoConta[]): Map<string, { entrada: number; saida: number }> {
     const mapa = new Map<string, { entrada: number; saida: number }>();
     for (const l of lancamentos) {
-      if (!l.data) continue;
+      if (!l.data || ehLinhaDeSaldo(l.historico)) continue;
       const chave = l.data.toISOString().slice(0, 10);
       const atual = mapa.get(chave) ?? { entrada: 0, saida: 0 };
       if (l.valor > 0) atual.entrada += l.valor;
@@ -400,14 +410,21 @@ export function processarConciliacaoBancaria(
     return mapa;
   }
   // Quando o toggle de aplicação automática está ligado, os lançamentos de
-  // resgate/aplicação (ex: CONTAMAX) também saem da comparação diária — do
-  // contrário a movimentação diária mostraria a mesma divergência que o
-  // reconhecimento automático já resolveu no nível de lançamento.
+  // resgate/aplicação (ex: CONTAMAX, CDB) também saem da comparação diária —
+  // do contrário a movimentação diária mostraria uma divergência que o
+  // reconhecimento automático já resolveu no nível de lançamento. Exclui dos
+  // dois lados simetricamente: em bancos como Santander o padrão só existe
+  // no Razão (o extrato nunca mostra o resgate/aplicação), mas em outros
+  // (ex: Safra, CDB automático) o extrato TEM a mesma linha — se só o Razão
+  // fosse filtrado, sobraria uma diferença fictícia no dia.
   const razaoParaMovimento = opcoes?.incluirAplicacaoAutomatica
     ? razao.filter((l) => !detectarAplicacaoAutomatica(l.historico))
     : razao;
+  const extratoParaMovimento = opcoes?.incluirAplicacaoAutomatica
+    ? extrato.filter((l) => !detectarAplicacaoAutomatica(l.historico))
+    : extrato;
   const movRazao = agruparPorDia(razaoParaMovimento);
-  const movExtrato = agruparPorDia(extrato);
+  const movExtrato = agruparPorDia(extratoParaMovimento);
   const todasDatas = Array.from(new Set([...movRazao.keys(), ...movExtrato.keys()])).sort();
   const dias: DiaComparado[] = todasDatas.map((d) => {
     const r = movRazao.get(d) ?? { entrada: 0, saida: 0 };
@@ -432,14 +449,16 @@ export function processarConciliacaoBancaria(
 
   // --- 2. Pareamento de lançamentos ---
   // Lançamentos com valor zero (ex: "SALDO ANTERIOR", "SALDO TOTAL DISPONÍVEL
-  // DIA") não têm impacto financeiro — servem só pra rastrear o saldo
-  // corrente (usado acima) e não devem virar pendência.
+  // DIA") ou que sejam linha de saldo informativa (ex: "SALDO TOTAL",
+  // "SALDO APLIC AUTOMATICA" do Safra, com valor preenchido mas sem impacto
+  // financeiro real) não devem virar pendência — servem só pra rastrear o
+  // saldo corrente (usado acima).
   const razaoPool: PoolItem[] = razao
     .map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, documento: l.documento ?? null, matched: false }))
-    .filter((l) => l.valor !== 0);
+    .filter((l) => l.valor !== 0 && !ehLinhaDeSaldo(l.historico));
   const extratoPool: PoolItem[] = extrato
     .map((l, idx) => ({ idx, data: l.data, historico: l.historico, valor: l.valor, documento: l.documento ?? null, matched: false }))
-    .filter((l) => l.valor !== 0);
+    .filter((l) => l.valor !== 0 && !ehLinhaDeSaldo(l.historico));
 
   const duplicadosRazao = marcarDuplicados(razaoPool);
   const duplicadosExtrato = marcarDuplicados(extratoPool);
@@ -461,7 +480,26 @@ export function processarConciliacaoBancaria(
     });
   }
 
-  // Passo A0 — reconhecimento de aplicação financeira automática (opcional)
+  // Passo A — pareamento exato (mesma data, mesmo valor)
+  for (const r of razaoPool) {
+    if (r.matched) continue;
+    const par = extratoPool.find((e) => !e.matched && r.data && e.data && diffDias(r.data, e.data) === 0 && Math.abs(e.valor - r.valor) < TOLERANCIA_VALOR);
+    if (par) {
+      r.matched = true;
+      par.matched = true;
+      definirItem('RAZAO', r, 'CONCILIADO', null, null);
+      definirItem('EXTRATO', par, 'CONCILIADO', null, null);
+    }
+  }
+
+  // Passo A0 — reconhecimento de aplicação financeira automática (opcional).
+  // Roda depois do Passo A de propósito: em alguns bancos (ex: Santander
+  // CONTAMAX) esses lançamentos nunca aparecem no extrato, então precisam do
+  // reconhecimento automático — mas em outros (ex: Safra CDB) o extrato TEM
+  // a contrapartida exata. Rodar antes do Passo A tirava o lançamento do
+  // Razão do jogo cedo demais, deixando a contrapartida do Extrato órfã e
+  // caindo como pendente à toa. Só vira "aplicação automática" o que sobrar
+  // sem par exato.
   if (opcoes?.incluirAplicacaoAutomatica) {
     for (const r of razaoPool) {
       if (r.matched) continue;
@@ -473,18 +511,6 @@ export function processarConciliacaoBancaria(
           ? 'Reconhecido automaticamente como resgate de aplicação financeira automática — movimentação interna que normalmente não aparece detalhada no extrato bancário.'
           : 'Reconhecido automaticamente como aplicação financeira automática — movimentação interna que normalmente não aparece detalhada no extrato bancário.';
       definirItem('RAZAO', r, 'APLICACAO_AUTOMATICA', null, obs);
-    }
-  }
-
-  // Passo A — pareamento exato (mesma data, mesmo valor)
-  for (const r of razaoPool) {
-    if (r.matched) continue;
-    const par = extratoPool.find((e) => !e.matched && r.data && e.data && diffDias(r.data, e.data) === 0 && Math.abs(e.valor - r.valor) < TOLERANCIA_VALOR);
-    if (par) {
-      r.matched = true;
-      par.matched = true;
-      definirItem('RAZAO', r, 'CONCILIADO', null, null);
-      definirItem('EXTRATO', par, 'CONCILIADO', null, null);
     }
   }
 
