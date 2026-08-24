@@ -105,6 +105,7 @@ function ConciliacaoBancariaInner() {
   const [erro, setErro] = useState<string | null>(null);
   const [apuracao, setApuracao] = useState<ApuracaoDB | null>(null);
   const [view, setView] = useState<'diagnostico' | 'pendentesExtrato' | 'pendentesRazao' | 'todos'>('diagnostico');
+  const [filtroData, setFiltroData] = useState<string | null>(null);
   const razaoRef = useRef<HTMLInputElement>(null);
   const extratoRef = useRef<HTMLInputElement>(null);
 
@@ -233,6 +234,10 @@ function ConciliacaoBancariaInner() {
 
   const pendentesExtrato = apuracao ? apuracao.itens.filter((i) => i.origem === 'EXTRATO' && i.status === 'PENDENTE') : [];
   const pendentesRazao = apuracao ? apuracao.itens.filter((i) => i.origem === 'RAZAO' && i.status === 'PENDENTE') : [];
+  const chaveData = (v: string | null) => (v ? v.slice(0, 10) : null);
+  const listaAtual = (view === 'pendentesExtrato' ? pendentesExtrato : view === 'pendentesRazao' ? pendentesRazao : apuracao?.itens ?? []).filter(
+    (i) => !filtroData || chaveData(i.data) === filtroData
+  );
 
   return (
     <div className="space-y-6">
@@ -378,7 +383,7 @@ function ConciliacaoBancariaInner() {
               <h2 className="font-display font-semibold text-brand mb-1">Movimentação diária</h2>
               <p className="text-xs text-gray-500 mb-4">
                 Total de entrada e saída de cada dia, Razão × Extrato — não usa saldo acumulado, para não propagar a
-                divergência de um dia pendente para os dias seguintes.
+                divergência de um dia pendente para os dias seguintes. Clique num dia para ver só os lançamentos daquela data.
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -397,7 +402,14 @@ function ConciliacaoBancariaInner() {
                     {apuracao.dias.map((d) => {
                       const temDivergencia = Math.abs(d.diferencaEntrada) > 0.01 || Math.abs(d.diferencaSaida) > 0.01;
                       return (
-                        <tr key={d.id} className={`border-b border-gray-50 ${temDivergencia ? 'bg-ruby/5' : ''}`}>
+                        <tr
+                          key={d.id}
+                          onClick={() => {
+                            setFiltroData(chaveData(d.data));
+                            setView('todos');
+                          }}
+                          className={`border-b border-gray-50 cursor-pointer hover:bg-brand/5 ${temDivergencia ? 'bg-ruby/5' : ''}`}
+                        >
                           <td className="py-1.5 pr-3 font-medium">{fmtDate(d.data)}</td>
                           <td className="py-1.5 pr-3 font-mono">{fmtBRL(d.entradaRazao)}</td>
                           <td className="py-1.5 pr-3 font-mono">{fmtBRL(d.entradaExtrato)}</td>
@@ -421,9 +433,21 @@ function ConciliacaoBancariaInner() {
           {(view === 'pendentesExtrato' || view === 'pendentesRazao' || view === 'todos') && (
             <div className="card-surface p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display font-semibold text-brand">
-                  {view === 'pendentesExtrato' ? 'Movimentações bancárias ainda não contabilizadas' : view === 'pendentesRazao' ? 'Contabilizado, mas não localizado no banco' : 'Todos os lançamentos'}
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-display font-semibold text-brand">
+                    {view === 'pendentesExtrato' ? 'Movimentações bancárias ainda não contabilizadas' : view === 'pendentesRazao' ? 'Contabilizado, mas não localizado no banco' : 'Todos os lançamentos'}
+                  </h2>
+                  {filtroData && (
+                    <button
+                      onClick={() => setFiltroData(null)}
+                      className="flex items-center gap-1 text-xs bg-brand/10 text-brand rounded-full px-2.5 py-1 hover:bg-brand/20"
+                      title="Limpar filtro de data"
+                    >
+                      Filtrado por {fmtDate(filtroData)}
+                      <span className="font-bold">×</span>
+                    </button>
+                  )}
+                </div>
                 <button onClick={exportarExcel} className="bg-accent text-white rounded-lg px-3 py-1.5 text-sm font-medium">
                   Exportar Excel
                 </button>
@@ -441,7 +465,7 @@ function ConciliacaoBancariaInner() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(view === 'pendentesExtrato' ? pendentesExtrato : view === 'pendentesRazao' ? pendentesRazao : apuracao.itens).map((i) => (
+                    {listaAtual.map((i) => (
                       <tr key={i.id} className="border-b border-gray-50">
                         <td className="px-3 py-1.5">{i.origem === 'RAZAO' ? 'Razão' : 'Extrato'}</td>
                         <td className="px-3 py-1.5">{fmtDate(i.data)}</td>
@@ -456,8 +480,10 @@ function ConciliacaoBancariaInner() {
                     ))}
                   </tbody>
                 </table>
-                {(view === 'pendentesExtrato' ? pendentesExtrato : view === 'pendentesRazao' ? pendentesRazao : apuracao.itens).length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-8">Nenhum lançamento aqui — tudo certo! 🎉</p>
+                {listaAtual.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-8">
+                    {filtroData ? 'Nenhum lançamento nessa data para esta aba.' : 'Nenhum lançamento aqui — tudo certo! 🎉'}
+                  </p>
                 )}
               </div>
             </div>
