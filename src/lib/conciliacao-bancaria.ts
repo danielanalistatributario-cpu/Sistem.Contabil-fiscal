@@ -594,6 +594,37 @@ export function processarConciliacaoBancaria(
     }
   }
 
+  // Passo D0 — par de estorno dentro do próprio Extrato: uma entrada e uma
+  // saída do mesmo dia, mesmo valor absoluto, sem nenhuma outra pista.
+  // Padrão típico de PIX/transferência enviada que volta no mesmo dia (ex:
+  // chave inválida, conta encerrada) — o Extrato registra as duas pernas
+  // (saída e depois a entrada de volta), mas como o efeito líquido é zero a
+  // empresa nunca chega a contabilizar nada no Razão. Só casa 1 entrada com
+  // 1 saída (não um grupo maior) pra não arriscar coincidência de valores.
+  {
+    const porDiaExtrato = new Map<string, { entrada: PoolItem[]; saida: PoolItem[] }>();
+    for (const e of extratoPool) {
+      if (e.matched || !e.data) continue;
+      const chave = e.data.toISOString().slice(0, 10);
+      const b = porDiaExtrato.get(chave) ?? { entrada: [], saida: [] };
+      (e.valor > 0 ? b.entrada : b.saida).push(e);
+      porDiaExtrato.set(chave, b);
+    }
+    for (const b of porDiaExtrato.values()) {
+      if (b.entrada.length !== 1 || b.saida.length !== 1) continue;
+      const ent = b.entrada[0];
+      const sai = b.saida[0];
+      if (Math.abs(ent.valor + sai.valor) >= TOLERANCIA_VALOR) continue;
+      grupoContador++;
+      const ref = `G${grupoContador}`;
+      ent.matched = true;
+      sai.matched = true;
+      const obs = `Par de estorno dentro do próprio Extrato (${fmtDataCurta(ent.data!)}): entrada e saída do mesmo valor no mesmo dia, sem nenhuma outra pendência naquele dia — provável PIX/transferência enviada e devolvida. Sem lançamento correspondente no Razão porque não há efeito financeiro líquido.`;
+      definirItem('EXTRATO', ent, 'CONCILIADO_GRUPO', ref, obs);
+      definirItem('EXTRATO', sai, 'CONCILIADO_GRUPO', ref, obs);
+    }
+  }
+
   // Passo D — sobras: pendentes
   for (const r of razaoPool) {
     if (!r.matched) {
