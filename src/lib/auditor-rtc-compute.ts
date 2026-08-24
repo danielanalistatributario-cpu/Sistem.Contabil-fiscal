@@ -7,6 +7,7 @@ import { RULE_DEFINITIONS, type EventoParsed, type ParsedItem } from './auditor-
 export type NfeBase = {
   fileName: string;
   chave: string; nNF: string; serie: string; dhEmi: string; cnpjEmit: string; xNomeEmit: string;
+  dadosAdicionais: string;
   itemCount: number;
   statusBase: string; statusDetailBase: string;
   nProt?: string; dhProt?: string;
@@ -81,6 +82,7 @@ export function recompute(
       const ev = cancelEventByChave[chave];
       nfesList.push({
         fileName: `(evento) ${ev.fileName}`, chave, nNF: '', serie: '', dhEmi: '', cnpjEmit: '', xNomeEmit: '',
+        dadosAdicionais: '',
         itemCount: 0, statusBase: 'Cancelada', statusDetailBase: '', synthetic: true,
       });
     }

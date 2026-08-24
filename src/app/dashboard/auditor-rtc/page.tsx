@@ -28,6 +28,12 @@ const STATUS_BADGE: Record<string, string> = {
   Outro: 'bg-amber-100 text-amber-700',
   'Sem protocolo': 'bg-amber-100 text-amber-700',
 };
+// Rótulo de exibição no cabeçalho do CSV exportado, quando diferente do nome
+// interno do campo (que é o cabeçalho padrão das demais colunas).
+const COL_LABELS: Record<string, string> = {
+  dadosAdicionais: 'DADOS ADICIONAIS DA NOTA',
+};
+
 const SITUACAO_BADGE: Record<string, string> = {
   'Válido': 'bg-green-100 text-green-700',
   'Válido com alertas': 'bg-amber-100 text-amber-700',
@@ -87,7 +93,7 @@ function AuditorRtcInner() {
         const data = await res.json();
         const a = data.apuracao;
         const nfesComp: NfeComputed[] = a.nfes.map((n: any) => ({ ...n }));
-        const itemsComp: ItemComputed[] = a.nfes.flatMap((n: any) => n.itens.map((i: any) => ({ ...i, fileName: n.fileName, chave: n.chave, docStatus: n.status })));
+        const itemsComp: ItemComputed[] = a.nfes.flatMap((n: any) => n.itens.map((i: any) => ({ ...i, fileName: n.fileName, chave: n.chave, docStatus: n.status, dadosAdicionais: n.dadosAdicionais })));
         setHistorico({ nfes: nfesComp, items: itemsComp, meta: a });
         setSalvo(true);
       }
@@ -133,6 +139,7 @@ function AuditorRtcInner() {
                     dhEmi: result.dhEmi || '',
                     cnpjEmit: result.cnpjEmit || '',
                     xNomeEmit: result.xNomeEmit || '',
+                    dadosAdicionais: result.dadosAdicionais || '',
                     itemCount: result.itemCount || 0,
                     statusBase: result.statusBase || '',
                     statusDetailBase: result.statusDetailBase || '',
@@ -255,9 +262,9 @@ function AuditorRtcInner() {
 
   function exportarCSV() {
     const cols = tab === 'resumo'
-      ? ['nNF', 'serie', 'chave', 'dhEmi', 'cnpjEmit', 'xNomeEmit', 'status', 'itemCount', 'itensErro', 'itensAlerta', 'itensSemIBS', 'itensSemCBS', 'situacao', 'observacoes']
-      : ['nNF', 'serie', 'chave', 'xNomeEmit', 'cProd', 'xProd', 'ncm', 'cfop', 'tes', 'cClassTrib', 'cst', 'qCom', 'vUnCom', 'vProd', 'vBC', 'pIBSTotal', 'pCBS', 'vIBS', 'vCBS', 'cstPis', 'pPis', 'vPis', 'cstCofins', 'pCofins', 'vCofins', 'situacao', 'missingLabel', 'alertLabel'];
-    const header = cols.join(';');
+      ? ['nNF', 'serie', 'chave', 'dhEmi', 'cnpjEmit', 'xNomeEmit', 'status', 'itemCount', 'itensErro', 'itensAlerta', 'itensSemIBS', 'itensSemCBS', 'situacao', 'observacoes', 'dadosAdicionais']
+      : ['nNF', 'serie', 'chave', 'xNomeEmit', 'cProd', 'xProd', 'ncm', 'cfop', 'tes', 'cClassTrib', 'cst', 'qCom', 'vUnCom', 'vProd', 'vBC', 'pIBSTotal', 'pCBS', 'vIBS', 'vCBS', 'cstPis', 'pPis', 'vPis', 'cstCofins', 'pCofins', 'vCofins', 'situacao', 'missingLabel', 'alertLabel', 'dadosAdicionais'];
+    const header = cols.map((c) => COL_LABELS[c] || c).join(';');
     const rows = dadosFiltrados.map((row) => cols.map((c) => `"${String(row[c] ?? '').replace(/"/g, '""')}"`).join(';'));
     const csv = '\uFEFF' + [header, ...rows].join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
           itensSemIBS: n.itensSemIBS || 0,
           itensSemCBS: n.itensSemCBS || 0,
           observacoes: n.observacoes || null,
+          dadosAdicionais: n.dadosAdicionais || null,
           nProt: n.nProt || null,
           synthetic: !!n.synthetic,
           itens: {

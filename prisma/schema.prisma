@@ -340,6 +340,7 @@ model AuditorRtcNfe {
   itensSemIBS    Int      @default(0)
   itensSemCBS    Int      @default(0)
   observacoes    String?
+  dadosAdicionais String? // conteúdo de infAdic/infCpl do XML (Informações Complementares de interesse do Contribuinte)
   nProt          String?
   synthetic      Boolean  @default(false)
   apuracao       AuditorRtcApuracao  @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)

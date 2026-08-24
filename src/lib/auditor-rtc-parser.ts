@@ -176,9 +176,8 @@ export function parseEventoXml(fileName: string, xmlText: string): EventoParsed 
   };
 }
 
-function extractTes(det: Element, infNFe: Element | null): string {
+function extractTes(det: Element, infCpl: string): string {
   const infAdProd = textOf(det, 'infAdProd');
-  const infCpl = textOf(firstTag(infNFe, 'infAdic'), 'infCpl');
   const combined = infAdProd + ' ' + infCpl;
   const m = combined.match(/TES\s*[:\-]?\s*(\d{2,6})/i);
   return m ? m[1] : '';
@@ -189,6 +188,7 @@ export type ItemIssue = { ruleId: string; severity: 'erro' | 'alerta'; message: 
 export type ParsedItem = {
   fileName: string;
   chave: string; nNF: string; serie: string; dhEmi: string; cnpjEmit: string; xNomeEmit: string;
+  dadosAdicionais: string;
   nItem: string; cProd: string; xProd: string; ncm: string; cfop: string; tes: string;
   cClassTrib: string; cst: string; groupType: string;
   qCom: number | null; vUnCom: number | null; vProd: number | null;
@@ -205,6 +205,7 @@ export type ParsedItem = {
 export type ParsedNFeResult = {
   error?: string;
   chave?: string; nNF?: string; serie?: string; dhEmi?: string; cnpjEmit?: string; xNomeEmit?: string;
+  dadosAdicionais?: string;
   itemCount?: number; items?: ParsedItem[];
   statusBase?: string; statusDetailBase?: string; nProt?: string; dhProt?: string;
 };
@@ -240,6 +241,9 @@ export function parseNFeXml(fileName: string, xmlText: string): ParsedNFeResult 
   const emit = firstTag(infNFe, 'emit');
   const cnpjEmit = textOf(emit, 'CNPJ');
   const xNomeEmit = textOf(emit, 'xNome');
+
+  // Informações Complementares de interesse do Contribuinte (infAdic/infCpl)
+  const dadosAdicionais = textOf(firstTag(infNFe, 'infAdic'), 'infCpl');
 
   const dets = Array.from(infNFe.getElementsByTagName('det'));
   const items: ParsedItem[] = [];
@@ -297,12 +301,13 @@ export function parseNFeXml(fileName: string, xmlText: string): ParsedNFeResult 
 
     items.push({
       fileName, chave, nNF, serie, dhEmi, cnpjEmit, xNomeEmit,
+      dadosAdicionais,
       nItem,
       cProd: textOf(prod, 'cProd'),
       xProd: textOf(prod, 'xProd'),
       ncm: textOf(prod, 'NCM'),
       cfop: textOf(prod, 'CFOP'),
-      tes: extractTes(det, infNFe),
+      tes: extractTes(det, dadosAdicionais),
       cClassTrib, cst, groupType,
       qCom: numOf(prod, 'qCom'),
       vUnCom: numOf(prod, 'vUnCom'),
@@ -328,6 +333,7 @@ export function parseNFeXml(fileName: string, xmlText: string): ParsedNFeResult 
 
   return {
     chave, nNF, serie, dhEmi, cnpjEmit, xNomeEmit,
+    dadosAdicionais,
     itemCount: dets.length,
     items,
     statusBase: statusInfo.status,
