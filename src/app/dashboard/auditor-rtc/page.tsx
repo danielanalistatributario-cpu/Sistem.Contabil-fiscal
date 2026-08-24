@@ -32,6 +32,7 @@ const STATUS_BADGE: Record<string, string> = {
 // interno do campo (que é o cabeçalho padrão das demais colunas).
 const COL_LABELS: Record<string, string> = {
   dadosAdicionais: 'DADOS ADICIONAIS DA NOTA',
+  dhEmi: 'DATA DE EMISSÃO',
 };
 
 const SITUACAO_BADGE: Record<string, string> = {
@@ -93,7 +94,17 @@ function AuditorRtcInner() {
         const data = await res.json();
         const a = data.apuracao;
         const nfesComp: NfeComputed[] = a.nfes.map((n: any) => ({ ...n }));
-        const itemsComp: ItemComputed[] = a.nfes.flatMap((n: any) => n.itens.map((i: any) => ({ ...i, fileName: n.fileName, chave: n.chave, docStatus: n.status, dadosAdicionais: n.dadosAdicionais })));
+        const itemsComp: ItemComputed[] = a.nfes.flatMap((n: any) => n.itens.map((i: any) => ({
+          ...i,
+          fileName: n.fileName,
+          chave: n.chave,
+          nNF: n.nNF,
+          serie: n.serie,
+          dhEmi: n.dhEmi,
+          xNomeEmit: n.xNomeEmit,
+          docStatus: n.status,
+          dadosAdicionais: n.dadosAdicionais,
+        })));
         setHistorico({ nfes: nfesComp, items: itemsComp, meta: a });
         setSalvo(true);
       }
@@ -263,9 +274,10 @@ function AuditorRtcInner() {
   function exportarCSV() {
     const cols = tab === 'resumo'
       ? ['nNF', 'serie', 'chave', 'dhEmi', 'cnpjEmit', 'xNomeEmit', 'status', 'itemCount', 'itensErro', 'itensAlerta', 'itensSemIBS', 'itensSemCBS', 'situacao', 'observacoes', 'dadosAdicionais']
-      : ['nNF', 'serie', 'chave', 'xNomeEmit', 'cProd', 'xProd', 'ncm', 'cfop', 'tes', 'cClassTrib', 'cst', 'qCom', 'vUnCom', 'vProd', 'vBC', 'pIBSTotal', 'pCBS', 'vIBS', 'vCBS', 'cstPis', 'pPis', 'vPis', 'cstCofins', 'pCofins', 'vCofins', 'situacao', 'missingLabel', 'alertLabel', 'dadosAdicionais'];
+      : ['nNF', 'serie', 'chave', 'dhEmi', 'xNomeEmit', 'cProd', 'xProd', 'ncm', 'cfop', 'tes', 'cClassTrib', 'cst', 'qCom', 'vUnCom', 'vProd', 'vBC', 'pIBSTotal', 'pCBS', 'vIBS', 'vCBS', 'cstPis', 'pPis', 'vPis', 'cstCofins', 'pCofins', 'vCofins', 'situacao', 'missingLabel', 'alertLabel', 'dadosAdicionais'];
     const header = cols.map((c) => COL_LABELS[c] || c).join(';');
-    const rows = dadosFiltrados.map((row) => cols.map((c) => `"${String(row[c] ?? '').replace(/"/g, '""')}"`).join(';'));
+    const valorCol = (row: any, c: string) => (c === 'dhEmi' ? fmtDateStr(row[c]) : (row[c] ?? ''));
+    const rows = dadosFiltrados.map((row) => cols.map((c) => `"${String(valorCol(row, c)).replace(/"/g, '""')}"`).join(';'));
     const csv = '\uFEFF' + [header, ...rows].join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
