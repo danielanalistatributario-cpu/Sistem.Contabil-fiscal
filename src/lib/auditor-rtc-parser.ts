@@ -242,8 +242,14 @@ export function parseNFeXml(fileName: string, xmlText: string): ParsedNFeResult 
   const cnpjEmit = textOf(emit, 'CNPJ');
   const xNomeEmit = textOf(emit, 'xNome');
 
-  // Informações Complementares de interesse do Contribuinte (infAdic/infCpl)
-  const dadosAdicionais = textOf(firstTag(infNFe, 'infAdic'), 'infCpl');
+  // Dados Adicionais da NF-e: combina Informações Complementares de interesse
+  // do Contribuinte (infCpl) e Informações Adicionais de Interesse do Fisco
+  // (infAdFisco, usada por bancos de dados fiscais como isenções/regimes
+  // especiais) — nem toda nota preenche as duas, então junta o que existir.
+  const infAdicEl = firstTag(infNFe, 'infAdic');
+  const infCplText = textOf(infAdicEl, 'infCpl');
+  const infAdFiscoText = textOf(infAdicEl, 'infAdFisco');
+  const dadosAdicionais = [infCplText, infAdFiscoText].filter(Boolean).join(' | ');
 
   const dets = Array.from(infNFe.getElementsByTagName('det'));
   const items: ParsedItem[] = [];
