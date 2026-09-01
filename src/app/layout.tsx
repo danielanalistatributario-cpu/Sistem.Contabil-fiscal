@@ -9,7 +9,6 @@ const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500', '600
 export const metadata: Metadata = {
   title: 'Portal Fiscal e Contábil | Fort Fruit',
   description: 'Portal de ferramentas para gestão fiscal e contábil — Fort Fruit Hortifrutigranjeiros',
-  icons: { icon: '/logo-fortfruit.png' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
