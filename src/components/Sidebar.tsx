@@ -50,7 +50,7 @@ export default function Sidebar({ role }: { role: Role | null }) {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 shrink-0 bg-gradient-to-b from-brand to-brand-deep text-white min-h-screen flex flex-col relative">
+    <aside className="w-64 shrink-0 bg-gradient-to-b from-brand to-brand-deep text-white h-screen sticky top-0 flex flex-col relative">
       <div className="px-5 py-5 bg-white">
         <Image src="/logo-fortfruit.png" alt="Fort Fruit" width={180} height={62} className="w-full h-auto" priority />
         <p className="text-[11px] text-brand/70 italic mt-1 text-center font-display">Bem pra gente</p>
