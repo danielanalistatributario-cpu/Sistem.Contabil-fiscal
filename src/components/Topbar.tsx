@@ -1,8 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useState } from 'react';
-import { Building2, LogOut, ChevronDown } from 'lucide-react';
+import { Building2, LogOut, ChevronDown, KeyRound } from 'lucide-react';
 import { ROLE_LABELS } from '@/lib/permissions';
 import type { Role } from '@/lib/permissions';
 
@@ -77,6 +78,14 @@ export default function Topbar({
           <p className="text-sm font-medium text-gray-800 leading-tight">{userName}</p>
           <p className="text-[11px] text-gray-400 leading-tight">{currentRole ? ROLE_LABELS[currentRole] : ''}</p>
         </div>
+        <Link
+          href="/dashboard/perfil"
+          title="Alterar senha"
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand hover:bg-brand/5 rounded-full px-3 py-2 transition-colors"
+        >
+          <KeyRound size={15} />
+          <span className="hidden md:inline">Alterar senha</span>
+        </Link>
         <button
           onClick={handleLogout}
           title="Sair"
