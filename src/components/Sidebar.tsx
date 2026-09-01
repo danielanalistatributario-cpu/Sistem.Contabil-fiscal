@@ -90,7 +90,10 @@ export default function Sidebar({ role }: { role: Role | null }) {
         })}
       </nav>
 
-      <div className="px-5 py-4 text-[11px] text-white/35 border-t border-white/10 font-mono">Fase 0–2 · em evolução</div>
+      <div className="px-5 py-4 border-t border-white/10 font-mono space-y-0.5">
+        <p className="text-[11px] text-white/35">Fase 0–2 · em evolução</p>
+        <p className="text-[10px] text-white/70">Desenvolvido por Daniel Garcia</p>
+      </div>
     </aside>
   );
 }
