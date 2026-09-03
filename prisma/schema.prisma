@@ -43,6 +43,8 @@ model Company {
   perfisProdutos PerfilProduto[]
   validacoesCadastro ValidacaoCadastroApuracao[]
   analisesFiscais AnaliseFiscalApuracao[]
+  analiseFiscalTesConfig AnaliseFiscalTesConfig[]
+  analiseFiscalCnpjsGrupo AnaliseFiscalCnpjGrupo[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -526,4 +528,36 @@ model AnaliseFiscalDivergencia {
   sugestaoCorrecao     String?
   apuracao             AnaliseFiscalApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
   item                 AnaliseFiscalItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+}
+
+// Metadados de TES editáveis por empresa (chaveNf, permiteProdutos, rótulo)
+// — a lógica de regras profundas continua fixa no código
+// (analise-fiscal-tes-registry.ts); isto é só a classificação básica que
+// permite cadastrar uma "TES nova" sem precisar de deploy.
+// chaveNf: obrigatoria | proibida | livre
+model AnaliseFiscalTesConfig {
+  id              String   @id @default(cuid())
+  companyId       String
+  codigo          String
+  grupo           String
+  chaveNf         String
+  permiteProdutos Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, codigo])
+}
+
+// CNPJs do grupo de empresas relacionadas, usados pela TES de
+// transferência entre filiais (138) para validar o fornecedor/remetente.
+model AnaliseFiscalCnpjGrupo {
+  id        String   @id @default(cuid())
+  companyId String
+  nome      String
+  cnpj      String
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, cnpj])
 }

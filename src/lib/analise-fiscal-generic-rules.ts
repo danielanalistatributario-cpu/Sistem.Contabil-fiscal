@@ -4,13 +4,13 @@
 // uma TES). Isso cobre as ~23 TES "metadados só" com checagens úteis desde já.
 
 import type { RuleDef, RuleContext, Divergencia } from './analise-fiscal-tes-registry';
-import { TES_METADATA, normalizarUf, somenteDigitos, fmtBRL, fmtPct } from './analise-fiscal-tes-registry';
+import { normalizarUf, somenteDigitos, fmtBRL, fmtPct } from './analise-fiscal-tes-registry';
 
 const ruleChaveNfPolicy: RuleDef = {
   id: 'generico_chave_nf_politica',
   check: (ctx) => {
     const { linha } = ctx;
-    const meta = TES_METADATA[linha.tes];
+    const meta = ctx.tesMetadataPorCodigo[linha.tes];
     if (!meta) return null;
     const preenchida = linha.chaveNf.trim() !== '';
     if (meta.chaveNf === 'proibida' && preenchida) {
@@ -68,7 +68,7 @@ const ruleProdutoNaoPermitido: RuleDef = {
   id: 'generico_produto_nao_permitido',
   check: (ctx) => {
     const { linha } = ctx;
-    const meta = TES_METADATA[linha.tes];
+    const meta = ctx.tesMetadataPorCodigo[linha.tes];
     if (!meta || meta.permiteProdutos) return null;
 
     if (linha.tipo) {
@@ -108,7 +108,7 @@ const ruleCfopUf: RuleDef = {
     // um código interno de referência, sem relação com a UF do fornecedor,
     // então o cruzamento CFOP×UF não se aplica (confirmado com dado real:
     // 100% das divergências desta regra vinham das TES gerenciais)
-    const meta = TES_METADATA[linha.tes];
+    const meta = ctx.tesMetadataPorCodigo[linha.tes];
     if (meta && meta.chaveNf === 'proibida') return null;
     const digito = (linha.cfop.match(/\d/) || [''])[0];
     if (!['1', '2', '5', '6'].includes(digito)) return null;

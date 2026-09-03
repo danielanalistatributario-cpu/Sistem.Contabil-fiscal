@@ -4,6 +4,7 @@ import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 import type { LinhaEntradaImportada } from '@/lib/analise-fiscal-reader';
 import { apurarEntradas } from '@/lib/analise-fiscal-compute';
+import { carregarTesMetadataPorCodigo, carregarCnpjsGrupo } from '@/lib/analise-fiscal-config-db';
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -28,10 +29,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Empresa não encontrada.' }, { status: 400 });
   }
 
-  const { itens, resumo } = apurarEntradas(linhas, {
-    ufDestino: company.ufDestino,
-    aliquotaInterna: company.aliquotaInterna,
-  });
+  const [tesMetadataPorCodigo, cnpjsGrupo] = await Promise.all([
+    carregarTesMetadataPorCodigo(session.currentCompanyId),
+    carregarCnpjsGrupo(session.currentCompanyId),
+  ]);
+
+  const { itens, resumo } = apurarEntradas(
+    linhas,
+    { ufDestino: company.ufDestino, aliquotaInterna: company.aliquotaInterna },
+    { tesMetadataPorCodigo, cnpjsGrupo }
+  );
 
   // Divergencia tem FK própria tanto pro item quanto pra apuração (denormalizado
   // de propósito, pra tela de divergências consultar sem join through item) —

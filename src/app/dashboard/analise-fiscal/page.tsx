@@ -3,10 +3,11 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { History } from 'lucide-react';
+import { History, Settings } from 'lucide-react';
 import { ImportHero } from '@/components/ImportHero';
 import * as XLSX from 'xlsx';
 import { lerRelatorioEntradas } from '@/lib/analise-fiscal-reader';
+import { canAccess, type Role } from '@/lib/permissions';
 
 type Severidade = 'CRITICO' | 'ALTO' | 'MEDIO' | 'BAIXO' | 'INFORMATIVO';
 
@@ -100,7 +101,18 @@ function AnaliseFiscalInner() {
   const [filtroSeveridade, setFiltroSeveridade] = useState<'TODOS' | Severidade>('TODOS');
   const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
+  const [role, setRole] = useState<Role | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch('/api/auth/me');
+      if (res.ok) {
+        const data = await res.json();
+        setRole(data.user?.currentRole ?? null);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!apuracaoIdParam) return;
@@ -250,6 +262,12 @@ function AnaliseFiscalInner() {
             <p className="text-gray-500 text-sm mt-1">Auditoria do Relatório Fiscal de Entradas — Relatório de Saídas em etapa futura.</p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
+            {canAccess(role, 'analiseFiscalConfig') && (
+              <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+                <Settings size={15} />
+                Configurar TES
+              </Link>
+            )}
             <Link href="/dashboard/analise-fiscal/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <History size={15} />
               Histórico
@@ -262,7 +280,13 @@ function AnaliseFiscalInner() {
       )}
 
       {!apuracao && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-4">
+          {canAccess(role, 'analiseFiscalConfig') && (
+            <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+              <Settings size={15} />
+              Configurar TES
+            </Link>
+          )}
           <Link href="/dashboard/analise-fiscal/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
             <History size={15} />
             Ver histórico de análises
@@ -367,9 +391,19 @@ function AnaliseFiscalInner() {
                   </button>
                 ))}
               </div>
-              <button onClick={exportarExcel} className="bg-accent text-white rounded-lg px-3 py-1.5 text-sm font-medium">
-                Exportar Excel
-              </button>
+              <div className="flex gap-2">
+                <a
+                  href={`/api/analise-fiscal/apuracoes/${apuracao.id}/pdf`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="border border-accent text-accent rounded-lg px-3 py-1.5 text-sm font-medium"
+                >
+                  Exportar PDF
+                </a>
+                <button onClick={exportarExcel} className="bg-accent text-white rounded-lg px-3 py-1.5 text-sm font-medium">
+                  Exportar Excel
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mb-4">

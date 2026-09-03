@@ -32,6 +32,15 @@ export type RuleContext = {
   linha: LinhaEntradaImportada;
   ufPropria: string;
   aliquotaInterna: number;
+  // CNPJs (só dígitos) do grupo de empresas relacionadas, cadastrados pela
+  // empresa via tela administrativa — usado pela TES 138. Vazio = empresa
+  // ainda não configurou, então a regra correspondente não roda.
+  cnpjsGrupo: Set<string>;
+  // metadados de TES (chaveNf, permiteProdutos, rótulo) editáveis pela
+  // empresa via tela administrativa — ver analise-fiscal-config-db.ts.
+  // As regras profundas (TES_RULES) continuam fixas no código; só os
+  // metadados usados pelas regras GENÉRICAS vêm daqui.
+  tesMetadataPorCodigo: Record<string, TesMetadata>;
 };
 
 export type RuleDef = { id: string; check: (ctx: RuleContext) => Divergencia | null };
@@ -240,13 +249,15 @@ const RULES_ICMS_ISENTO_PISCOFINS_PADRAO: RuleDef[] = [
 ];
 
 // ---------------- Fort Fruit — CNPJs do grupo (TES 138) ----------------
-export const CNPJS_GRUPO_FORTFRUIT: { nome: string; cnpj: string }[] = [
+// Não é mais usado diretamente pela regra (que agora lê ctx.cnpjsGrupo,
+// vindo da tabela AnaliseFiscalCnpjGrupo via tela administrativa) — fica
+// como referência para o script de seed inicial da Fort Fruit.
+export const CNPJS_GRUPO_FORTFRUIT_SEED: { nome: string; cnpj: string }[] = [
   { nome: 'Fortfruit Matriz', cnpj: '02.338.006/0001-07' },
   { nome: 'Filial Castanhal', cnpj: '02.338.006/0004-41' },
   { nome: 'Filial Passarela', cnpj: '02.338.006/0006-03' },
   { nome: 'Filial Piedade', cnpj: '02.338.006/0005-22' },
 ];
-const DIGITOS_GRUPO_FORTFRUIT = new Set(CNPJS_GRUPO_FORTFRUIT.map((c) => somenteDigitos(c.cnpj)));
 
 // ---------------- regras profundas: Gerenciais (001/002/004/009) ----------------
 // Única validação é a política de Chave NF (proibida), que já roda via
@@ -313,16 +324,20 @@ const RULES_138: RuleDef[] = [
   {
     id: 'tes138_cnpj_grupo',
     check: (ctx) => {
-      const { linha } = ctx;
+      const { linha, cnpjsGrupo } = ctx;
+      // empresa ainda não cadastrou o grupo de CNPJs (tela administrativa)
+      // — sem lista de referência, não dá pra afirmar que o fornecedor
+      // está fora do grupo, então a regra não roda
+      if (!cnpjsGrupo || cnpjsGrupo.size === 0) return null;
       const digitos = somenteDigitos(linha.cnpjCpf);
       if (!digitos) return null;
-      if (DIGITOS_GRUPO_FORTFRUIT.has(digitos)) return null;
+      if (cnpjsGrupo.has(digitos)) return null;
       return {
         severidade: 'CRITICO',
         tipo: 'FORNECEDOR_TES',
-        regraEsperada: 'TES 138 é exclusiva para transferências entre empresas do grupo Fort Fruit',
+        regraEsperada: 'TES 138 é exclusiva para transferências entre empresas do grupo cadastrado',
         informacaoEncontrada: `CNPJ ${linha.cnpjCpf} (fornecedor: ${linha.fornecedor}) não está na lista de CNPJs do grupo`,
-        motivo: 'O CNPJ do fornecedor/remetente não corresponde a nenhuma filial cadastrada do grupo Fort Fruit',
+        motivo: 'O CNPJ do fornecedor/remetente não corresponde a nenhuma empresa cadastrada no grupo (Configurar TES → CNPJs do grupo)',
         sugestaoCorrecao: 'Verificar se esta nota deveria mesmo usar TES 138, ou se é uma compra de terceiro classificada incorretamente',
       };
     },

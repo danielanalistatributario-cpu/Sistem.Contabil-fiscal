@@ -14,6 +14,7 @@ export const MODULE_PERMISSIONS = {
   auditorRtc: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   validacaoCadastro: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   analiseFiscal: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  analiseFiscalConfig: ['ADMINISTRADOR'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;

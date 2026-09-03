@@ -3,8 +3,8 @@
 // específicas, e agrega tudo em KPIs pro cabeçalho da apuração.
 
 import type { LinhaEntradaImportada } from './analise-fiscal-reader';
-import type { Divergencia, Severidade } from './analise-fiscal-tes-registry';
-import { TES_METADATA, TES_RULES } from './analise-fiscal-tes-registry';
+import type { Divergencia, Severidade, TesMetadata } from './analise-fiscal-tes-registry';
+import { TES_RULES } from './analise-fiscal-tes-registry';
 import { GENERIC_RULES } from './analise-fiscal-generic-rules';
 
 export type ItemApurado = {
@@ -39,12 +39,18 @@ export type ResultadoApuracao = { itens: ItemApurado[]; resumo: ResumoApuracao }
 
 export function apurarEntradas(
   linhas: LinhaEntradaImportada[],
-  company: { ufDestino: string; aliquotaInterna: number }
+  company: { ufDestino: string; aliquotaInterna: number },
+  config: { tesMetadataPorCodigo: Record<string, TesMetadata>; cnpjsGrupo: Set<string> }
 ): ResultadoApuracao {
-  const ctxBase = { ufPropria: company.ufDestino || '', aliquotaInterna: company.aliquotaInterna || 0.19 };
+  const ctxBase = {
+    ufPropria: company.ufDestino || '',
+    aliquotaInterna: company.aliquotaInterna || 0.19,
+    cnpjsGrupo: config.cnpjsGrupo,
+    tesMetadataPorCodigo: config.tesMetadataPorCodigo,
+  };
 
   const itens: ItemApurado[] = linhas.map((linha) => {
-    const meta = TES_METADATA[linha.tes];
+    const meta = config.tesMetadataPorCodigo[linha.tes];
     const tesConhecida = !!meta;
     const divergencias: Divergencia[] = [];
     const ctx = { linha, ...ctxBase };
@@ -77,7 +83,7 @@ export function apurarEntradas(
 
   for (const item of itens) {
     const { linha } = item;
-    const meta = TES_METADATA[linha.tes];
+    const meta = config.tesMetadataPorCodigo[linha.tes];
     if (linha.numeroNf) notas.add(linha.numeroNf);
     if (linha.produtoCodigo || linha.produtoDescricao) produtos.add(linha.produtoCodigo || linha.produtoDescricao);
     if (linha.tes) tesSet.add(linha.tes);
