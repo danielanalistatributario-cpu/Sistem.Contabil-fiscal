@@ -122,7 +122,13 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const apuracao = await prisma.analiseFiscalApuracao.findUnique({
     where: { id: params.id },
-    include: { itens: { include: { divergencias: true }, orderBy: { linha: 'asc' } }, company: true },
+    include: {
+      itens: {
+        orderBy: { linha: 'asc' },
+        select: { numeroNf: true, linha: true, tes: true, divergencias: true },
+      },
+      company: true,
+    },
   });
 
   if (!apuracao || apuracao.companyId !== session.currentCompanyId) {

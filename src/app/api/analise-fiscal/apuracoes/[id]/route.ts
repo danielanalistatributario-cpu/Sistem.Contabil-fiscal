@@ -12,9 +12,30 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 
+  // seleciona só os campos que a tela realmente usa — evita respostas
+  // pesadas desnecessárias em apurações com muitos milhares de itens
   const apuracao = await prisma.analiseFiscalApuracao.findUnique({
     where: { id: params.id },
-    include: { itens: { include: { divergencias: true }, orderBy: { linha: 'asc' } } },
+    include: {
+      itens: {
+        orderBy: { linha: 'asc' },
+        select: {
+          id: true,
+          linha: true,
+          tes: true,
+          tesConhecida: true,
+          produtoCodigo: true,
+          produtoDescricao: true,
+          cfop: true,
+          uf: true,
+          fornecedor: true,
+          cnpjCpf: true,
+          chaveNf: true,
+          numeroNf: true,
+          divergencias: true,
+        },
+      },
+    },
   });
 
   if (!apuracao || apuracao.companyId !== session.currentCompanyId) {

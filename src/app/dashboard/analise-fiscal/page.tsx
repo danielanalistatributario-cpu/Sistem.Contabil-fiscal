@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { History, Settings } from 'lucide-react';
 import { ImportHero } from '@/components/ImportHero';
 import * as XLSX from 'xlsx';
-import { lerRelatorioEntradas } from '@/lib/analise-fiscal-reader';
 import { canAccess, type Role } from '@/lib/permissions';
 
 type Severidade = 'CRITICO' | 'ALTO' | 'MEDIO' | 'BAIXO' | 'INFORMATIVO';
@@ -131,37 +130,26 @@ function AnaliseFiscalInner() {
     setLoading(true);
 
     try {
-      const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
-      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
-        header: 1,
-        raw: true,
-        defval: null,
-      }) as unknown[][];
+      // O arquivo é enviado bruto e lido no servidor — relatórios reais
+      // chegam a milhares de linhas, e mandar isso já interpretado como
+      // JSON estoura o limite de payload da hospedagem bem antes do
+      // arquivo .xlsx compacto original.
+      const formData = new FormData();
+      formData.append('file', file);
+      if (periodo) formData.append('periodo', periodo);
 
-      const leitura = lerRelatorioEntradas(aoa);
-      if (leitura.erro) {
-        setErro(leitura.erro);
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetch('/api/analise-fiscal/apurar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodo: periodo || null, fileName: file.name, linhas: leitura.rows }),
-      });
-      const data = await res.json();
+      const res = await fetch('/api/analise-fiscal/apurar', { method: 'POST', body: formData });
+      const data = await res.json().catch(() => null);
       setLoading(false);
 
       if (!res.ok) {
-        setErro(data.error || 'Falha ao processar.');
+        setErro(data?.error || `Falha ao processar (HTTP ${res.status}).`);
         return;
       }
       setApuracao(data.apuracao);
     } catch (err) {
       setLoading(false);
-      setErro('Não foi possível ler o arquivo. Verifique se é um .xlsx/.csv válido no layout do Relatório de Entradas.');
+      setErro('Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.');
       console.error(err);
     }
   }
