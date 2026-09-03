@@ -42,6 +42,7 @@ model Company {
   activityLog    ActivityLog[]
   perfisProdutos PerfilProduto[]
   validacoesCadastro ValidacaoCadastroApuracao[]
+  analisesFiscais AnaliseFiscalApuracao[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -441,4 +442,88 @@ model ValidacaoCadastroItem {
   status            String
   observacao        String?
   apuracao          ValidacaoCadastroApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+}
+
+// Análise e Apuração Fiscal — auditoria do Relatório Fiscal de Entradas,
+// cruzando TES x Produto x CFOP x UF x Fornecedor x Chave NF x tributos.
+// Apenas ENTRADAS por enquanto (Etapas 1-10); Saídas e o cruzamento
+// entradas x saídas ficam para uma etapa futura.
+model AnaliseFiscalApuracao {
+  id                       String   @id @default(cuid())
+  companyId                String
+  periodo                  String?
+  fileName                 String?
+  totalLinhas              Int
+  totalNotas               Int
+  totalProdutos            Int
+  totalTes                 Int
+  totalCfops               Int
+  qtdTesNovas              Int      @default(0)
+  qtdCfopsNovos            Int      @default(0)
+  qtdNotasSemChave         Int      @default(0)
+  qtdDivergenciaCfopUf     Int      @default(0)
+  qtdDivergenciaIcms       Int      @default(0)
+  qtdDivergenciaPisCofins  Int      @default(0)
+  qtdProdutosIncompativeis Int      @default(0)
+  totalDivergencias        Int      @default(0)
+  qtdCritico               Int      @default(0)
+  qtdAlto                  Int      @default(0)
+  qtdMedio                 Int      @default(0)
+  qtdBaixo                 Int      @default(0)
+  qtdInformativo           Int      @default(0)
+  tesNovasEncontradas      String? // lista separada por vírgula, para exibição rápida sem consultar os itens
+  processedAt              DateTime @default(now())
+  company                  Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  itens                    AnaliseFiscalItem[]
+  divergencias              AnaliseFiscalDivergencia[]
+}
+
+model AnaliseFiscalItem {
+  id               String   @id @default(cuid())
+  apuracaoId       String
+  linha            Int // nº da linha no arquivo original importado, para rastreio
+  tes              String
+  tesConhecida     Boolean  @default(false)
+  produtoCodigo    String?
+  produtoDescricao String?
+  cfop             String?
+  uf               String?
+  fornecedor       String?
+  cnpjCpf          String?
+  chaveNf          String?
+  numeroNf         String?
+  total            Float?
+  desconto         Float?
+  frete            Float?
+  despesa          Float?
+  seguro           Float?
+  valorContabil    Float?
+  baseIcms         Float?
+  valorIcms        Float?
+  aliquotaIcms     Float?
+  isento           Float?
+  baseOutros       Float?
+  basePis          Float?
+  valorPis         Float?
+  aliquotaPis      Float?
+  baseCofins       Float?
+  valorCofins      Float?
+  aliquotaCofins   Float?
+  apuracao         AnaliseFiscalApuracao      @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+  divergencias     AnaliseFiscalDivergencia[]
+}
+
+// severidade: CRITICO | ALTO | MEDIO | BAIXO | INFORMATIVO
+model AnaliseFiscalDivergencia {
+  id                   String   @id @default(cuid())
+  apuracaoId           String // denormalizado — permite consultar a tela de divergências sem join pelo item
+  itemId               String
+  severidade           String
+  tipo                 String
+  regraEsperada        String
+  informacaoEncontrada String
+  motivo               String
+  sugestaoCorrecao     String?
+  apuracao             AnaliseFiscalApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+  item                 AnaliseFiscalItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
 }

@@ -13,6 +13,7 @@ export const MODULE_PERMISSIONS = {
   conciliacao: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   auditorRtc: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   validacaoCadastro: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  analiseFiscal: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;
