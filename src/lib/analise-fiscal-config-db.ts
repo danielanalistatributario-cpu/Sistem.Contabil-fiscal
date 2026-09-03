@@ -7,13 +7,14 @@
 import { prisma } from './db';
 import { TES_METADATA, type TesMetadata, type ChaveNfPolicy } from './analise-fiscal-tes-registry';
 
-// Garante que a empresa tenha pelo menos um registro de config de TES —
-// na primeira chamada, semeia com os defaults hardcoded (achatados por
-// código). Chamadas seguintes são no-op (idempotente).
+// Garante que os códigos de TES do registro hardcoded existam na config
+// da empresa — cria só os que estiverem faltando (skipDuplicates), nunca
+// sobrescreve o que o admin já customizou pela tela. Roda em toda
+// apuração/carregamento (barato, é só um createMany com poucas dezenas de
+// linhas) — assim, quando uma TES nova ganha metadados aqui no código
+// (como aconteceu com 211/212), toda empresa recebe o default
+// automaticamente, mesmo quem já tinha sido semeada antes.
 export async function garantirSeedTesConfig(companyId: string): Promise<void> {
-  const existentes = await prisma.analiseFiscalTesConfig.count({ where: { companyId } });
-  if (existentes > 0) return;
-
   const codigosJaVistos = new Set<string>();
   const dados = Object.entries(TES_METADATA)
     .filter(([codigo]) => {
@@ -27,6 +28,7 @@ export async function garantirSeedTesConfig(companyId: string): Promise<void> {
       grupo: meta.grupo,
       chaveNf: meta.chaveNf,
       permiteProdutos: meta.permiteProdutos,
+      validarCfopUf: meta.validarCfopUf !== false,
     }));
 
   if (dados.length === 0) return;
@@ -43,6 +45,7 @@ export async function carregarTesMetadataPorCodigo(companyId: string): Promise<R
       grupo: l.grupo,
       chaveNf: l.chaveNf as ChaveNfPolicy,
       permiteProdutos: l.permiteProdutos,
+      validarCfopUf: l.validarCfopUf,
     };
   }
   return mapa;

@@ -52,6 +52,11 @@ export type TesMetadata = {
   grupo: string;
   chaveNf: ChaveNfPolicy;
   permiteProdutos: boolean;
+  // false = não roda o cruzamento CFOP x UF nesta TES (ex: TES de frete,
+  // onde o CFOP reflete a natureza do transporte, não a UF do fornecedor
+  // — confirmado com dado real e a pedido do usuário). Ausente/undefined
+  // equivale a true (comportamento padrão, roda a checagem).
+  validarCfopUf?: boolean;
 };
 
 type TesRuleGroup = TesMetadata & { rules: RuleDef[] };
@@ -86,8 +91,6 @@ function ehCpf(cnpjCpf: string): boolean {
 function terminaEmAL(descricao: string): boolean {
   return /\bAL\.?$/i.test((descricao || '').trim());
 }
-
-const NOME_EMPRESARIAL_REGEX = /\b(ME|LTDA|EIRELI|COMERCIO|COM[ée]RCIO|SERVI[çc]O|IMPORTA[çc][ãa]O|COMERCIALIZA[çc][ãa]O)\b/i;
 
 // ---------------- regras genéricas reaproveitáveis entre TES ----------------
 // (calibradas contra um Relatório de Entradas real — ver
@@ -265,6 +268,12 @@ export const CNPJS_GRUPO_FORTFRUIT_SEED: { nome: string; cnpj: string }[] = [
 const RULES_GERENCIAIS: RuleDef[] = [];
 
 // ---------------- regras profundas: TES 101 ----------------
+// TES 101 é pra revenda — fornecedor esperado é CNPJ. Qualquer CNPJ está
+// correto (confirmado pelo usuário: a checagem por nome no fornecedor
+// gerava falso positivo em casos legítimos, como cooperativas com nome
+// truncado pelo Protheus — "se são CNPJs estão corretos"). Só o CPF é
+// sinalizado, pois indica produtor rural, que deveria usar TES de
+// produtor (130/141), não a TES 101.
 const RULES_101: RuleDef[] = [
   {
     id: 'tes101_fornecedor_cpf',
@@ -278,29 +287,6 @@ const RULES_101: RuleDef[] = [
         informacaoEncontrada: `Fornecedor "${linha.fornecedor}" com CPF ${linha.cnpjCpf}`,
         motivo: 'CPF normalmente indica produtor rural, que costuma usar TES de produtor (130/141), não a TES 101',
         sugestaoCorrecao: 'Verificar se a classificação TES 101 está correta para este fornecedor',
-      };
-    },
-  },
-  {
-    // TES 101 é normalmente usada com fornecedores CNPJ que têm perfil de
-    // empresa comercial estabelecida (ME/LTDA/COMÉRCIO/SERVIÇO/IMPORTAÇÃO/
-    // COMERCIALIZAÇÃO no nome) — isso é o padrão esperado, não uma
-    // divergência. O que precisa de verificação é o CNPJ SEM esse
-    // indicativo: pode ser um produtor rural registrado com CNPJ (em vez
-    // de CPF) e classificado incorretamente em TES 101 em vez de 130/141.
-    id: 'tes101_fornecedor_cnpj_sem_indicativo_empresarial',
-    check: (ctx) => {
-      const { linha } = ctx;
-      if (ehCpf(linha.cnpjCpf)) return null;
-      if (!linha.cnpjCpf.trim()) return null;
-      if (NOME_EMPRESARIAL_REGEX.test(linha.fornecedor || '')) return null;
-      return {
-        severidade: 'MEDIO',
-        tipo: 'FORNECEDOR_TES',
-        regraEsperada: 'TES 101 é para revenda — fornecedor CNPJ sem indicativo de empresa comercial estabelecida merece verificação',
-        informacaoEncontrada: `Fornecedor "${linha.fornecedor}" (CNPJ ${linha.cnpjCpf})`,
-        motivo: 'Nome do fornecedor não contém indicativo de empresa comercial (ME/LTDA/COMÉRCIO/SERVIÇO/IMPORTAÇÃO/COMERCIALIZAÇÃO) — pode ser produtor rural registrado com CNPJ, que deveria usar TES de produtor (130/141)',
-        sugestaoCorrecao: 'Verificar se o fornecedor é produtor rural e se a classificação TES 101 está correta',
       };
     },
   },
@@ -428,7 +414,14 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   { codigos: ['152'], grupo: 'Frete tributado', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
   // TES 153 (frete isento): ICMS isento, mas PIS/COFINS continuam
   // tributados (evidência real: ICMS 0/146, PIS/COFINS nunca zerados)
-  { codigos: ['153'], grupo: 'Frete isento', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
+  // CFOP de frete (evidência real: sempre 2353, independente da UF do
+  // fornecedor) não segue a convenção interna/interestadual normal — a
+  // pedido do usuário, sem checagem de CFOP x UF
+  { codigos: ['153'], grupo: 'Frete isento', chaveNf: 'obrigatoria', permiteProdutos: true, validarCfopUf: false, rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
+  // TES 211/212 "Frete iniciado UF": evidência real (Chave NF 100%
+  // preenchida, CFOP sempre 2932 independente da UF) — mesmo padrão de
+  // frete da TES 153, sem checagem de CFOP x UF
+  { codigos: ['211', '212'], grupo: 'Frete iniciado UF', chaveNf: 'obrigatoria', permiteProdutos: true, validarCfopUf: false, rules: [] },
   // 155/194/294 x 157 tratados separadamente: mesmo grupo de metadados no
   // texto original, mas o comportamento real de ICMS diverge (evidência
   // real: 155/194/294 sempre isentos de ICMS; 157 sempre tributado pela

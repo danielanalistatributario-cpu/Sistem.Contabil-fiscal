@@ -10,6 +10,7 @@ type TesRow = {
   grupo: string;
   chaveNf: 'obrigatoria' | 'proibida' | 'livre';
   permiteProdutos: boolean;
+  validarCfopUf: boolean;
 };
 
 type CnpjRow = { id: string; nome: string; cnpj: string };
@@ -31,6 +32,7 @@ export default function AnaliseFiscalConfigPage() {
   const [novoGrupo, setNovoGrupo] = useState('');
   const [novaChaveNf, setNovaChaveNf] = useState<TesRow['chaveNf']>('obrigatoria');
   const [novoPermiteProdutos, setNovoPermiteProdutos] = useState(true);
+  const [novoValidarCfopUf, setNovoValidarCfopUf] = useState(true);
 
   const [novoNomeCnpj, setNovoNomeCnpj] = useState('');
   const [novoCnpj, setNovoCnpj] = useState('');
@@ -62,7 +64,13 @@ export default function AnaliseFiscalConfigPage() {
     const res = await fetch('/api/analise-fiscal/config/tes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codigo: novoCodigo, grupo: novoGrupo, chaveNf: novaChaveNf, permiteProdutos: novoPermiteProdutos }),
+      body: JSON.stringify({
+        codigo: novoCodigo,
+        grupo: novoGrupo,
+        chaveNf: novaChaveNf,
+        permiteProdutos: novoPermiteProdutos,
+        validarCfopUf: novoValidarCfopUf,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -73,10 +81,11 @@ export default function AnaliseFiscalConfigPage() {
     setNovoGrupo('');
     setNovaChaveNf('obrigatoria');
     setNovoPermiteProdutos(true);
+    setNovoValidarCfopUf(true);
     carregarTes();
   }
 
-  async function handleEditTes(id: string, campo: 'grupo' | 'chaveNf' | 'permiteProdutos', valor: string | boolean) {
+  async function handleEditTes(id: string, campo: 'grupo' | 'chaveNf' | 'permiteProdutos' | 'validarCfopUf', valor: string | boolean) {
     await fetch(`/api/analise-fiscal/config/tes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -170,6 +179,10 @@ export default function AnaliseFiscalConfigPage() {
             <input type="checkbox" checked={novoPermiteProdutos} onChange={(e) => setNovoPermiteProdutos(e.target.checked)} />
             Permite produtos
           </label>
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 pb-2">
+            <input type="checkbox" checked={novoValidarCfopUf} onChange={(e) => setNovoValidarCfopUf(e.target.checked)} />
+            Valida CFOP×UF
+          </label>
           <button type="submit" className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
             + Cadastrar TES
           </button>
@@ -184,6 +197,7 @@ export default function AnaliseFiscalConfigPage() {
                 <th className="py-2 pr-3">Grupo / rótulo</th>
                 <th className="py-2 pr-3">Chave NF</th>
                 <th className="py-2 pr-3">Permite produtos</th>
+                <th className="py-2 pr-3">Valida CFOP×UF</th>
                 <th className="py-2 pr-3"></th>
               </tr>
             </thead>
@@ -214,6 +228,13 @@ export default function AnaliseFiscalConfigPage() {
                       type="checkbox"
                       checked={t.permiteProdutos}
                       onChange={(e) => handleEditTes(t.id, 'permiteProdutos', e.target.checked)}
+                    />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <input
+                      type="checkbox"
+                      checked={t.validarCfopUf}
+                      onChange={(e) => handleEditTes(t.id, 'validarCfopUf', e.target.checked)}
                     />
                   </td>
                   <td className="py-2 pr-3">

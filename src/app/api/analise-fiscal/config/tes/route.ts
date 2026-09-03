@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
   const grupo = String(body?.grupo || '').trim();
   const chaveNf = String(body?.chaveNf || '').trim();
   const permiteProdutos = !!body?.permiteProdutos;
+  const validarCfopUf = body?.validarCfopUf === undefined ? true : !!body.validarCfopUf;
 
   if (!codigo || !grupo || !CHAVE_NF_VALIDAS.includes(chaveNf)) {
     return NextResponse.json(
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
   }
 
   const tes = await prisma.analiseFiscalTesConfig.create({
-    data: { companyId: session.currentCompanyId, codigo, grupo, chaveNf, permiteProdutos },
+    data: { companyId: session.currentCompanyId, codigo, grupo, chaveNf, permiteProdutos, validarCfopUf },
   });
 
   await logActivity(session.id, 'CADASTROU_TES_ANALISE_FISCAL', `TES ${codigo} — ${grupo}`, session.currentCompanyId);

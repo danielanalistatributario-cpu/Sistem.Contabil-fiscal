@@ -110,6 +110,10 @@ const ruleCfopUf: RuleDef = {
     // 100% das divergências desta regra vinham das TES gerenciais)
     const meta = ctx.tesMetadataPorCodigo[linha.tes];
     if (meta && meta.chaveNf === 'proibida') return null;
+    // algumas TES (ex: frete) têm CFOP fixo que reflete a natureza da
+    // operação, não a UF do fornecedor — checagem desligada por TES
+    // (padrão: ligada quando o campo está ausente/undefined)
+    if (meta && meta.validarCfopUf === false) return null;
     const digito = (linha.cfop.match(/\d/) || [''])[0];
     if (!['1', '2', '5', '6'].includes(digito)) return null;
     const interna = digito === '1' || digito === '5';

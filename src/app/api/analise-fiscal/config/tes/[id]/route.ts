@@ -23,6 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const grupo = body?.grupo !== undefined ? String(body.grupo).trim() : tesAtual.grupo;
   const chaveNf = body?.chaveNf !== undefined ? String(body.chaveNf).trim() : tesAtual.chaveNf;
   const permiteProdutos = body?.permiteProdutos !== undefined ? !!body.permiteProdutos : tesAtual.permiteProdutos;
+  const validarCfopUf = body?.validarCfopUf !== undefined ? !!body.validarCfopUf : tesAtual.validarCfopUf;
 
   if (!grupo || !CHAVE_NF_VALIDAS.includes(chaveNf)) {
     return NextResponse.json(
@@ -33,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const tes = await prisma.analiseFiscalTesConfig.update({
     where: { id: params.id },
-    data: { grupo, chaveNf, permiteProdutos },
+    data: { grupo, chaveNf, permiteProdutos, validarCfopUf },
   });
 
   await logActivity(session.id, 'EDITOU_TES_ANALISE_FISCAL', `TES ${tes.codigo} — ${grupo}`, session.currentCompanyId);
