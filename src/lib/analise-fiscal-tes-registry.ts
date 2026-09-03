@@ -282,18 +282,25 @@ const RULES_101: RuleDef[] = [
     },
   },
   {
-    id: 'tes101_fornecedor_nome_empresarial',
+    // TES 101 é normalmente usada com fornecedores CNPJ que têm perfil de
+    // empresa comercial estabelecida (ME/LTDA/COMÉRCIO/SERVIÇO/IMPORTAÇÃO/
+    // COMERCIALIZAÇÃO no nome) — isso é o padrão esperado, não uma
+    // divergência. O que precisa de verificação é o CNPJ SEM esse
+    // indicativo: pode ser um produtor rural registrado com CNPJ (em vez
+    // de CPF) e classificado incorretamente em TES 101 em vez de 130/141.
+    id: 'tes101_fornecedor_cnpj_sem_indicativo_empresarial',
     check: (ctx) => {
       const { linha } = ctx;
       if (ehCpf(linha.cnpjCpf)) return null;
-      if (!NOME_EMPRESARIAL_REGEX.test(linha.fornecedor || '')) return null;
+      if (!linha.cnpjCpf.trim()) return null;
+      if (NOME_EMPRESARIAL_REGEX.test(linha.fornecedor || '')) return null;
       return {
         severidade: 'MEDIO',
         tipo: 'FORNECEDOR_TES',
-        regraEsperada: 'TES 101 é para produtos de revenda isentos — fornecedores com perfil de comércio/importação estabelecido merecem revisão',
-        informacaoEncontrada: `Fornecedor "${linha.fornecedor}"`,
-        motivo: 'Nome do fornecedor contém indicativo de empresa comercial/importadora estabelecida (ME/LTDA/COMÉRCIO/SERVIÇO/IMPORTAÇÃO/COMERCIALIZAÇÃO)',
-        sugestaoCorrecao: 'Verificar se o fornecedor deveria mesmo estar classificado em TES 101',
+        regraEsperada: 'TES 101 é para revenda — fornecedor CNPJ sem indicativo de empresa comercial estabelecida merece verificação',
+        informacaoEncontrada: `Fornecedor "${linha.fornecedor}" (CNPJ ${linha.cnpjCpf})`,
+        motivo: 'Nome do fornecedor não contém indicativo de empresa comercial (ME/LTDA/COMÉRCIO/SERVIÇO/IMPORTAÇÃO/COMERCIALIZAÇÃO) — pode ser produtor rural registrado com CNPJ, que deveria usar TES de produtor (130/141)',
+        sugestaoCorrecao: 'Verificar se o fornecedor é produtor rural e se a classificação TES 101 está correta',
       };
     },
   },
@@ -425,16 +432,22 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   // 155/194/294 x 157 tratados separadamente: mesmo grupo de metadados no
   // texto original, mas o comportamento real de ICMS diverge (evidência
   // real: 155/194/294 sempre isentos de ICMS; 157 sempre tributado pela
-  // tabela normal) — PIS/COFINS tributados 1,65%/7,60% em ambos
-  { codigos: ['155', '194', '294'], grupo: 'Manutenção (predial/elétrica/máquinas)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
-  { codigos: ['157'], grupo: 'Manutenção (veículos)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleIcmsTabelaPadrao(), ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
+  // tabela normal) — PIS/COFINS tributados 1,65%/7,60% em ambos.
+  // A pedido do usuário, 155/194/157 não validam mais ICMS (só PIS/COFINS)
+  // — 294 continua validando ICMS isento normalmente.
+  { codigos: ['155', '194'], grupo: 'Manutenção (predial/elétrica/máquinas)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
+  { codigos: ['294'], grupo: 'Manutenção (predial/elétrica/máquinas)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
+  { codigos: ['157'], grupo: 'Manutenção (veículos)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
   // TES 165: ICMS isento no relatório (evidência real: 44/44) —
   // PIS/COFINS aparecem mistos (tributado e isento) no arquivo real, sem
   // padrão único, por isso sem checagem de PIS/COFINS aqui
   { codigos: ['165'], grupo: 'Combustíveis e lubrificantes', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
   // Chave NF confirmada obrigatória com dado real (106/106 e 6/6); tudo
-  // isento de ICMS/PIS/COFINS (evidência real: 100% zerados)
-  { codigos: ['172', '173', '196'], grupo: 'Limpeza / escritório / informática', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
+  // isento de ICMS/PIS/COFINS (evidência real: 100% zerados). A pedido do
+  // usuário, TES 172 não valida mais ICMS (só PIS/COFINS isentos) — 173 e
+  // 196 continuam validando os três normalmente.
+  { codigos: ['172'], grupo: 'Limpeza / escritório / informática', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
+  { codigos: ['173', '196'], grupo: 'Limpeza / escritório / informática', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
   // TES 175: não apareceu no arquivo real testado — fica metadados só
   { codigos: ['175'], grupo: 'ST, PIS/COFINS tributado', chaveNf: 'livre', permiteProdutos: true, rules: [] },
   // Devolução de operação interna: ICMS pela alíquota interna fixa
