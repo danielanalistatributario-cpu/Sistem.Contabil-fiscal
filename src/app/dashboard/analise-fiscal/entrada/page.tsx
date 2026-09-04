@@ -6,15 +6,13 @@ import Link from 'next/link';
 import { ArrowLeft, History, Settings, BookOpenText } from 'lucide-react';
 import { ImportHero } from '@/components/ImportHero';
 import * as XLSX from 'xlsx';
-import { lerRelatorioSaidas } from '@/lib/analise-fiscal-saida-reader';
-import { apurarSaidas, type ItemApuradoSaida, type ResumoApuracaoSaida } from '@/lib/analise-fiscal-saida-compute';
-import type { TesMetadata } from '@/lib/analise-fiscal-tes-registry';
 import { canAccess, type Role } from '@/lib/permissions';
 
 type Severidade = 'CRITICO' | 'ALTO' | 'MEDIO' | 'BAIXO' | 'INFORMATIVO';
 
-type DivergenciaView = {
-  id?: string;
+type DivergenciaDB = {
+  id: string;
+  itemId: string;
   severidade: Severidade;
   tipo: string;
   regraEsperada: string;
@@ -23,7 +21,8 @@ type DivergenciaView = {
   sugestaoCorrecao: string | null;
 };
 
-type ItemView = {
+type ItemDB = {
+  id: string;
   linha: number;
   tes: string;
   tesConhecida: boolean;
@@ -31,21 +30,33 @@ type ItemView = {
   produtoDescricao: string | null;
   cfop: string | null;
   uf: string | null;
-  cliente: string | null;
+  fornecedor: string | null;
   cnpjCpf: string | null;
   chaveNf: string | null;
   numeroNf: string | null;
-  divergencias: DivergenciaView[];
+  divergencias: DivergenciaDB[];
 };
 
-type ApuracaoView = {
+type ApuracaoDB = {
   id: string;
   periodo: string | null;
   fileName: string | null;
-  status: string;
+  totalLinhas: number;
+  totalNotas: number;
+  totalProdutos: number;
+  totalTes: number;
+  totalCfops: number;
+  qtdTesNovas: number;
+  qtdNotasSemChave: number;
+  totalDivergencias: number;
+  qtdCritico: number;
+  qtdAlto: number;
+  qtdMedio: number;
+  qtdBaixo: number;
+  qtdInformativo: number;
+  tesNovasEncontradas: string | null;
   processedAt: string;
-  resumo: ResumoApuracaoSaida;
-  itens: ItemView[];
+  itens: ItemDB[];
 };
 
 const SEVERIDADE_LABEL: Record<Severidade, string> = {
@@ -55,6 +66,7 @@ const SEVERIDADE_LABEL: Record<Severidade, string> = {
   BAIXO: 'Baixo',
   INFORMATIVO: 'Informativo',
 };
+
 const SEVERIDADE_COLOR: Record<Severidade, string> = {
   CRITICO: 'bg-red-100 text-red-700',
   ALTO: 'bg-amber-100 text-amber-700',
@@ -62,45 +74,29 @@ const SEVERIDADE_COLOR: Record<Severidade, string> = {
   BAIXO: 'bg-blue-100 text-blue-700',
   INFORMATIVO: 'bg-gray-200 text-gray-600',
 };
+
 const SEVERIDADE_ORDEM: Severidade[] = ['CRITICO', 'ALTO', 'MEDIO', 'BAIXO', 'INFORMATIVO'];
-const TAMANHO_LOTE = 2000;
 
-function paraItemView(item: ItemApuradoSaida): ItemView {
-  return {
-    linha: item.linha.linha,
-    tes: item.linha.tes,
-    tesConhecida: item.tesConhecida,
-    produtoCodigo: item.linha.produtoCodigo || null,
-    produtoDescricao: item.linha.produtoDescricao || null,
-    cfop: item.linha.cfop || null,
-    uf: item.linha.uf || null,
-    cliente: item.linha.fornecedor || null,
-    cnpjCpf: item.linha.cnpjCpf || null,
-    chaveNf: item.linha.chaveNf || null,
-    numeroNf: item.linha.numeroNf || null,
-    divergencias: item.divergencias.map((d) => ({ ...d, sugestaoCorrecao: d.sugestaoCorrecao || null })),
-  };
-}
+type LinhaDivergencia = DivergenciaDB & { item: ItemDB };
 
-export default function AnaliseFiscalSaidaPage() {
+export default function AnaliseFiscalEntradaPage() {
   return (
     <Suspense fallback={null}>
-      <AnaliseFiscalSaidaInner />
+      <AnaliseFiscalEntradaInner />
     </Suspense>
   );
 }
 
-function AnaliseFiscalSaidaInner() {
+function AnaliseFiscalEntradaInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const apuracaoIdParam = searchParams.get('apuracaoId');
 
   const [file, setFile] = useState<File | null>(null);
   const [periodo, setPeriodo] = useState('');
-  const [processando, setProcessando] = useState(false);
-  const [progresso, setProgresso] = useState<{ fase: string; loteAtual: number; totalLotes: number } | null>(null);
+  const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [apuracao, setApuracao] = useState<ApuracaoView | null>(null);
+  const [apuracao, setApuracao] = useState<ApuracaoDB | null>(null);
   const [filtroSeveridade, setFiltroSeveridade] = useState<'TODOS' | Severidade>('TODOS');
   const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
@@ -120,19 +116,10 @@ function AnaliseFiscalSaidaInner() {
   useEffect(() => {
     if (!apuracaoIdParam) return;
     (async () => {
-      const res = await fetch(`/api/analise-fiscal/saida/apuracoes/${apuracaoIdParam}`);
+      const res = await fetch(`/api/analise-fiscal/apuracoes/${apuracaoIdParam}`);
       if (res.ok) {
         const data = await res.json();
-        const a = data.apuracao;
-        setApuracao({
-          id: a.id,
-          periodo: a.periodo,
-          fileName: a.fileName,
-          status: a.status,
-          processedAt: a.processedAt,
-          resumo: a,
-          itens: a.itens,
-        });
+        setApuracao(data.apuracao);
       }
     })();
   }, [apuracaoIdParam]);
@@ -140,101 +127,29 @@ function AnaliseFiscalSaidaInner() {
   async function handleProcessar() {
     if (!file) return;
     setErro(null);
-    setApuracao(null);
-    setProcessando(true);
+    setLoading(true);
 
     try {
-      setProgresso({ fase: 'Lendo arquivo...', loteAtual: 0, totalLotes: 0 });
-      const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
-      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null }) as unknown[][];
-      const leitura = lerRelatorioSaidas(aoa);
-      if (leitura.erro) {
-        setErro(leitura.erro);
-        setProcessando(false);
-        setProgresso(null);
+      // O arquivo é enviado bruto e lido no servidor — relatórios reais
+      // chegam a milhares de linhas, e mandar isso já interpretado como
+      // JSON estoura o limite de payload da hospedagem bem antes do
+      // arquivo .xlsx compacto original.
+      const formData = new FormData();
+      formData.append('file', file);
+      if (periodo) formData.append('periodo', periodo);
+
+      const res = await fetch('/api/analise-fiscal/apurar', { method: 'POST', body: formData });
+      const data = await res.json().catch(() => null);
+      setLoading(false);
+
+      if (!res.ok) {
+        setErro(data?.error || `Falha ao processar (HTTP ${res.status}).`);
         return;
       }
-
-      setProgresso({ fase: 'Carregando configuração da empresa...', loteAtual: 0, totalLotes: 0 });
-      const resCfg = await fetch('/api/analise-fiscal/config-runtime');
-      const cfg = await resCfg.json().catch(() => null);
-      if (!resCfg.ok || !cfg) {
-        setErro(cfg?.error || 'Não foi possível carregar a configuração da empresa.');
-        setProcessando(false);
-        setProgresso(null);
-        return;
-      }
-      const tesMetadataPorCodigo = cfg.tesMetadataPorCodigo as Record<string, TesMetadata>;
-      const cnpjsGrupo = new Set<string>(cfg.cnpjsGrupo);
-
-      setProgresso({ fase: 'Calculando divergências...', loteAtual: 0, totalLotes: 0 });
-      const { itens, resumo } = apurarSaidas(leitura.rows, cfg.company, { tesMetadataPorCodigo, cnpjsGrupo });
-
-      setProgresso({ fase: 'Criando apuração...', loteAtual: 0, totalLotes: 0 });
-      const resIniciar = await fetch('/api/analise-fiscal/saida/apurar/iniciar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodo: periodo || null, fileName: file.name, resumo }),
-      });
-      const dataIniciar = await resIniciar.json().catch(() => null);
-      if (!resIniciar.ok) {
-        setErro(dataIniciar?.error || 'Falha ao iniciar a apuração.');
-        setProcessando(false);
-        setProgresso(null);
-        return;
-      }
-      const apuracaoId: string = dataIniciar.apuracaoId;
-
-      const totalLotes = Math.ceil(itens.length / TAMANHO_LOTE) || 1;
-      for (let i = 0; i < totalLotes; i++) {
-        setProgresso({ fase: 'Enviando dados...', loteAtual: i + 1, totalLotes });
-        const lote = itens.slice(i * TAMANHO_LOTE, (i + 1) * TAMANHO_LOTE);
-        if (lote.length === 0) continue;
-        const resLote = await fetch('/api/analise-fiscal/saida/apurar/lote', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apuracaoId, itens: lote }),
-        });
-        if (!resLote.ok) {
-          const dataLote = await resLote.json().catch(() => null);
-          setErro(dataLote?.error || `Falha ao enviar lote ${i + 1} de ${totalLotes}.`);
-          setProcessando(false);
-          setProgresso(null);
-          return;
-        }
-      }
-
-      setProgresso({ fase: 'Finalizando...', loteAtual: totalLotes, totalLotes });
-      const resFinalizar = await fetch('/api/analise-fiscal/saida/apurar/finalizar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apuracaoId }),
-      });
-      if (!resFinalizar.ok) {
-        const dataFin = await resFinalizar.json().catch(() => null);
-        setErro(dataFin?.error || 'Falha ao finalizar a apuração.');
-        setProcessando(false);
-        setProgresso(null);
-        return;
-      }
-
-      setApuracao({
-        id: apuracaoId,
-        periodo: periodo || null,
-        fileName: file.name,
-        status: 'CONCLUIDA',
-        processedAt: new Date().toISOString(),
-        resumo,
-        itens: itens.filter((i) => i.divergencias.length > 0).map(paraItemView),
-      });
-      setProcessando(false);
-      setProgresso(null);
-      router.replace(`/dashboard/analise-fiscal/saida?apuracaoId=${apuracaoId}`);
+      setApuracao(data.apuracao);
     } catch (err) {
-      setProcessando(false);
-      setProgresso(null);
-      setErro('Não foi possível processar o arquivo. Verifique sua conexão e tente novamente.');
+      setLoading(false);
+      setErro('Não foi possível enviar o arquivo. Verifique sua conexão e tente novamente.');
       console.error(err);
     }
   }
@@ -248,10 +163,10 @@ function AnaliseFiscalSaidaInner() {
     setFiltroTipo('TODOS');
     setBusca('');
     if (inputRef.current) inputRef.current.value = '';
-    router.replace('/dashboard/analise-fiscal/saida');
+    router.replace('/dashboard/analise-fiscal/entrada');
   }
 
-  const divergenciasFlat = useMemo(() => {
+  const divergenciasFlat: LinhaDivergencia[] = useMemo(() => {
     if (!apuracao) return [];
     return apuracao.itens.flatMap((item) => item.divergencias.map((d) => ({ ...d, item })));
   }, [apuracao]);
@@ -269,13 +184,55 @@ function AnaliseFiscalSaidaInner() {
         if (filtroSeveridade !== 'TODOS' && d.severidade !== filtroSeveridade) return false;
         if (filtroTipo !== 'TODOS' && d.tipo !== filtroTipo) return false;
         if (buscaNorm) {
-          const alvo = `${d.item.tes} ${d.item.produtoDescricao || ''} ${d.item.cliente || ''} ${d.item.numeroNf || ''}`.toLowerCase();
+          const alvo = `${d.item.tes} ${d.item.produtoDescricao || ''} ${d.item.fornecedor || ''} ${d.item.numeroNf || ''}`.toLowerCase();
           if (!alvo.includes(buscaNorm)) return false;
         }
         return true;
       })
       .sort((a, b) => SEVERIDADE_ORDEM.indexOf(a.severidade) - SEVERIDADE_ORDEM.indexOf(b.severidade));
   }, [divergenciasFlat, filtroSeveridade, filtroTipo, busca]);
+
+  function exportarExcel() {
+    if (!apuracao) return;
+    const wsDivergencias = XLSX.utils.json_to_sheet(
+      divergenciasFlat.map((d) => ({
+        'Linha': d.item.linha,
+        'Nota Fiscal': d.item.numeroNf || '',
+        'TES': d.item.tes,
+        'Produto': d.item.produtoDescricao || '',
+        'Fornecedor': d.item.fornecedor || '',
+        'CNPJ/CPF': d.item.cnpjCpf || '',
+        'CFOP': d.item.cfop || '',
+        'UF': d.item.uf || '',
+        'Severidade': SEVERIDADE_LABEL[d.severidade],
+        'Tipo': d.tipo,
+        'Regra Esperada': d.regraEsperada,
+        'Informação Encontrada': d.informacaoEncontrada,
+        'Motivo': d.motivo,
+        'Sugestão de Correção': d.sugestaoCorrecao || '',
+      }))
+    );
+    const wsItens = XLSX.utils.json_to_sheet(
+      apuracao.itens.map((i) => ({
+        'Linha': i.linha,
+        'Nota Fiscal': i.numeroNf || '',
+        'Chave NF': i.chaveNf || '',
+        'TES': i.tes,
+        'TES Conhecida': i.tesConhecida ? 'Sim' : 'Não',
+        'Produto': i.produtoDescricao || '',
+        'Código Produto': i.produtoCodigo || '',
+        'CFOP': i.cfop || '',
+        'UF': i.uf || '',
+        'Fornecedor': i.fornecedor || '',
+        'CNPJ/CPF': i.cnpjCpf || '',
+        'Qtd. Divergências': i.divergencias.length,
+      }))
+    );
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsDivergencias, 'Divergências');
+    XLSX.utils.book_append_sheet(wb, wsItens, 'Itens Importados');
+    XLSX.writeFile(wb, `Analise_Fiscal_Entradas_${(apuracao.periodo || 'sem-periodo').replace('/', '-')}.xlsx`);
+  }
 
   return (
     <div className="space-y-6">
@@ -286,16 +243,16 @@ function AnaliseFiscalSaidaInner() {
 
       {!apuracao ? (
         <ImportHero
-          eyebrow="Auditoria fiscal · Saídas"
-          titleParts={['Análise de', { text: 'Saídas', accent: true }]}
-          description="Importe o Relatório Fiscal de Saídas e o sistema audita cada venda/transferência contra o tratamento tributário esperado pela TES — mesma lógica do módulo de Entradas, adaptada pras TES de venda. Arquivos grandes (dezenas de milhares de linhas) são calculados no seu navegador e enviados em lotes."
-          badges={['Regras por TES (Protheus)', 'Processa arquivos grandes em lotes']}
+          eyebrow="Auditoria fiscal · Entradas"
+          titleParts={['Análise de', { text: 'Entradas', accent: true }]}
+          description="Importe o Relatório Fiscal de Entradas e o sistema audita cada lançamento contra o tratamento tributário esperado pela TES — cruzando produto, CFOP, UF, fornecedor, chave de NF-e e os cálculos de ICMS/PIS/COFINS, apontando exatamente onde e por que cada divergência acontece."
+          badges={['Regras por TES (Protheus)', 'Aponta motivo e sugestão de correção']}
         />
       ) : (
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-display font-semibold text-brand">Análise de Saídas</h1>
-            <p className="text-gray-500 text-sm mt-1">Auditoria do Relatório Fiscal de Saídas (vendas e transferências).</p>
+            <h1 className="text-2xl font-display font-semibold text-brand">Análise de Entradas</h1>
+            <p className="text-gray-500 text-sm mt-1">Auditoria do Relatório Fiscal de Entradas.</p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {canAccess(role, 'analiseFiscalConfig') && (
@@ -310,7 +267,7 @@ function AnaliseFiscalSaidaInner() {
                 </Link>
               </>
             )}
-            <Link href="/dashboard/analise-fiscal/saida/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+            <Link href="/dashboard/analise-fiscal/entrada/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <History size={15} />
               Histórico
             </Link>
@@ -335,7 +292,7 @@ function AnaliseFiscalSaidaInner() {
               </Link>
             </>
           )}
-          <Link href="/dashboard/analise-fiscal/saida/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+          <Link href="/dashboard/analise-fiscal/entrada/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
             <History size={15} />
             Ver histórico de análises
           </Link>
@@ -347,8 +304,8 @@ function AnaliseFiscalSaidaInner() {
       {!apuracao && (
         <div className="card-surface p-5 space-y-3">
           <p className="text-xs text-gray-500">
-            Envie o Relatório Fiscal de Saídas (Excel/CSV) exportado do Protheus — mesmas colunas do Relatório de
-            Entradas (TES, Produto, CFOP, UF, Fornec./Cliente, CNPJ/CPF, Chave NF, Total).
+            Envie o Relatório Fiscal de Entradas (Excel/CSV) exportado do Protheus, contendo colunas como TES,
+            Produto, CFOP, UF, Fornec./Cliente, CNPJ/CPF, Chave NF, Total e Valor Contábil.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <input
@@ -357,7 +314,6 @@ function AnaliseFiscalSaidaInner() {
               accept=".xlsx,.xls,.csv"
               onChange={(e) => setFile(e.target.files?.[0] || null)}
               className="text-sm"
-              disabled={processando}
             />
             <input
               type="text"
@@ -365,30 +321,15 @@ function AnaliseFiscalSaidaInner() {
               value={periodo}
               onChange={(e) => setPeriodo(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-48"
-              disabled={processando}
             />
             <button
               onClick={handleProcessar}
-              disabled={!file || processando}
+              disabled={!file || loading}
               className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
-              {processando ? 'Processando...' : 'Analisar Saídas'}
+              {loading ? 'Processando...' : 'Analisar Entradas'}
             </button>
           </div>
-          {progresso && (
-            <div className="space-y-1.5 pt-2">
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>{progresso.fase}</span>
-                {progresso.totalLotes > 0 && <span>{progresso.loteAtual} de {progresso.totalLotes} lote(s)</span>}
-              </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-accent transition-all duration-300"
-                  style={{ width: progresso.totalLotes > 0 ? `${(progresso.loteAtual / progresso.totalLotes) * 100}%` : '15%' }}
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -404,34 +345,38 @@ function AnaliseFiscalSaidaInner() {
             <div className="card-surface p-4">
               <p className="text-[10px] uppercase tracking-wide text-gray-400">Linhas / Notas</p>
               <p className="text-2xl font-bold text-gray-800 mt-1">
-                {apuracao.resumo.totalLinhas.toLocaleString('pt-BR')}{' '}
-                <span className="text-sm text-gray-400 font-normal">/ {apuracao.resumo.totalNotas.toLocaleString('pt-BR')}</span>
+                {apuracao.totalLinhas} <span className="text-sm text-gray-400 font-normal">/ {apuracao.totalNotas}</span>
               </p>
             </div>
-            <div className={`card-surface p-4 ${apuracao.resumo.totalDivergencias > 0 ? 'border border-amber-300' : ''}`}>
+            <div className={`card-surface p-4 ${apuracao.totalDivergencias > 0 ? 'border border-amber-300' : ''}`}>
               <p className="text-[10px] uppercase tracking-wide text-gray-400">Divergências</p>
-              <p className={`text-2xl font-bold mt-1 ${apuracao.resumo.totalDivergencias > 0 ? 'text-amber-600' : 'text-gray-800'}`}>
-                {apuracao.resumo.totalDivergencias}
+              <p className={`text-2xl font-bold mt-1 ${apuracao.totalDivergencias > 0 ? 'text-amber-600' : 'text-gray-800'}`}>
+                {apuracao.totalDivergencias}
               </p>
             </div>
-            <div className={`card-surface p-4 ${apuracao.resumo.qtdCritico > 0 ? 'border border-red-300' : ''}`}>
+            <div className={`card-surface p-4 ${apuracao.qtdCritico > 0 ? 'border border-red-300' : ''}`}>
               <p className="text-[10px] uppercase tracking-wide text-gray-400">Críticas / Altas</p>
               <p className="text-lg font-bold mt-1">
-                <span className={apuracao.resumo.qtdCritico > 0 ? 'text-red-600' : 'text-gray-600'}>{apuracao.resumo.qtdCritico}</span>
+                <span className={apuracao.qtdCritico > 0 ? 'text-red-600' : 'text-gray-600'}>{apuracao.qtdCritico}</span>
                 <span className="text-gray-300 mx-1">/</span>
-                <span className={apuracao.resumo.qtdAlto > 0 ? 'text-amber-600' : 'text-gray-600'}>{apuracao.resumo.qtdAlto}</span>
+                <span className={apuracao.qtdAlto > 0 ? 'text-amber-600' : 'text-gray-600'}>{apuracao.qtdAlto}</span>
               </p>
             </div>
-            <div className={`card-surface p-4 ${apuracao.resumo.qtdTesNovas > 0 ? 'border border-teal/40' : ''}`}>
+            <div className={`card-surface p-4 ${apuracao.qtdTesNovas > 0 ? 'border border-teal/40' : ''}`}>
               <p className="text-[10px] uppercase tracking-wide text-gray-400">TES novas</p>
-              <p className={`text-2xl font-bold mt-1 ${apuracao.resumo.qtdTesNovas > 0 ? 'text-teal' : 'text-gray-800'}`}>
-                {apuracao.resumo.qtdTesNovas}
+              <p className={`text-2xl font-bold mt-1 ${apuracao.qtdTesNovas > 0 ? 'text-teal' : 'text-gray-800'}`}>
+                {apuracao.qtdTesNovas}
               </p>
+              {apuracao.tesNovasEncontradas && (
+                <p className="text-[10px] text-gray-400 mt-1 truncate" title={apuracao.tesNovasEncontradas}>
+                  {apuracao.tesNovasEncontradas}
+                </p>
+              )}
             </div>
-            <div className={`card-surface p-4 ${apuracao.resumo.qtdNotasSemChave > 0 ? 'border border-ruby/40' : ''}`}>
+            <div className={`card-surface p-4 ${apuracao.qtdNotasSemChave > 0 ? 'border border-ruby/40' : ''}`}>
               <p className="text-[10px] uppercase tracking-wide text-gray-400">Notas sem chave</p>
-              <p className={`text-2xl font-bold mt-1 ${apuracao.resumo.qtdNotasSemChave > 0 ? 'text-ruby' : 'text-gray-800'}`}>
-                {apuracao.resumo.qtdNotasSemChave}
+              <p className={`text-2xl font-bold mt-1 ${apuracao.qtdNotasSemChave > 0 ? 'text-ruby' : 'text-gray-800'}`}>
+                {apuracao.qtdNotasSemChave}
               </p>
             </div>
           </div>
@@ -453,19 +398,16 @@ function AnaliseFiscalSaidaInner() {
               </div>
               <div className="flex gap-2">
                 <a
-                  href={`/api/analise-fiscal/saida/apuracoes/${apuracao.id}/pdf`}
+                  href={`/api/analise-fiscal/apuracoes/${apuracao.id}/pdf`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="border border-accent text-accent rounded-lg px-3 py-1.5 text-sm font-medium"
                 >
                   Exportar PDF
                 </a>
-                <a
-                  href={`/api/analise-fiscal/saida/apuracoes/${apuracao.id}/excel`}
-                  className="bg-accent text-white rounded-lg px-3 py-1.5 text-sm font-medium"
-                >
+                <button onClick={exportarExcel} className="bg-accent text-white rounded-lg px-3 py-1.5 text-sm font-medium">
                   Exportar Excel
-                </a>
+                </button>
               </div>
             </div>
 
@@ -482,17 +424,12 @@ function AnaliseFiscalSaidaInner() {
               </select>
               <input
                 type="text"
-                placeholder="Buscar por TES, produto, cliente ou nota..."
+                placeholder="Buscar por TES, produto, fornecedor ou nota..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[220px]"
               />
             </div>
-
-            <p className="text-xs text-gray-400 mb-2">
-              Mostrando só os itens com divergência ({divergenciasFlat.length}) — o total de linhas importadas está no
-              card acima. Pra ver todas as linhas (mesmo sem divergência), use "Exportar Excel".
-            </p>
 
             <div className="overflow-x-auto">
               <table className="w-full text-xs min-w-[1000px]">
@@ -501,19 +438,19 @@ function AnaliseFiscalSaidaInner() {
                     <th className="px-3 py-2">Nota</th>
                     <th className="px-3 py-2">TES</th>
                     <th className="px-3 py-2">Produto</th>
-                    <th className="px-3 py-2">Cliente</th>
+                    <th className="px-3 py-2">Fornecedor</th>
                     <th className="px-3 py-2">Severidade</th>
                     <th className="px-3 py-2">Motivo</th>
                     <th className="px-3 py-2">Sugestão</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {divergenciasFiltradas.map((d, idx) => (
-                    <tr key={d.id || `${d.item.linha}-${idx}`} className="border-b border-gray-50 align-top">
+                  {divergenciasFiltradas.map((d) => (
+                    <tr key={d.id} className="border-b border-gray-50 align-top">
                       <td className="px-3 py-1.5 font-mono whitespace-nowrap">{d.item.numeroNf || `L${d.item.linha}`}</td>
                       <td className="px-3 py-1.5 font-mono">{d.item.tes}</td>
                       <td className="px-3 py-1.5 max-w-[200px] truncate" title={d.item.produtoDescricao || ''}>{d.item.produtoDescricao}</td>
-                      <td className="px-3 py-1.5 max-w-[180px] truncate" title={d.item.cliente || ''}>{d.item.cliente}</td>
+                      <td className="px-3 py-1.5 max-w-[180px] truncate" title={d.item.fornecedor || ''}>{d.item.fornecedor}</td>
                       <td className="px-3 py-1.5">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${SEVERIDADE_COLOR[d.severidade]}`}>
                           {SEVERIDADE_LABEL[d.severidade]}

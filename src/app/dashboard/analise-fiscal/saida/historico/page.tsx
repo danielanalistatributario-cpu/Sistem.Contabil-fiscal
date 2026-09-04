@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 
 type ApuracaoResumo = {
   id: string;
@@ -47,7 +48,11 @@ export default function HistoricoAnaliseFiscalSaidaPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-display font-semibold text-brand">Histórico — Análise e Apuração Fiscal (Saídas)</h1>
+        <Link href="/dashboard/analise-fiscal/saida" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors mb-2 w-fit">
+          <ArrowLeft size={15} />
+          Análise de Saídas
+        </Link>
+        <h1 className="text-2xl font-display font-semibold text-brand">Histórico — Análise de Saídas</h1>
         <p className="text-gray-500 text-sm mt-1">Consulte análises do Relatório de Saídas realizadas anteriormente.</p>
       </div>
 
@@ -58,7 +63,7 @@ export default function HistoricoAnaliseFiscalSaidaPage() {
             <p className="text-2xl mb-2">🗂</p>
             <p className="text-sm">
               Nenhuma análise salva ainda. Processe um relatório em{' '}
-              <Link href="/dashboard/analise-fiscal/saida" className="text-brand underline">Análise e Apuração Fiscal — Saídas</Link>.
+              <Link href="/dashboard/analise-fiscal/saida" className="text-brand underline">Análise de Saídas</Link>.
             </p>
           </div>
         )}

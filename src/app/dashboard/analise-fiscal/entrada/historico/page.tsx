@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 
 type ApuracaoResumo = {
   id: string;
@@ -19,7 +20,7 @@ type ApuracaoResumo = {
   processedAt: string;
 };
 
-export default function HistoricoAnaliseFiscalPage() {
+export default function HistoricoAnaliseFiscalEntradaPage() {
   const [apuracoes, setApuracoes] = useState<ApuracaoResumo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,7 +47,11 @@ export default function HistoricoAnaliseFiscalPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-display font-semibold text-brand">Histórico — Análise e Apuração Fiscal</h1>
+        <Link href="/dashboard/analise-fiscal/entrada" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors mb-2 w-fit">
+          <ArrowLeft size={15} />
+          Análise de Entradas
+        </Link>
+        <h1 className="text-2xl font-display font-semibold text-brand">Histórico — Análise de Entradas</h1>
         <p className="text-gray-500 text-sm mt-1">Consulte análises do Relatório de Entradas realizadas anteriormente.</p>
       </div>
 
@@ -57,7 +62,7 @@ export default function HistoricoAnaliseFiscalPage() {
             <p className="text-2xl mb-2">🗂</p>
             <p className="text-sm">
               Nenhuma análise salva ainda. Processe um relatório em{' '}
-              <Link href="/dashboard/analise-fiscal" className="text-brand underline">Análise e Apuração Fiscal</Link>.
+              <Link href="/dashboard/analise-fiscal/entrada" className="text-brand underline">Análise de Entradas</Link>.
             </p>
           </div>
         )}
@@ -85,7 +90,7 @@ export default function HistoricoAnaliseFiscalPage() {
               </div>
               <div className="flex gap-2">
                 <Link
-                  href={`/dashboard/analise-fiscal?apuracaoId=${a.id}`}
+                  href={`/dashboard/analise-fiscal/entrada?apuracaoId=${a.id}`}
                   className="text-xs border border-gray-300 rounded-lg px-3 py-1.5"
                 >
                   Abrir

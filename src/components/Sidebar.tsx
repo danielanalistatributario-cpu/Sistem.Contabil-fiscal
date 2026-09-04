@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, PackageSearch, ClipboardCheck, TrendingUp, Users, Settings,
+  LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, PackageSearch, ClipboardCheck, Users, Settings,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from '@/lib/permissions';
@@ -36,7 +36,6 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/auditor-rtc', label: 'Auditor RTC (IBS/CBS)', icon: ShieldCheck, moduleKey: 'auditorRtc', accent: 'text-teal' },
       { href: '/dashboard/validacao-cadastro', label: 'Validação de Cadastro', icon: PackageSearch, moduleKey: 'validacaoCadastro', accent: 'text-ruby' },
       { href: '/dashboard/analise-fiscal', label: 'Análise e Apuração Fiscal', icon: ClipboardCheck, moduleKey: 'analiseFiscal', accent: 'text-accent' },
-      { href: '/dashboard/analise-fiscal/saida', label: 'Análise Fiscal — Saídas', icon: TrendingUp, moduleKey: 'analiseFiscal', accent: 'text-accent' },
     ],
   },
   {

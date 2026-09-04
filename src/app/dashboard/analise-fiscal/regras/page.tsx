@@ -15,6 +15,8 @@ type TesRegra = {
   regras: RegraResumo[];
 };
 
+type Direcao = 'entrada' | 'saida';
+
 const CHAVE_NF_LABELS: Record<TesRegra['chaveNf'], string> = {
   obrigatoria: 'Obrigatória',
   proibida: 'Proibida',
@@ -27,10 +29,17 @@ const CHAVE_NF_COLOR: Record<TesRegra['chaveNf'], string> = {
   livre: 'bg-gray-100 text-gray-600',
 };
 
-export default function RegrasAnaliseFiscalPage() {
+const ABAS: { key: Direcao; emoji: string; label: string }[] = [
+  { key: 'entrada', emoji: '📥', label: 'Regras de Entradas' },
+  { key: 'saida', emoji: '📤', label: 'Regras de Saídas' },
+];
+
+export default function RegrasAnaliseEApuracaoFiscalPage() {
   const [regrasGerais, setRegrasGerais] = useState<RegraResumo[]>([]);
-  const [tes, setTes] = useState<TesRegra[]>([]);
+  const [tesEntrada, setTesEntrada] = useState<TesRegra[]>([]);
+  const [tesSaida, setTesSaida] = useState<TesRegra[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aba, setAba] = useState<Direcao>('entrada');
   const [busca, setBusca] = useState('');
 
   useEffect(() => {
@@ -39,22 +48,25 @@ export default function RegrasAnaliseFiscalPage() {
       if (res.ok) {
         const data = await res.json();
         setRegrasGerais(data.regrasGerais);
-        setTes(data.tes);
+        setTesEntrada(data.entrada.tes);
+        setTesSaida(data.saida.tes);
       }
       setLoading(false);
     })();
   }, []);
 
+  const tesAtual = aba === 'entrada' ? tesEntrada : tesSaida;
+
   const tesFiltradas = useMemo(() => {
     const buscaNorm = busca.trim().toLowerCase();
-    if (!buscaNorm) return tes;
-    return tes.filter((t) => {
+    if (!buscaNorm) return tesAtual;
+    return tesAtual.filter((t) => {
       const alvo = `${t.codigo} ${t.grupo} ${t.regras.map((r) => r.descricao).join(' ')}`.toLowerCase();
       return alvo.includes(buscaNorm);
     });
-  }, [tes, busca]);
+  }, [tesAtual, busca]);
 
-  const totalComRegraProfunda = tes.filter((t) => t.regras.length > 0).length;
+  const totalComRegraProfunda = tesAtual.filter((t) => t.regras.length > 0).length;
 
   return (
     <div className="space-y-6">
@@ -63,11 +75,11 @@ export default function RegrasAnaliseFiscalPage() {
           <ArrowLeft size={15} />
           Voltar
         </Link>
-        <h1 className="text-2xl font-display font-semibold text-brand">Regras da Análise Fiscal</h1>
+        <h1 className="text-2xl font-display font-semibold text-brand">⚙️ Regras da Análise e Apuração Fiscal</h1>
         <p className="text-gray-500 text-sm mt-1">
           Consulta de todas as validações que o sistema aplica hoje — o que roda em toda TES (regras gerais) e o que é
-          específico de cada TES. Somente consulta: para mudar o comportamento de uma TES (Chave NF, produtos, CFOP×UF)
-          use a tela{' '}
+          específico de cada TES, separado por Entradas e Saídas. Somente consulta: para mudar o comportamento de uma
+          TES (Chave NF, produtos, CFOP×UF) use a tela{' '}
           <Link href="/dashboard/analise-fiscal/config" className="text-brand underline">Configurar TES</Link>.
         </p>
       </div>
@@ -78,7 +90,7 @@ export default function RegrasAnaliseFiscalPage() {
         <>
           <div className="card-surface p-5 space-y-3">
             <h2 className="font-display font-semibold text-brand">
-              Regras gerais <span className="text-xs font-normal text-gray-400">— aplicam a toda TES (com as exceções indicadas em cada uma)</span>
+              Regras gerais <span className="text-xs font-normal text-gray-400">— aplicam a toda TES, de Entradas e de Saídas (com as exceções indicadas em cada uma)</span>
             </h2>
             <ul className="space-y-2">
               {regrasGerais.map((r) => (
@@ -90,9 +102,23 @@ export default function RegrasAnaliseFiscalPage() {
             </ul>
           </div>
 
+          <div className="flex gap-2">
+            {ABAS.map((a) => (
+              <button
+                key={a.key}
+                onClick={() => { setAba(a.key); setBusca(''); }}
+                className={`text-sm px-4 py-2 rounded-lg border font-medium ${
+                  aba === a.key ? 'bg-brand text-white border-brand' : 'border-gray-300 text-gray-600'
+                }`}
+              >
+                {a.emoji} {a.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-xs text-gray-400">
-              {tes.length} TES cadastradas · {totalComRegraProfunda} com regra específica além das gerais
+              {tesAtual.length} TES cadastradas · {totalComRegraProfunda} com regra específica além das gerais
             </p>
             <input
               type="text"
