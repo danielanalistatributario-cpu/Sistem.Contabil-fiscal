@@ -45,6 +45,7 @@ model Company {
   analisesFiscais AnaliseFiscalApuracao[]
   analiseFiscalTesConfig AnaliseFiscalTesConfig[]
   analiseFiscalCnpjsGrupo AnaliseFiscalCnpjGrupo[]
+  analisesFiscaisSaida AnaliseFiscalSaidaApuracao[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -528,6 +529,100 @@ model AnaliseFiscalDivergencia {
   sugestaoCorrecao     String?
   apuracao             AnaliseFiscalApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
   item                 AnaliseFiscalItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+}
+
+// Análise e Apuração Fiscal — Saídas (vendas/transferências/baixas).
+// Mesma forma do trio de Entradas acima, mas processada em lotes: o
+// Relatório de Saídas real chega a dezenas de milhares de linhas (bem
+// maior que Entradas), então o cálculo roda no navegador e os itens são
+// persistidos aos poucos via /apurar/lote — daí o campo `status`
+// (PROCESSANDO enquanto os lotes ainda estão chegando, CONCLUIDA quando
+// /apurar/finalizar termina). O resumo já vem pronto do cálculo no
+// navegador (não depende de agregação SQL depois de persistir).
+// status: PROCESSANDO | CONCLUIDA
+model AnaliseFiscalSaidaApuracao {
+  id                       String   @id @default(cuid())
+  companyId                String
+  periodo                  String?
+  fileName                 String?
+  status                   String   @default("PROCESSANDO")
+  totalLinhas              Int
+  totalNotas               Int
+  totalProdutos            Int
+  totalTes                 Int
+  totalCfops               Int
+  qtdTesNovas              Int      @default(0)
+  qtdCfopsNovos            Int      @default(0)
+  qtdNotasSemChave         Int      @default(0)
+  qtdDivergenciaCfopUf     Int      @default(0)
+  qtdDivergenciaIcms       Int      @default(0)
+  qtdDivergenciaPisCofins  Int      @default(0)
+  qtdProdutosIncompativeis Int      @default(0)
+  totalDivergencias        Int      @default(0)
+  qtdCritico               Int      @default(0)
+  qtdAlto                  Int      @default(0)
+  qtdMedio                 Int      @default(0)
+  qtdBaixo                 Int      @default(0)
+  qtdInformativo           Int      @default(0)
+  tesNovasEncontradas      String?
+  processedAt              DateTime @default(now())
+  company                  Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  itens                    AnaliseFiscalSaidaItem[]
+  divergencias             AnaliseFiscalSaidaDivergencia[]
+}
+
+model AnaliseFiscalSaidaItem {
+  id               String   @id @default(cuid())
+  apuracaoId       String
+  linha            Int
+  tes              String
+  tesConhecida     Boolean  @default(false)
+  produtoCodigo    String?
+  produtoDescricao String?
+  cfop             String?
+  uf               String?
+  cliente          String?
+  cnpjCpf          String?
+  chaveNf          String?
+  numeroNf         String?
+  total            Float?
+  desconto         Float?
+  frete            Float?
+  despesa          Float?
+  seguro           Float?
+  valorContabil    Float?
+  baseIcms         Float?
+  valorIcms        Float?
+  aliquotaIcms     Float?
+  isento           Float?
+  baseOutros       Float?
+  basePis          Float?
+  valorPis         Float?
+  aliquotaPis      Float?
+  baseCofins       Float?
+  valorCofins      Float?
+  aliquotaCofins   Float?
+  apuracao         AnaliseFiscalSaidaApuracao      @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+  divergencias     AnaliseFiscalSaidaDivergencia[]
+
+  @@index([apuracaoId])
+}
+
+// severidade: CRITICO | ALTO | MEDIO | BAIXO | INFORMATIVO
+model AnaliseFiscalSaidaDivergencia {
+  id                   String   @id @default(cuid())
+  apuracaoId           String
+  itemId               String
+  severidade           String
+  tipo                 String
+  regraEsperada        String
+  informacaoEncontrada String
+  motivo               String
+  sugestaoCorrecao     String?
+  apuracao             AnaliseFiscalSaidaApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+  item                 AnaliseFiscalSaidaItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([apuracaoId])
 }
 
 // Metadados de TES editáveis por empresa (chaveNf, permiteProdutos, rótulo)

@@ -43,7 +43,13 @@ export type RuleContext = {
   tesMetadataPorCodigo: Record<string, TesMetadata>;
 };
 
-export type RuleDef = { id: string; check: (ctx: RuleContext) => Divergencia | null };
+export type RuleDef = {
+  id: string;
+  // texto fixo, independente de qualquer lançamento — explica o que a
+  // regra valida, pra alimentar a tela "Regras da Análise Fiscal"
+  descricao: string;
+  check: (ctx: RuleContext) => Divergencia | null;
+};
 
 export type ChaveNfPolicy = 'obrigatoria' | 'proibida' | 'livre';
 
@@ -96,9 +102,10 @@ function terminaEmAL(descricao: string): boolean {
 // (calibradas contra um Relatório de Entradas real — ver
 // [[testar-com-arquivo-real]] na memória do projeto)
 
-function ruleValorZero(campo: 'Icms' | 'Pis' | 'Cofins', label: string): RuleDef {
+export function ruleValorZero(campo: 'Icms' | 'Pis' | 'Cofins', label: string): RuleDef {
   return {
     id: `valor_isento_${campo.toLowerCase()}`,
+    descricao: `Confere se o Valor de ${label} está zerado — nesta TES, ${label} deve ser isento (sem valor destacado).`,
     check: (ctx) => {
       const linha = ctx.linha as unknown as Record<string, number | null | string>;
       const valor = linha[`valor${campo}`] as number | null;
@@ -115,9 +122,10 @@ function ruleValorZero(campo: 'Icms' | 'Pis' | 'Cofins', label: string): RuleDef
   };
 }
 
-function ruleValorTributadoFixo(campo: 'Pis' | 'Cofins', label: string, aliqEsperadaPct: number): RuleDef {
+export function ruleValorTributadoFixo(campo: 'Pis' | 'Cofins', label: string, aliqEsperadaPct: number): RuleDef {
   return {
     id: `valor_tributado_fixo_${campo.toLowerCase()}`,
+    descricao: `Confere se o Valor de ${label} está preenchido (não pode ficar zerado) e se a alíquota informada é ${aliqEsperadaPct}% — alíquota fixa esperada nesta TES.`,
     check: (ctx) => {
       const linha = ctx.linha as unknown as Record<string, number | null | string>;
       const valor = linha[`valor${campo}`] as number | null;
@@ -156,9 +164,11 @@ function ruleValorTributadoFixo(campo: 'Pis' | 'Cofins', label: string, aliqEspe
 // mesma lógica da checagem de alíquota de ICMS da TES 102 (tabela
 // 19%/12%/7%/4% conforme UF de origem), reaproveitada por outras TES que
 // seguem a tabela normal de ICMS (129, 157)
-function ruleIcmsTabelaPadrao(): RuleDef {
+export function ruleIcmsTabelaPadrao(): RuleDef {
   return {
     id: 'icms_tabela_padrao',
+    descricao:
+      'Confere a alíquota de ICMS pela tabela padrão: alíquota interna da empresa quando o fornecedor está na mesma UF, ou a tabela interestadual (19%/12%/7%/4%, conforme a UF de origem e se o produto é importado) quando o fornecedor está em outro estado.',
     check: (ctx) => {
       const { linha, ufPropria, aliquotaInterna } = ctx;
       if (linha.aliquotaIcms == null || !linha.uf) return null;
@@ -194,9 +204,10 @@ function ruleIcmsTabelaPadrao(): RuleDef {
 // devolução de operação interna: ICMS sempre pela alíquota interna da
 // empresa, independente da UF do destinatário/remetente (evidência real:
 // TES 217/317 sempre 19% no arquivo testado)
-function ruleIcmsAliquotaInternaFixa(): RuleDef {
+export function ruleIcmsAliquotaInternaFixa(): RuleDef {
   return {
     id: 'icms_aliquota_interna_fixa',
+    descricao: 'Confere se a alíquota de ICMS é igual à alíquota interna da empresa — devolução de operação interna sempre usa a alíquota interna, independente da UF do remetente.',
     check: (ctx) => {
       const { linha, aliquotaInterna } = ctx;
       if (linha.aliquotaIcms == null) return null;
@@ -222,6 +233,7 @@ function ruleIcmsAliquotaInternaFixa(): RuleDef {
 function ruleTipoEsperado(prefixoEsperado: string, labelEsperado: string): RuleDef {
   return {
     id: `tipo_esperado_${prefixoEsperado.toLowerCase()}`,
+    descricao: `Confere se a coluna Tipo do item começa com "${prefixoEsperado}" (${labelEsperado}) — item de outro tipo nesta TES é sinalizado para revisão.`,
     check: (ctx) => {
       const { linha } = ctx;
       if (!linha.tipo) return null;
@@ -277,6 +289,7 @@ const RULES_GERENCIAIS: RuleDef[] = [];
 const RULES_101: RuleDef[] = [
   {
     id: 'tes101_fornecedor_cpf',
+    descricao: 'Sinaliza fornecedor pessoa física (CPF) na TES 101 — CPF geralmente indica produtor rural, que deveria usar TES de produtor (130/141), não a 101. Fornecedor CNPJ está sempre correto, sem checagem por nome.',
     check: (ctx) => {
       const { linha } = ctx;
       if (!ehCpf(linha.cnpjCpf)) return null;
@@ -296,6 +309,7 @@ const RULES_101: RuleDef[] = [
 const RULES_102: RuleDef[] = [
   {
     id: 'tes102_produto_al',
+    descricao: 'Sinaliza produto cuja descrição termina em "AL" (indício de importação via acordo ALALC) classificado em TES 102 — normalmente deveria estar na TES 101.',
     check: (ctx) => {
       const { linha } = ctx;
       if (!terminaEmAL(linha.produtoDescricao)) return null;
@@ -316,6 +330,7 @@ const RULES_102: RuleDef[] = [
 const RULES_138: RuleDef[] = [
   {
     id: 'tes138_cnpj_grupo',
+    descricao: 'Confere se o CNPJ do fornecedor/remetente está na lista de CNPJs do grupo cadastrada em Configurar TES → CNPJs do grupo. Só roda quando a empresa já cadastrou pelo menos um CNPJ nessa lista.',
     check: (ctx) => {
       const { linha, cnpjsGrupo } = ctx;
       // empresa ainda não cadastrou o grupo de CNPJs (tela administrativa)
@@ -337,6 +352,7 @@ const RULES_138: RuleDef[] = [
   },
   {
     id: 'tes138_cfop_fixo',
+    descricao: 'Confere se o CFOP é 1152 (transferência interna) ou 2152 (transferência interestadual), conforme a UF do remetente em relação à UF da empresa.',
     check: (ctx) => {
       const { linha, ufPropria } = ctx;
       if (!linha.cfop || !linha.uf) return null;
@@ -358,6 +374,7 @@ const RULES_138: RuleDef[] = [
   },
   {
     id: 'tes138_isencao',
+    descricao: 'Confere se ICMS, PIS e COFINS estão todos zerados — transferência entre filiais do grupo não deve ter nenhum desses tributos destacado.',
     check: (ctx) => {
       const { linha } = ctx;
       const valores: [string, number | null][] = [['ICMS', linha.valorIcms], ['PIS', linha.valorPis], ['COFINS', linha.valorCofins]];

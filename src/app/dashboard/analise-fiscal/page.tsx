@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { History, Settings } from 'lucide-react';
+import { History, Settings, BookOpenText } from 'lucide-react';
 import { ImportHero } from '@/components/ImportHero';
 import * as XLSX from 'xlsx';
 import { canAccess, type Role } from '@/lib/permissions';
@@ -251,10 +251,16 @@ function AnaliseFiscalInner() {
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {canAccess(role, 'analiseFiscalConfig') && (
-              <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
-                <Settings size={15} />
-                Configurar TES
-              </Link>
+              <>
+                <Link href="/dashboard/analise-fiscal/regras" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+                  <BookOpenText size={15} />
+                  Regras da Análise Fiscal
+                </Link>
+                <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+                  <Settings size={15} />
+                  Configurar TES
+                </Link>
+              </>
             )}
             <Link href="/dashboard/analise-fiscal/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <History size={15} />
@@ -270,10 +276,16 @@ function AnaliseFiscalInner() {
       {!apuracao && (
         <div className="flex justify-end gap-4">
           {canAccess(role, 'analiseFiscalConfig') && (
-            <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
-              <Settings size={15} />
-              Configurar TES
-            </Link>
+            <>
+              <Link href="/dashboard/analise-fiscal/regras" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+                <BookOpenText size={15} />
+                Regras da Análise Fiscal
+              </Link>
+              <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+                <Settings size={15} />
+                Configurar TES
+              </Link>
+            </>
           )}
           <Link href="/dashboard/analise-fiscal/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
             <History size={15} />

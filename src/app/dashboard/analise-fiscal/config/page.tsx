@@ -135,7 +135,9 @@ export default function AnaliseFiscalConfigPage() {
         <p className="text-gray-500 text-sm mt-1">
           Listas de referência usadas pelo motor de regras — cadastre uma TES nova para que ela pare de aparecer como
           &quot;TES nova&quot; e ganhe as checagens de Chave NF e produto. A lógica de regras profundas (cálculo de
-          imposto, alíquota etc.) continua sendo implementada por código, não por aqui.
+          imposto, alíquota etc.) continua sendo implementada por código, não por aqui — para consultar o que cada
+          regra valida, veja{' '}
+          <Link href="/dashboard/analise-fiscal/regras" className="text-brand underline">Regras da Análise Fiscal</Link>.
         </p>
       </div>
 

@@ -8,6 +8,7 @@ import { normalizarUf, somenteDigitos, fmtBRL, fmtPct } from './analise-fiscal-t
 
 const ruleChaveNfPolicy: RuleDef = {
   id: 'generico_chave_nf_politica',
+  descricao: 'Confere se a Chave NF está preenchida ou em branco conforme a política de cada TES: obrigatória (deve ter chave), proibida (não deve ter — TES gerencial/serviço) ou livre (sem checagem).',
   check: (ctx) => {
     const { linha } = ctx;
     const meta = ctx.tesMetadataPorCodigo[linha.tes];
@@ -39,6 +40,7 @@ const ruleChaveNfPolicy: RuleDef = {
 
 const ruleChaveNfFormato: RuleDef = {
   id: 'generico_chave_nf_formato',
+  descricao: 'Confere se a Chave NF, quando preenchida, tem exatamente 44 dígitos (tamanho padrão da chave de acesso da NF-e).',
   check: (ctx) => {
     const { linha } = ctx;
     if (!linha.chaveNf) return null;
@@ -66,6 +68,7 @@ const ruleChaveNfFormato: RuleDef = {
 // de volta pra checagem por descrição, mais fraca porém melhor que nada.
 const ruleProdutoNaoPermitido: RuleDef = {
   id: 'generico_produto_nao_permitido',
+  descricao: 'Em TES marcadas como "não permite produtos" (só serviço), confere se o item é realmente um serviço pela coluna Tipo (prefixo SV) — mercadoria/ativo lançado nessas TES é sinalizado. Sem a coluna Tipo, cai para uma checagem mais fraca pela simples presença de descrição de produto.',
   check: (ctx) => {
     const { linha } = ctx;
     const meta = ctx.tesMetadataPorCodigo[linha.tes];
@@ -100,6 +103,7 @@ const ruleProdutoNaoPermitido: RuleDef = {
 
 const ruleCfopUf: RuleDef = {
   id: 'generico_cfop_uf',
+  descricao: 'Confere se o primeiro dígito do CFOP (1 ou 5 = interna, 2 ou 6 = interestadual) bate com a UF do fornecedor em relação à UF da empresa. Não roda em TES com Chave NF proibida (gerenciais) nem em TES marcadas para não validar CFOP×UF (ex: fretes).',
   check: (ctx) => {
     const { linha, ufPropria } = ctx;
     if (!linha.cfop || !linha.uf) return null;
@@ -135,6 +139,7 @@ const ruleCfopUf: RuleDef = {
 
 const ruleValorContabil: RuleDef = {
   id: 'generico_valor_contabil',
+  descricao: 'Recalcula o Valor Contábil como Total − Desconto + Despesa + Frete + Seguro e compara com o valor informado na nota.',
   check: (ctx) => {
     const { linha } = ctx;
     if (linha.total == null || linha.valorContabil == null) return null;
@@ -162,6 +167,7 @@ const ruleValorContabil: RuleDef = {
 function ruleCalculoImposto(campo: 'Icms' | 'Pis' | 'Cofins', label: string): RuleDef {
   return {
     id: `generico_calculo_${campo.toLowerCase()}`,
+    descricao: `Confere se Valor de ${label} = Base de Cálculo × Alíquota informada. Não roda quando a Base de Cálculo é zero (indica que o imposto foi calculado sobre outra base não capturada no relatório, como ICMS-ST).`,
     check: (ctx) => {
       const linha = ctx.linha as unknown as Record<string, number | null>;
       const base = linha[`base${campo}`];
