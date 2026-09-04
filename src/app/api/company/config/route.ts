@@ -15,6 +15,7 @@ export async function GET() {
     ufDestino: company.ufDestino,
     aliquotaInterna: company.aliquotaInterna,
     protheusSufixo: company.protheusSufixo,
+    inscricaoEstadual: company.inscricaoEstadual,
   });
 }
 
@@ -37,6 +38,8 @@ export async function PATCH(req: NextRequest) {
   const aliquotaInterna = Number(body?.aliquotaInterna);
   const protheusSufixoRaw = String(body?.protheusSufixo || '').trim();
   const protheusSufixo = protheusSufixoRaw === '' ? null : protheusSufixoRaw;
+  const inscricaoEstadualRaw = String(body?.inscricaoEstadual || '').trim();
+  const inscricaoEstadual = inscricaoEstadualRaw === '' ? null : inscricaoEstadualRaw;
 
   if (ufDestino.length !== 2 || Number.isNaN(aliquotaInterna) || aliquotaInterna <= 0 || aliquotaInterna >= 1) {
     return NextResponse.json(
@@ -53,13 +56,13 @@ export async function PATCH(req: NextRequest) {
 
   const company = await prisma.company.update({
     where: { id: session.currentCompanyId },
-    data: { ufDestino, aliquotaInterna, protheusSufixo },
+    data: { ufDestino, aliquotaInterna, protheusSufixo, inscricaoEstadual },
   });
 
   await logActivity(
     session.id,
     'ATUALIZOU_CONFIG_FISCAL',
-    `UF destino: ${ufDestino}, alíquota interna: ${(aliquotaInterna * 100).toFixed(2)}%, sufixo Protheus: ${protheusSufixo || '(não configurado)'}`,
+    `UF destino: ${ufDestino}, alíquota interna: ${(aliquotaInterna * 100).toFixed(2)}%, sufixo Protheus: ${protheusSufixo || '(não configurado)'}, IE: ${inscricaoEstadual || '(não configurada)'}`,
     session.currentCompanyId
   );
 
@@ -67,5 +70,6 @@ export async function PATCH(req: NextRequest) {
     ufDestino: company.ufDestino,
     aliquotaInterna: company.aliquotaInterna,
     protheusSufixo: company.protheusSufixo,
+    inscricaoEstadual: company.inscricaoEstadual,
   });
 }

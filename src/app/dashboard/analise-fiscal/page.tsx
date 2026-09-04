@@ -29,7 +29,7 @@ const SECOES: Secao[] = [
     href: '/dashboard/analise-fiscal/apuracao',
     emoji: '📊',
     titulo: 'Apuração Fiscal',
-    descricao: 'Cruzamento de Entradas e Saídas validadas, com os totalizadores da apuração. Em construção.',
+    descricao: 'Cruza os dados já validados de Entradas e Saídas e monta o Livro de Apuração do ICMS automaticamente.',
   },
   {
     href: '/dashboard/analise-fiscal/relatorios',

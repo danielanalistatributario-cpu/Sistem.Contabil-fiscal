@@ -16,6 +16,12 @@ const HISTORICOS = [
     titulo: 'Histórico de Saídas',
     descricao: 'Análises do Relatório de Saídas já processadas — abra, exporte PDF/Excel ou exclua.',
   },
+  {
+    href: '/dashboard/analise-fiscal/apuracao/historico',
+    emoji: '📊',
+    titulo: 'Histórico de Apuração Fiscal',
+    descricao: 'Apurações do ICMS já geradas — abra, exporte o Livro Fiscal em PDF ou exclua.',
+  },
 ];
 
 export default function RelatoriosAnaliseFiscalPage() {

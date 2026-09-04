@@ -6,6 +6,7 @@ export default function ConfigPage() {
   const [ufDestino, setUfDestino] = useState('');
   const [aliquotaInterna, setAliquotaInterna] = useState('');
   const [protheusSufixo, setProtheusSufixo] = useState('');
+  const [inscricaoEstadual, setInscricaoEstadual] = useState('');
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -19,6 +20,7 @@ export default function ConfigPage() {
       setUfDestino(data.ufDestino);
       setAliquotaInterna((data.aliquotaInterna * 100).toString());
       setProtheusSufixo(data.protheusSufixo || '');
+      setInscricaoEstadual(data.inscricaoEstadual || '');
     }
     setLoading(false);
   }, []);
@@ -39,6 +41,7 @@ export default function ConfigPage() {
         ufDestino,
         aliquotaInterna: parseFloat(aliquotaInterna) / 100,
         protheusSufixo,
+        inscricaoEstadual,
       }),
     });
     const data = await res.json();
@@ -85,6 +88,18 @@ export default function ConfigPage() {
                 className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-24"
                 required
               />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Inscrição Estadual</label>
+              <input
+                value={inscricaoEstadual}
+                onChange={(e) => setInscricaoEstadual(e.target.value)}
+                placeholder="151977887"
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-40"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Usada no cabeçalho do Livro Fiscal de Apuração, na Apuração Fiscal.
+              </p>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Sufixo da tabela no Protheus (ex: 140)</label>
