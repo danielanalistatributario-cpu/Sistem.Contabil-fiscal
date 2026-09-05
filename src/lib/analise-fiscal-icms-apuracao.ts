@@ -26,6 +26,11 @@ export type RegistroIcms = {
 
 const SOMA_VAZIA = { valorContabil: 0, baseIcms: 0, valorIcms: 0, isento: 0, baseOutros: 0 };
 
+// CFOPs que o usuário pediu pra desconsiderar inteiramente da Apuração
+// Fiscal do ICMS — não entram na tabela por CFOP nem nos totais 001/005
+// do Resumo, mesmo que apareçam no relatório de Entradas/Saídas.
+const CFOPS_EXCLUIDOS_ICMS = ['1101', '1932', '1933', '2932', '2933'];
+
 function somar(a: Omit<LinhaCfop, 'cfop'>, b: Omit<LinhaCfop, 'cfop'>): Omit<LinhaCfop, 'cfop'> {
   return {
     valorContabil: a.valorContabil + b.valorContabil,
@@ -54,7 +59,7 @@ export async function agregarIcmsPorCfop(apuracaoId: string, direcao: Direcao): 
   if (direcao === 'entrada') {
     const grupos = await prisma.analiseFiscalItem.groupBy({
       by: ['cfop'],
-      where: { apuracaoId, cfop: { not: null } },
+      where: { apuracaoId, cfop: { not: null, notIn: CFOPS_EXCLUIDOS_ICMS } },
       _sum: { total: true, desconto: true, frete: true, despesa: true, seguro: true, baseIcms: true, valorIcms: true, isento: true, baseOutros: true },
     });
     linhas = grupos
@@ -97,7 +102,7 @@ export async function agregarIcmsPorCfop(apuracaoId: string, direcao: Direcao): 
 // tabela inteira.
 export async function somaIcms(apuracaoId: string, direcao: Direcao): Promise<number> {
   const resultado = direcao === 'entrada'
-    ? await prisma.analiseFiscalItem.aggregate({ where: { apuracaoId }, _sum: { valorIcms: true } })
+    ? await prisma.analiseFiscalItem.aggregate({ where: { apuracaoId, cfop: { notIn: CFOPS_EXCLUIDOS_ICMS } }, _sum: { valorIcms: true } })
     : await prisma.analiseFiscalSaidaItem.aggregate({ where: { apuracaoId }, _sum: { valorIcms: true } });
   return resultado._sum.valorIcms || 0;
 }
