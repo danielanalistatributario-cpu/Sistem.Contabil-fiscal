@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, Suspense, Fragment } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, History, Settings, BookOpenText } from 'lucide-react';
@@ -13,8 +13,7 @@ type Categoria = 'OUTROS_DEBITOS' | 'ESTORNO_CREDITOS' | 'OUTROS_CREDITOS' | 'ES
 type Lancamento = { id?: string; categoria: Categoria; descricao: string; valor: number };
 
 type LinhaCfop = { cfop: string; valorContabil: number; baseIcms: number; valorIcms: number; isento: number; baseOutros: number };
-type BucketCfop = { label: string; linhas: LinhaCfop[]; subtotal: Omit<LinhaCfop, 'cfop'> };
-type RegistroIcms = { doEstado: BucketCfop; outrosEstados: BucketCfop; exterior: BucketCfop; totais: Omit<LinhaCfop, 'cfop'> };
+type RegistroIcms = { linhas: LinhaCfop[]; totais: Omit<LinhaCfop, 'cfop'> };
 
 type Resumo = {
   porSaidasComDebito: number; outrosDebitos: number; estornoCreditos: number; subTotalDebito: number;
@@ -264,7 +263,9 @@ function ApuracaoFiscalInner() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-display font-semibold text-brand">Apuração Fiscal — {detalhe.periodo}</h1>
-            <p className="text-gray-500 text-sm mt-1">{detalhe.company.name} · CNPJ {detalhe.company.cnpj}</p>
+            <p className="text-gray-500 text-sm mt-1">
+              {detalhe.company.name} · Insc. Est. {detalhe.company.inscricaoEstadual || '—'} · CNPJ {detalhe.company.cnpj}
+            </p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {canAccess(role, 'analiseFiscalConfig') && (
@@ -436,70 +437,54 @@ function ApuracaoFiscalInner() {
               </div>
             </div>
 
-            <SecaoResumo
-              titulo="Débito do Imposto"
-              linhasFixas={[
-                ['001 — Por saídas/prestações com débito do imposto', detalhe.resumo.porSaidasComDebito],
-                ['002 — Outros débitos', detalhe.resumo.outrosDebitos],
-              ]}
-              categoriaExtra="OUTROS_DEBITOS"
-              lancamentosEdit={lancamentosEdit}
-              atualizarLancamento={atualizarLancamento}
-              adicionarLancamento={adicionarLancamento}
-              removerLancamento={removerLancamento}
-              linhasFixas2={[['003 — Estorno de créditos', detalhe.resumo.estornoCreditos]]}
-              categoriaExtra2="ESTORNO_CREDITOS"
-              subtotal={['004 — Sub-total', detalhe.resumo.subTotalDebito]}
-            />
-
-            <SecaoResumo
-              titulo="Crédito do Imposto"
-              linhasFixas={[
-                ['005 — Por entradas/aquisições com crédito do imposto', detalhe.resumo.porEntradasComCredito],
-                ['006 — Outros créditos', detalhe.resumo.outrosCreditos],
-              ]}
-              categoriaExtra="OUTROS_CREDITOS"
-              lancamentosEdit={lancamentosEdit}
-              atualizarLancamento={atualizarLancamento}
-              adicionarLancamento={adicionarLancamento}
-              removerLancamento={removerLancamento}
-              linhasFixas2={[['007 — Estorno de débitos', detalhe.resumo.estornoDebitos]]}
-              categoriaExtra2="ESTORNO_DEBITOS"
-              subtotal={['008 — Sub-total', detalhe.resumo.subTotalCredito]}
-            >
-              <div className="flex items-center justify-between gap-3 py-1">
-                <span className="text-sm text-gray-700">009 — Saldo credor do período anterior</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={saldoAnteriorEdit}
-                  onChange={(e) => setSaldoAnteriorEdit(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-40 text-right"
-                />
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+              <VerticalLabel>DÉBITO DO IMPOSTO</VerticalLabel>
+              <div className="flex-1 px-3 py-2 overflow-x-auto">
+                <TabelaLedger>
+                  <LinhaNumerada label="001 — Por saídas/prestações com débito do imposto" soma={detalhe.resumo.porSaidasComDebito} />
+                  <LinhaCategoria numero="002" titulo="Outros débitos" categoria="OUTROS_DEBITOS" total={detalhe.resumo.outrosDebitos} lancamentosEdit={lancamentosEdit} atualizarLancamento={atualizarLancamento} adicionarLancamento={adicionarLancamento} removerLancamento={removerLancamento} />
+                  <LinhaCategoria numero="003" titulo="Estorno de créditos" categoria="ESTORNO_CREDITOS" total={detalhe.resumo.estornoCreditos} lancamentosEdit={lancamentosEdit} atualizarLancamento={atualizarLancamento} adicionarLancamento={adicionarLancamento} removerLancamento={removerLancamento} />
+                  <LinhaNumerada label="004 — Sub-total" soma={detalhe.resumo.subTotalDebito} negrito />
+                </TabelaLedger>
               </div>
-              <LinhaTotal label="010 — Total" valor={detalhe.resumo.totalCredito} />
-            </SecaoResumo>
+            </div>
 
-            <div className="pt-2 border-t border-gray-100 space-y-1.5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Apuração do Saldo</h3>
-              <LinhaSimples label="011 — Saldo devedor (débito menos crédito)" valor={detalhe.resumo.saldoDevedor} />
-              <SecaoLancamentosSimples
-                categoria="DEDUCOES"
-                label="012 — Deduções"
-                total={detalhe.resumo.deducoes}
-                lancamentosEdit={lancamentosEdit}
-                atualizarLancamento={atualizarLancamento}
-                adicionarLancamento={adicionarLancamento}
-                removerLancamento={removerLancamento}
-              />
-              <LinhaTotal label="013 — Imposto a recolher" valor={detalhe.resumo.impostoARecolher} />
-              <div className={`mt-2 rounded-lg px-4 py-3 ${detalhe.resumo.saldoCredorTransportar > 0 ? 'bg-teal/10' : 'bg-gray-50'}`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-800">014 — Saldo credor a transportar p/ período seguinte</span>
-                  <span className={`text-lg font-bold ${detalhe.resumo.saldoCredorTransportar > 0 ? 'text-teal' : 'text-gray-800'}`}>
-                    {fmt(detalhe.resumo.saldoCredorTransportar)}
-                  </span>
-                </div>
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+              <VerticalLabel>CRÉDITO DO IMPOSTO</VerticalLabel>
+              <div className="flex-1 px-3 py-2 overflow-x-auto">
+                <TabelaLedger>
+                  <LinhaNumerada label="005 — Por entradas/aquisições com crédito do imposto" soma={detalhe.resumo.porEntradasComCredito} />
+                  <LinhaCategoria numero="006" titulo="Outros créditos" categoria="OUTROS_CREDITOS" total={detalhe.resumo.outrosCreditos} lancamentosEdit={lancamentosEdit} atualizarLancamento={atualizarLancamento} adicionarLancamento={adicionarLancamento} removerLancamento={removerLancamento} />
+                  <LinhaCategoria numero="007" titulo="Estorno de débitos" categoria="ESTORNO_DEBITOS" total={detalhe.resumo.estornoDebitos} lancamentosEdit={lancamentosEdit} atualizarLancamento={atualizarLancamento} adicionarLancamento={adicionarLancamento} removerLancamento={removerLancamento} />
+                  <LinhaNumerada label="008 — Sub-total" soma={detalhe.resumo.subTotalCredito} negrito />
+                  <tr>
+                    <td className="py-1.5 pr-2 text-gray-700">009 — Saldo credor do período anterior</td>
+                    <td></td>
+                    <td className="py-1 text-right">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={saldoAnteriorEdit}
+                        onChange={(e) => setSaldoAnteriorEdit(e.target.value)}
+                        className="border border-gray-300 rounded px-2 py-1 text-xs w-28 text-right"
+                      />
+                    </td>
+                    <td></td>
+                  </tr>
+                  <LinhaNumerada label="010 — Total" soma={detalhe.resumo.totalCredito} negrito />
+                </TabelaLedger>
+              </div>
+            </div>
+
+            <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+              <VerticalLabel>APURAÇÃO DO SALDO</VerticalLabel>
+              <div className="flex-1 px-3 py-2 overflow-x-auto">
+                <TabelaLedger>
+                  <LinhaNumerada label="011 — Saldo devedor (débito menos crédito)" soma={detalhe.resumo.saldoDevedor} />
+                  <LinhaCategoria numero="012" titulo="Deduções" categoria="DEDUCOES" total={detalhe.resumo.deducoes} lancamentosEdit={lancamentosEdit} atualizarLancamento={atualizarLancamento} adicionarLancamento={adicionarLancamento} removerLancamento={removerLancamento} />
+                  <LinhaNumerada label="013 — Imposto a recolher" soma={detalhe.resumo.impostoARecolher} negrito />
+                  <LinhaNumerada label="014 — Saldo credor a transportar p/ período seguinte" soma={detalhe.resumo.saldoCredorTransportar} negrito destaque={detalhe.resumo.saldoCredorTransportar > 0} />
+                </TabelaLedger>
               </div>
             </div>
           </div>
@@ -526,29 +511,15 @@ function TabelaCfop({ titulo, registro }: { titulo: string; registro: RegistroIc
             </tr>
           </thead>
           <tbody>
-            {[registro.doEstado, registro.outrosEstados, registro.exterior].map((bucket) => (
-              bucket.linhas.length === 0 ? null : (
-                <Fragment key={bucket.label}>
-                  {bucket.linhas.map((l) => (
-                    <tr key={l.cfop} className="border-b border-gray-50">
-                      <td className="px-3 py-1.5 font-mono">{l.cfop}</td>
-                      <td className="px-3 py-1.5 text-right">{fmt(l.valorContabil)}</td>
-                      <td className="px-3 py-1.5 text-right">{fmt(l.baseIcms)}</td>
-                      <td className="px-3 py-1.5 text-right">{fmt(l.valorIcms)}</td>
-                      <td className="px-3 py-1.5 text-right">{fmt(l.isento)}</td>
-                      <td className="px-3 py-1.5 text-right">{fmt(l.baseOutros)}</td>
-                    </tr>
-                  ))}
-                  <tr key={bucket.label} className="border-b border-gray-100 bg-gray-50 font-medium">
-                    <td className="px-3 py-1.5" colSpan={1}>{bucket.label}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(bucket.subtotal.valorContabil)}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(bucket.subtotal.baseIcms)}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(bucket.subtotal.valorIcms)}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(bucket.subtotal.isento)}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(bucket.subtotal.baseOutros)}</td>
-                  </tr>
-                </Fragment>
-              )
+            {registro.linhas.map((l) => (
+              <tr key={l.cfop} className="border-b border-gray-50">
+                <td className="px-3 py-1.5 font-mono">{l.cfop}</td>
+                <td className="px-3 py-1.5 text-right">{fmt(l.valorContabil)}</td>
+                <td className="px-3 py-1.5 text-right">{fmt(l.baseIcms)}</td>
+                <td className="px-3 py-1.5 text-right">{fmt(l.valorIcms)}</td>
+                <td className="px-3 py-1.5 text-right">{fmt(l.isento)}</td>
+                <td className="px-3 py-1.5 text-right">{fmt(l.baseOutros)}</td>
+              </tr>
             ))}
             <tr className="font-semibold text-brand">
               <td className="px-3 py-2">TOTAIS</td>
@@ -560,7 +531,7 @@ function TabelaCfop({ titulo, registro }: { titulo: string; registro: RegistroIc
             </tr>
           </tbody>
         </table>
-        {[registro.doEstado, registro.outrosEstados, registro.exterior].every((b) => b.linhas.length === 0) && (
+        {registro.linhas.length === 0 && (
           <p className="text-sm text-gray-400 text-center py-6">Nenhum CFOP com movimento neste período.</p>
         )}
       </div>
@@ -568,93 +539,103 @@ function TabelaCfop({ titulo, registro }: { titulo: string; registro: RegistroIc
   );
 }
 
-function LinhaSimples({ label, valor }: { label: string; valor: number }) {
+// Réplica visual do Livro Fiscal de Apuração real: uma faixa vertical com
+// o nome da seção (DÉBITO/CRÉDITO/SALDO) ao lado de uma tabela com
+// "Coluna Auxiliar" (valor de cada lançamento discriminado) e "Soma"
+// (o total da linha numerada) — mesma convenção do documento original.
+function VerticalLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-sm text-gray-700">{label}</span>
-      <span className="text-sm font-mono">{fmt(valor)}</span>
+    <div className="w-8 shrink-0 bg-brand flex items-center justify-center py-3">
+      <span
+        className="text-white text-[10px] font-bold tracking-widest whitespace-nowrap"
+        style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+      >
+        {children}
+      </span>
     </div>
   );
 }
 
-function LinhaTotal({ label, valor }: { label: string; valor: number }) {
+function TabelaLedger({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-1 font-semibold">
-      <span className="text-sm text-gray-800">{label}</span>
-      <span className="text-sm font-mono">{fmt(valor)}</span>
-    </div>
+    <table className="w-full text-sm min-w-[420px]">
+      <thead>
+        <tr className="text-[10px] uppercase tracking-wide text-gray-400">
+          <th className="text-left font-medium pb-1"></th>
+          <th className="text-right font-medium pb-1 w-32">Coluna Auxiliar</th>
+          <th className="text-right font-medium pb-1 w-32">Soma</th>
+          <th className="w-6"></th>
+        </tr>
+      </thead>
+      <tbody>{children}</tbody>
+    </table>
+  );
+}
+
+function LinhaNumerada({ label, soma, negrito, destaque }: { label: string; soma: number; negrito?: boolean; destaque?: boolean }) {
+  return (
+    <tr className={destaque ? 'bg-teal/10' : negrito ? 'bg-gray-50' : ''}>
+      <td className={`py-1.5 pr-2 ${negrito || destaque ? 'font-semibold text-gray-800' : 'text-gray-700'}`}>{label}</td>
+      <td></td>
+      <td className={`py-1.5 text-right font-mono ${destaque ? 'text-teal font-bold' : negrito ? 'font-semibold' : ''}`}>{fmt(soma)}</td>
+      <td></td>
+    </tr>
   );
 }
 
 type LancamentosProps = {
-  categoria: Categoria;
   lancamentosEdit: Lancamento[];
   atualizarLancamento: (idx: number, campo: 'descricao' | 'valor', valor: string) => void;
   adicionarLancamento: (categoria: Categoria) => void;
   removerLancamento: (idx: number) => void;
 };
 
-function ListaLancamentos({ categoria, lancamentosEdit, atualizarLancamento, adicionarLancamento, removerLancamento }: LancamentosProps) {
+function LinhaCategoria({
+  numero, titulo, categoria, total, lancamentosEdit, atualizarLancamento, adicionarLancamento, removerLancamento,
+}: { numero: string; titulo: string; categoria: Categoria; total: number } & LancamentosProps) {
+  const itens = lancamentosEdit.map((l, idx) => ({ ...l, idx })).filter((l) => l.categoria === categoria);
   return (
-    <div className="pl-4 space-y-1">
-      {lancamentosEdit.map((l, idx) => l.categoria === categoria && (
-        <div key={idx} className="flex items-center gap-2">
-          <input
-            value={l.descricao}
-            onChange={(e) => atualizarLancamento(idx, 'descricao', e.target.value)}
-            placeholder="Descrição do lançamento"
-            className="border border-gray-200 rounded-lg px-2 py-1 text-xs flex-1"
-          />
-          <input
-            type="number"
-            step="0.01"
-            value={l.valor}
-            onChange={(e) => atualizarLancamento(idx, 'valor', e.target.value)}
-            className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-32 text-right"
-          />
-          <button onClick={() => removerLancamento(idx)} className="text-xs text-red-500">✕</button>
-        </div>
+    <>
+      <tr>
+        <td className="py-1.5 pr-2 text-gray-700">
+          {numero} — {titulo}{itens.length > 0 ? ' (discriminar abaixo)' : ''}
+        </td>
+        <td></td>
+        <td className="py-1.5 text-right font-mono">{itens.length === 0 ? fmt(total) : ''}</td>
+        <td></td>
+      </tr>
+      {itens.map((l, i) => (
+        <tr key={l.idx}>
+          <td className="py-1 pl-5">
+            <input
+              value={l.descricao}
+              onChange={(e) => atualizarLancamento(l.idx, 'descricao', e.target.value)}
+              placeholder="Descrição do lançamento"
+              className="border border-gray-200 rounded px-2 py-1 text-xs w-full"
+            />
+          </td>
+          <td className="py-1 text-right">
+            <input
+              type="number"
+              step="0.01"
+              value={l.valor}
+              onChange={(e) => atualizarLancamento(l.idx, 'valor', e.target.value)}
+              className="border border-gray-200 rounded px-2 py-1 text-xs w-28 text-right"
+            />
+          </td>
+          <td className="py-1 text-right font-mono text-xs text-gray-500">{i === itens.length - 1 ? fmt(total) : ''}</td>
+          <td className="py-1 text-center">
+            <button onClick={() => removerLancamento(l.idx)} className="text-xs text-red-500">✕</button>
+          </td>
+        </tr>
       ))}
-      <button onClick={() => adicionarLancamento(categoria)} className="text-xs text-brand underline">
-        + Adicionar lançamento
-      </button>
-    </div>
-  );
-}
-
-function SecaoLancamentosSimples({ label, total, ...lancamentosProps }: LancamentosProps & { label: string; total: number }) {
-  return (
-    <div>
-      <LinhaSimples label={label} valor={total} />
-      <ListaLancamentos {...lancamentosProps} />
-    </div>
-  );
-}
-
-function SecaoResumo({
-  titulo, linhasFixas, categoriaExtra, linhasFixas2, categoriaExtra2, subtotal, children, ...lancamentosProps
-}: Omit<LancamentosProps, 'categoria'> & {
-  titulo: string;
-  linhasFixas: [string, number][];
-  categoriaExtra: Categoria;
-  linhasFixas2: [string, number][];
-  categoriaExtra2: Categoria;
-  subtotal: [string, number];
-  children?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-700 mb-2">{titulo}</h3>
-      <div className="space-y-1.5">
-        {linhasFixas.map(([label, valor]) => <LinhaSimples key={label} label={label} valor={valor} />)}
-        <ListaLancamentos categoria={categoriaExtra} {...lancamentosProps} />
-
-        {linhasFixas2.map(([label, valor]) => <LinhaSimples key={label} label={label} valor={valor} />)}
-        <ListaLancamentos categoria={categoriaExtra2} {...lancamentosProps} />
-
-        <LinhaTotal label={subtotal[0]} valor={subtotal[1]} />
-        {children}
-      </div>
-    </div>
+      <tr>
+        <td colSpan={4} className="pb-1.5 pl-5">
+          <button onClick={() => adicionarLancamento(categoria)} className="text-xs text-brand underline">
+            + Adicionar lançamento
+          </button>
+        </td>
+      </tr>
+    </>
   );
 }

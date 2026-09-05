@@ -19,34 +19,12 @@ export type LinhaCfop = {
   baseOutros: number;
 };
 
-export type BucketCfop = {
-  label: string;
-  linhas: LinhaCfop[];
-  subtotal: Omit<LinhaCfop, 'cfop'>;
-};
-
 export type RegistroIcms = {
-  doEstado: BucketCfop;
-  outrosEstados: BucketCfop;
-  exterior: BucketCfop;
+  linhas: LinhaCfop[];
   totais: Omit<LinhaCfop, 'cfop'>;
 };
 
 const SOMA_VAZIA = { valorContabil: 0, baseIcms: 0, valorIcms: 0, isento: 0, baseOutros: 0 };
-
-function bucketDoCfop(cfop: string, direcao: Direcao): 'doEstado' | 'outrosEstados' | 'exterior' | null {
-  const primeiroDigito = cfop.trim()[0];
-  if (direcao === 'entrada') {
-    if (primeiroDigito === '1') return 'doEstado';
-    if (primeiroDigito === '2') return 'outrosEstados';
-    if (primeiroDigito === '3') return 'exterior';
-  } else {
-    if (primeiroDigito === '5') return 'doEstado';
-    if (primeiroDigito === '6') return 'outrosEstados';
-    if (primeiroDigito === '7') return 'exterior';
-  }
-  return null;
-}
 
 function somar(a: Omit<LinhaCfop, 'cfop'>, b: Omit<LinhaCfop, 'cfop'>): Omit<LinhaCfop, 'cfop'> {
   return {
@@ -59,63 +37,58 @@ function somar(a: Omit<LinhaCfop, 'cfop'>, b: Omit<LinhaCfop, 'cfop'>): Omit<Lin
 }
 
 // Agrupa os itens de uma apuração de Entrada ou Saída por CFOP, somando
-// exatamente as colunas do Registro de Apuração do ICMS real (Valores
-// Contábeis / Base de Cálculo / Imposto Creditado ou Debitado / Isentas
-// ou Não Tributadas / Outras) — confirmado batendo a soma real contra um
-// Registro de Apuração do ICMS de exemplo. A separação DO ESTADO / DE
-// OUTROS ESTADOS / DO EXTERIOR segue o primeiro dígito do CFOP (1/5, 2/6,
-// 3/7), convenção padrão que também bateu exatamente contra o exemplo.
+// exatamente as colunas do Registro de Apuração do ICMS real (Base de
+// Cálculo / Imposto Creditado ou Debitado / Isentas ou Não Tributadas /
+// Outras). Só uma linha por CFOP + o total geral — sem totalizadores
+// intermediários por UF, a pedido do usuário ("não é preciso ter o
+// totalizador das operações internas").
+//
+// Valores Contábeis não vem pronto do relatório do Protheus (não existe
+// essa coluna separada no layout real — ver analise-fiscal-reader.ts).
+// A pedido do usuário: na Entrada é calculado como
+// Total - Desconto + Frete + Despesa + Seguro; na Saída é direto o valor
+// da coluna Total do relatório.
 export async function agregarIcmsPorCfop(apuracaoId: string, direcao: Direcao): Promise<RegistroIcms> {
-  const grupos = direcao === 'entrada'
-    ? await prisma.analiseFiscalItem.groupBy({
-        by: ['cfop'],
-        where: { apuracaoId, cfop: { not: null } },
-        _sum: { valorContabil: true, baseIcms: true, valorIcms: true, isento: true, baseOutros: true },
-      })
-    : await prisma.analiseFiscalSaidaItem.groupBy({
-        by: ['cfop'],
-        where: { apuracaoId, cfop: { not: null } },
-        _sum: { valorContabil: true, baseIcms: true, valorIcms: true, isento: true, baseOutros: true },
-      });
+  let linhas: LinhaCfop[];
 
-  const linhas: LinhaCfop[] = grupos
-    .filter((g) => g.cfop)
-    .map((g) => ({
-      cfop: g.cfop as string,
-      valorContabil: g._sum.valorContabil || 0,
-      baseIcms: g._sum.baseIcms || 0,
-      valorIcms: g._sum.valorIcms || 0,
-      isento: g._sum.isento || 0,
-      baseOutros: g._sum.baseOutros || 0,
-    }))
-    .sort((a, b) => parseInt(a.cfop, 10) - parseInt(b.cfop, 10) || a.cfop.localeCompare(b.cfop));
-
-  const buckets: Record<'doEstado' | 'outrosEstados' | 'exterior', LinhaCfop[]> = {
-    doEstado: [],
-    outrosEstados: [],
-    exterior: [],
-  };
-
-  for (const linha of linhas) {
-    const bucket = bucketDoCfop(linha.cfop, direcao);
-    if (bucket) buckets[bucket].push(linha);
+  if (direcao === 'entrada') {
+    const grupos = await prisma.analiseFiscalItem.groupBy({
+      by: ['cfop'],
+      where: { apuracaoId, cfop: { not: null } },
+      _sum: { total: true, desconto: true, frete: true, despesa: true, seguro: true, baseIcms: true, valorIcms: true, isento: true, baseOutros: true },
+    });
+    linhas = grupos
+      .filter((g) => g.cfop)
+      .map((g) => ({
+        cfop: g.cfop as string,
+        valorContabil: (g._sum.total || 0) - (g._sum.desconto || 0) + (g._sum.frete || 0) + (g._sum.despesa || 0) + (g._sum.seguro || 0),
+        baseIcms: g._sum.baseIcms || 0,
+        valorIcms: g._sum.valorIcms || 0,
+        isento: g._sum.isento || 0,
+        baseOutros: g._sum.baseOutros || 0,
+      }));
+  } else {
+    const grupos = await prisma.analiseFiscalSaidaItem.groupBy({
+      by: ['cfop'],
+      where: { apuracaoId, cfop: { not: null } },
+      _sum: { total: true, baseIcms: true, valorIcms: true, isento: true, baseOutros: true },
+    });
+    linhas = grupos
+      .filter((g) => g.cfop)
+      .map((g) => ({
+        cfop: g.cfop as string,
+        valorContabil: g._sum.total || 0,
+        baseIcms: g._sum.baseIcms || 0,
+        valorIcms: g._sum.valorIcms || 0,
+        isento: g._sum.isento || 0,
+        baseOutros: g._sum.baseOutros || 0,
+      }));
   }
 
-  function montarBucket(label: string, itens: LinhaCfop[]): BucketCfop {
-    const subtotal = itens.reduce((acc, l) => somar(acc, l), { ...SOMA_VAZIA });
-    return { label, linhas: itens, subtotal };
-  }
+  linhas.sort((a, b) => parseInt(a.cfop, 10) - parseInt(b.cfop, 10) || a.cfop.localeCompare(b.cfop));
+  const totais = linhas.reduce((acc, l) => somar(acc, l), { ...SOMA_VAZIA });
 
-  const doEstado = montarBucket(direcao === 'entrada' ? '1.000 DO ESTADO' : '5.000 PARA O ESTADO', buckets.doEstado);
-  const outrosEstados = montarBucket(
-    direcao === 'entrada' ? '2.000 DE OUTROS ESTADOS' : '6.000 PARA OUTROS ESTADOS',
-    buckets.outrosEstados
-  );
-  const exterior = montarBucket(direcao === 'entrada' ? '3.000 DO EXTERIOR' : '7.000 PARA O EXTERIOR', buckets.exterior);
-
-  const totais = somar(somar(doEstado.subtotal, outrosEstados.subtotal), exterior.subtotal);
-
-  return { doEstado, outrosEstados, exterior, totais };
+  return { linhas, totais };
 }
 
 // Total de ICMS (creditado ou debitado, conforme a direção) de uma
