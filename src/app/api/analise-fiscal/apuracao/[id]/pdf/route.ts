@@ -138,19 +138,17 @@ async function gerarPdf(apuracao: {
       desenharRegistro(doc, 'SAÍDAS — ICMS por CFOP', registroSaidas);
     }
 
-    if (doc.y > 650) doc.addPage();
-    doc.fontSize(12).fillColor('#00753A').text('Resumo da Apuração do Imposto');
+    // Resumo sempre numa página nova e própria, com cada seção
+    // (Débito/Crédito/Saldo) num quadro fechado (faixa verde de título +
+    // borda ao redor) — a pedido do usuário, pra caber tudo numa página só.
+    doc.addPage();
+    doc.fontSize(18).font('Helvetica-Bold').fillColor('#00753A').text('Resumo da Apuração do Imposto', { align: 'center' });
+    doc.font('Helvetica').fontSize(9).fillColor('#666').text(
+      `${apuracao.company.name}   ·   Período: ${apuracao.periodo}`,
+      { align: 'center' }
+    );
     doc.fillColor('#000');
-    doc.moveDown(0.5);
-
-    function cabecalhoColunas() {
-      const y = doc.y;
-      doc.fontSize(7).fillColor('#888');
-      doc.text('Coluna Auxiliar', MARGEM + LARGURA_UTIL - COL_SOMA_W - COL_AUXILIAR_W, y, { width: COL_AUXILIAR_W - 6, align: 'right' });
-      doc.text('Soma', MARGEM + LARGURA_UTIL - COL_SOMA_W, y, { width: COL_SOMA_W, align: 'right' });
-      doc.fillColor('#000');
-      doc.moveDown(0.5);
-    }
+    doc.moveDown(1.2);
 
     // desenha uma categoria "NNN — Título (discriminar abaixo)": some no
     // total direto se não houver lançamento, senão o total aparece só na
@@ -172,33 +170,51 @@ async function gerarPdf(apuracao: {
       });
     }
 
-    doc.fontSize(10).font('Helvetica-Bold').text('Débito do Imposto');
-    doc.font('Helvetica');
-    cabecalhoColunas();
-    desenharResumoLinha(doc, '001 — Por saídas/prestações com débito do imposto', { soma: fmt(resumo.porSaidasComDebito) });
-    categoria('002', 'Outros débitos', 'OUTROS_DEBITOS', resumo.outrosDebitos);
-    categoria('003', 'Estorno de créditos', 'ESTORNO_CREDITOS', resumo.estornoCreditos);
-    desenharResumoLinha(doc, '004 — Sub-total', { soma: fmt(resumo.subTotalDebito), negrito: true });
-    doc.moveDown(0.5);
+    // Um "quadrado" por seção: faixa verde com o título, cabeçalho das
+    // colunas, o conteúdo (via callback) e por fim uma borda ao redor de
+    // tudo — desenhada depois do conteúdo pra não cobrir o texto.
+    function desenharCaixaSecao(titulo: string, desenharConteudo: () => void) {
+      const yInicio = doc.y;
+      doc.rect(MARGEM, yInicio, LARGURA_UTIL, 20).fill('#00753A');
+      doc.fillColor('#fff').fontSize(11).font('Helvetica-Bold').text(titulo, MARGEM + 10, yInicio + 5);
+      doc.fillColor('#000').font('Helvetica');
+      doc.y = yInicio + 28;
 
-    doc.fontSize(10).font('Helvetica-Bold').text('Crédito do Imposto');
-    doc.font('Helvetica');
-    cabecalhoColunas();
-    desenharResumoLinha(doc, '005 — Por entradas/aquisições com crédito do imposto', { soma: fmt(resumo.porEntradasComCredito) });
-    categoria('006', 'Outros créditos', 'OUTROS_CREDITOS', resumo.outrosCreditos);
-    categoria('007', 'Estorno de débitos', 'ESTORNO_DEBITOS', resumo.estornoDebitos);
-    desenharResumoLinha(doc, '008 — Sub-total', { soma: fmt(resumo.subTotalCredito), negrito: true });
-    desenharResumoLinha(doc, '009 — Saldo credor do período anterior', { soma: fmt(resumo.saldoCredorAnterior) });
-    desenharResumoLinha(doc, '010 — Total', { soma: fmt(resumo.totalCredito), negrito: true });
-    doc.moveDown(0.5);
+      doc.fontSize(7).fillColor('#888');
+      doc.text('Coluna Auxiliar', MARGEM + LARGURA_UTIL - COL_SOMA_W - COL_AUXILIAR_W, doc.y, { width: COL_AUXILIAR_W - 6, align: 'right' });
+      doc.text('Soma', MARGEM + LARGURA_UTIL - COL_SOMA_W, doc.y, { width: COL_SOMA_W, align: 'right' });
+      doc.fillColor('#000');
+      doc.moveDown(0.7);
 
-    doc.fontSize(10).font('Helvetica-Bold').text('Apuração do Saldo');
-    doc.font('Helvetica');
-    cabecalhoColunas();
-    desenharResumoLinha(doc, '011 — Saldo devedor (débito menos crédito)', { soma: fmt(resumo.saldoDevedor) });
-    categoria('012', 'Deduções', 'DEDUCOES', resumo.deducoes);
-    desenharResumoLinha(doc, '013 — Imposto a recolher', { soma: fmt(resumo.impostoARecolher), negrito: true });
-    desenharResumoLinha(doc, '014 — Saldo credor a transportar p/ período seguinte', { soma: fmt(resumo.saldoCredorTransportar), negrito: true });
+      desenharConteudo();
+
+      const yFim = doc.y + 8;
+      doc.rect(MARGEM, yInicio, LARGURA_UTIL, yFim - yInicio).lineWidth(1).stroke('#00753A');
+      doc.y = yFim + 16;
+    }
+
+    desenharCaixaSecao('DÉBITO DO IMPOSTO', () => {
+      desenharResumoLinha(doc, '001 — Por saídas/prestações com débito do imposto', { soma: fmt(resumo.porSaidasComDebito) });
+      categoria('002', 'Outros débitos', 'OUTROS_DEBITOS', resumo.outrosDebitos);
+      categoria('003', 'Estorno de créditos', 'ESTORNO_CREDITOS', resumo.estornoCreditos);
+      desenharResumoLinha(doc, '004 — Sub-total', { soma: fmt(resumo.subTotalDebito), negrito: true });
+    });
+
+    desenharCaixaSecao('CRÉDITO DO IMPOSTO', () => {
+      desenharResumoLinha(doc, '005 — Por entradas/aquisições com crédito do imposto', { soma: fmt(resumo.porEntradasComCredito) });
+      categoria('006', 'Outros créditos', 'OUTROS_CREDITOS', resumo.outrosCreditos);
+      categoria('007', 'Estorno de débitos', 'ESTORNO_DEBITOS', resumo.estornoDebitos);
+      desenharResumoLinha(doc, '008 — Sub-total', { soma: fmt(resumo.subTotalCredito), negrito: true });
+      desenharResumoLinha(doc, '009 — Saldo credor do período anterior', { soma: fmt(resumo.saldoCredorAnterior) });
+      desenharResumoLinha(doc, '010 — Total', { soma: fmt(resumo.totalCredito), negrito: true });
+    });
+
+    desenharCaixaSecao('APURAÇÃO DO SALDO', () => {
+      desenharResumoLinha(doc, '011 — Saldo devedor (débito menos crédito)', { soma: fmt(resumo.saldoDevedor) });
+      categoria('012', 'Deduções', 'DEDUCOES', resumo.deducoes);
+      desenharResumoLinha(doc, '013 — Imposto a recolher', { soma: fmt(resumo.impostoARecolher), negrito: true });
+      desenharResumoLinha(doc, '014 — Saldo credor a transportar p/ período seguinte', { soma: fmt(resumo.saldoCredorTransportar), negrito: true });
+    });
 
     doc.end();
   });
