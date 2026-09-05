@@ -19,6 +19,7 @@ export async function GET() {
       id: true,
       periodo: true,
       fileName: true,
+      status: true,
       totalLinhas: true,
       totalNotas: true,
       totalDivergencias: true,

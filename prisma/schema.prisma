@@ -451,13 +451,16 @@ model ValidacaoCadastroItem {
 
 // Análise e Apuração Fiscal — auditoria do Relatório Fiscal de Entradas,
 // cruzando TES x Produto x CFOP x UF x Fornecedor x Chave NF x tributos.
-// Apenas ENTRADAS por enquanto (Etapas 1-10); Saídas e o cruzamento
-// entradas x saídas ficam para uma etapa futura.
+// status: PROCESSANDO | CONCLUIDA — igual AnaliseFiscalSaidaApuracao:
+// arquivos de Entradas também passaram a estourar o limite de payload da
+// Vercel quando enviados inteiros (~5MB+), então o cálculo roda no
+// navegador e os itens chegam em lotes via /apurar/lote.
 model AnaliseFiscalApuracao {
   id                       String   @id @default(cuid())
   companyId                String
   periodo                  String?
   fileName                 String?
+  status                   String   @default("PROCESSANDO")
   totalLinhas              Int
   totalNotas               Int
   totalProdutos            Int

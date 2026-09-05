@@ -8,6 +8,7 @@ type ApuracaoResumo = {
   id: string;
   periodo: string | null;
   fileName: string | null;
+  status: string;
   totalLinhas: number;
   totalNotas: number;
   totalDivergencias: number;
@@ -72,20 +73,26 @@ export default function HistoricoAnaliseFiscalEntradaPage() {
               <div>
                 <h4 className="font-medium text-sm text-gray-800">
                   {a.periodo || a.fileName || 'Sem período informado'}
-                  {a.qtdCritico > 0 && (
+                  {a.status === 'PROCESSANDO' && (
+                    <span className="ml-2 text-[10px] bg-gray-200 text-gray-600 rounded-full px-2 py-0.5">
+                      Incompleta — processamento não terminou
+                    </span>
+                  )}
+                  {a.status === 'CONCLUIDA' && a.qtdCritico > 0 && (
                     <span className="ml-2 text-[10px] bg-red-100 text-red-700 rounded-full px-2 py-0.5">
                       {a.qtdCritico} crítica(s)
                     </span>
                   )}
-                  {a.qtdTesNovas > 0 && (
+                  {a.status === 'CONCLUIDA' && a.qtdTesNovas > 0 && (
                     <span className="ml-2 text-[10px] bg-teal/10 text-teal rounded-full px-2 py-0.5">
                       {a.qtdTesNovas} TES nova(s)
                     </span>
                   )}
                 </h4>
                 <p className="text-xs text-gray-400 font-mono mt-1">
-                  {new Date(a.processedAt).toLocaleString('pt-BR')} · {a.totalLinhas} linha(s) · {a.totalNotas} nota(s) ·{' '}
-                  {a.totalDivergencias} divergência(s) ({a.qtdCritico} crít. · {a.qtdAlto} alta · {a.qtdMedio} média · {a.qtdBaixo} baixa)
+                  {new Date(a.processedAt).toLocaleString('pt-BR')} · {a.totalLinhas.toLocaleString('pt-BR')} linha(s) ·{' '}
+                  {a.totalNotas.toLocaleString('pt-BR')} nota(s) · {a.totalDivergencias} divergência(s) ({a.qtdCritico} crít. ·{' '}
+                  {a.qtdAlto} alta · {a.qtdMedio} média · {a.qtdBaixo} baixa)
                 </p>
               </div>
               <div className="flex gap-2">
