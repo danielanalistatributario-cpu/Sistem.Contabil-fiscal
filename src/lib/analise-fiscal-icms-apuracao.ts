@@ -29,7 +29,7 @@ const SOMA_VAZIA = { valorContabil: 0, baseIcms: 0, valorIcms: 0, isento: 0, bas
 // CFOPs que o usuário pediu pra desconsiderar inteiramente da Apuração
 // Fiscal do ICMS — não entram na tabela por CFOP nem nos totais 001/005
 // do Resumo, mesmo que apareçam no relatório de Entradas/Saídas.
-const CFOPS_EXCLUIDOS_ICMS = ['1101', '1932', '1933', '2932', '2933'];
+const CFOPS_EXCLUIDOS_ICMS = ['1101', '1932', '1933', '2933'];
 
 function somar(a: Omit<LinhaCfop, 'cfop'>, b: Omit<LinhaCfop, 'cfop'>): Omit<LinhaCfop, 'cfop'> {
   return {
