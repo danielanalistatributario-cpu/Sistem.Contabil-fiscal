@@ -175,12 +175,13 @@ function AnaliseFiscalEntradaInner() {
       }
       const tesMetadataPorCodigo = cfg.tesMetadataPorCodigo as Record<string, TesMetadata>;
       const cnpjsGrupo = new Set<string>(cfg.cnpjsGrupo);
+      const produtosClassificacao = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacao);
 
       setProgresso({ fase: 'Calculando divergências...', loteAtual: 0, totalLotes: 0 });
       const { itens, resumo }: { itens: ItemApurado[]; resumo: ResumoApuracao } = apurarEntradas(
         leitura.rows,
         cfg.company,
-        { tesMetadataPorCodigo, cnpjsGrupo }
+        { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao }
       );
 
       setProgresso({ fase: 'Criando apuração...', loteAtual: 0, totalLotes: 0 });

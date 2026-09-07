@@ -48,6 +48,7 @@ model Company {
   analiseFiscalCnpjsGrupo AnaliseFiscalCnpjGrupo[]
   analisesFiscaisSaida AnaliseFiscalSaidaApuracao[]
   apuracoesFiscaisIcms AnaliseFiscalApuracaoIcms[]
+  analiseFiscalProdutosClassificacao AnaliseFiscalProdutoClassificacao[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -637,6 +638,9 @@ model AnaliseFiscalSaidaDivergencia {
 // (analise-fiscal-tes-registry.ts); isto é só a classificação básica que
 // permite cadastrar uma "TES nova" sem precisar de deploy.
 // chaveNf: obrigatoria | proibida | livre
+// naturezaOperacao: LIVRE (padrão — sem cruzamento produto×TES) | ISENTA |
+// TRIBUTADA | TRANSFERENCIA (produto sai isento independente da
+// classificação dele — natureza da operação de transferência).
 model AnaliseFiscalTesConfig {
   id              String   @id @default(cuid())
   companyId       String
@@ -645,11 +649,30 @@ model AnaliseFiscalTesConfig {
   chaveNf         String
   permiteProdutos Boolean  @default(true)
   validarCfopUf   Boolean  @default(true)
+  naturezaOperacao String  @default("LIVRE")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, codigo])
+}
+
+// Classificação tributária intrínseca do produto (ISENTO ou TRIBUTADO),
+// cadastrada pelo admin — usada pra cruzar com a natureza da TES
+// (AnaliseFiscalTesConfig.naturezaOperacao) e sinalizar produto lançado
+// na TES errada (ex: produto tributado numa TES isenta).
+model AnaliseFiscalProdutoClassificacao {
+  id             String   @id @default(cuid())
+  companyId      String
+  codigoProduto  String
+  descricao      String
+  classificacao  String
+  observacao     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, codigoProduto])
 }
 
 // CNPJs do grupo de empresas relacionadas, usados pela TES de

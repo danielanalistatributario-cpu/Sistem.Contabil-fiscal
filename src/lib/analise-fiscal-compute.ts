@@ -3,7 +3,7 @@
 // específicas, e agrega tudo em KPIs pro cabeçalho da apuração.
 
 import type { LinhaEntradaImportada } from './analise-fiscal-reader';
-import type { Divergencia, Severidade, TesMetadata } from './analise-fiscal-tes-registry';
+import type { Divergencia, Severidade, TesMetadata, ClassificacaoProduto } from './analise-fiscal-tes-registry';
 import { TES_RULES } from './analise-fiscal-tes-registry';
 import { GENERIC_RULES } from './analise-fiscal-generic-rules';
 
@@ -40,13 +40,14 @@ export type ResultadoApuracao = { itens: ItemApurado[]; resumo: ResumoApuracao }
 export function apurarEntradas(
   linhas: LinhaEntradaImportada[],
   company: { ufDestino: string; aliquotaInterna: number },
-  config: { tesMetadataPorCodigo: Record<string, TesMetadata>; cnpjsGrupo: Set<string> }
+  config: { tesMetadataPorCodigo: Record<string, TesMetadata>; cnpjsGrupo: Set<string>; produtosClassificacao?: Map<string, ClassificacaoProduto> }
 ): ResultadoApuracao {
   const ctxBase = {
     ufPropria: company.ufDestino || '',
     aliquotaInterna: company.aliquotaInterna || 0.19,
     cnpjsGrupo: config.cnpjsGrupo,
     tesMetadataPorCodigo: config.tesMetadataPorCodigo,
+    produtosClassificacao: config.produtosClassificacao || new Map(),
   };
 
   const itens: ItemApurado[] = linhas.map((linha) => {

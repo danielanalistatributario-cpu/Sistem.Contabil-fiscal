@@ -4,7 +4,7 @@
 // uma TES). Isso cobre as ~23 TES "metadados só" com checagens úteis desde já.
 
 import type { RuleDef, RuleContext, Divergencia } from './analise-fiscal-tes-registry';
-import { normalizarUf, somenteDigitos, fmtBRL, fmtPct } from './analise-fiscal-tes-registry';
+import { normalizarUf, somenteDigitos, fmtBRL, fmtPct, extrairCodigoProduto } from './analise-fiscal-tes-registry';
 
 const ruleChaveNfPolicy: RuleDef = {
   id: 'generico_chave_nf_politica',
@@ -137,6 +137,75 @@ const ruleCfopUf: RuleDef = {
   },
 };
 
+// Cruza a classificação tributária do produto (ISENTO/TRIBUTADO,
+// cadastrada pela empresa) com a natureza da TES lançada
+// (ISENTA/TRIBUTADA/TRANSFERENCIA/LIVRE, também cadastrada). Só roda
+// quando os dois lados estão classificados — produto sem cadastro ou TES
+// LIVRE/TRANSFERENCIA (produto sai isento independente da classificação
+// dele na transferência) não geram divergência.
+const ruleProdutoClassificacaoTes: RuleDef = {
+  id: 'generico_produto_classificacao_tes',
+  descricao: 'Confere se a classificação tributária do produto (ISENTO/TRIBUTADO, cadastrada em Configurar TES) bate com a natureza da TES lançada (ISENTA/TRIBUTADA). Não roda em TES de transferência (produto sai isento independente da classificação) nem em produto/TES ainda não classificados.',
+  check: (ctx) => {
+    const { linha } = ctx;
+    const meta = ctx.tesMetadataPorCodigo[linha.tes];
+    if (!meta || !meta.naturezaOperacao) return null;
+    if (meta.naturezaOperacao === 'LIVRE' || meta.naturezaOperacao === 'TRANSFERENCIA') return null;
+
+    const codigo = extrairCodigoProduto(linha.produtoDescricao);
+    if (!codigo) return null;
+    const classificacao = ctx.produtosClassificacao.get(codigo);
+    if (!classificacao) return null;
+
+    if (meta.naturezaOperacao === 'ISENTA' && classificacao === 'TRIBUTADO') {
+      return {
+        severidade: 'ALTO',
+        tipo: 'PRODUTO_CLASSIFICACAO_TES',
+        regraEsperada: `TES ${linha.tes} (${meta.grupo}) é isenta — produtos tributados não deveriam ser lançados aqui`,
+        informacaoEncontrada: `Produto "${linha.produtoDescricao}" está cadastrado como TRIBUTADO`,
+        motivo: `Produto classificado como tributado lançado numa TES isenta (${linha.tes})`,
+        sugestaoCorrecao: 'Verificar se a TES correta seria uma TES tributada para este produto',
+      };
+    }
+    if (meta.naturezaOperacao === 'TRIBUTADA' && classificacao === 'ISENTO') {
+      return {
+        severidade: 'ALTO',
+        tipo: 'PRODUTO_CLASSIFICACAO_TES',
+        regraEsperada: `TES ${linha.tes} (${meta.grupo}) é tributada — produtos isentos não deveriam ser lançados aqui`,
+        informacaoEncontrada: `Produto "${linha.produtoDescricao}" está cadastrado como ISENTO`,
+        motivo: `Produto classificado como isento lançado numa TES tributada (${linha.tes})`,
+        sugestaoCorrecao: 'Verificar se a TES correta seria uma TES isenta para este produto',
+      };
+    }
+    return null;
+  },
+};
+
+// CFOP 1152/2152 (transferência entre estabelecimentos, mesmo padrão já
+// calibrado na TES 138 — ver analise-fiscal-tes-registry.ts) numa TES que
+// não está marcada como TRANSFERENCIA é sinal de TES incorreta, mesmo sem
+// nenhuma regra específica cadastrada para essa TES.
+const ruleCfopTransferencia: RuleDef = {
+  id: 'generico_cfop_transferencia',
+  descricao: 'Confere se o CFOP de transferência (1152/2152) está sendo usado numa TES marcada como TRANSFERENCIA. CFOP de transferência em qualquer outra TES é sinalizado.',
+  check: (ctx) => {
+    const { linha } = ctx;
+    if (!linha.cfop) return null;
+    const cfopDigitos = (linha.cfop.match(/\d+/) || [''])[0];
+    if (cfopDigitos !== '1152' && cfopDigitos !== '2152') return null;
+    const meta = ctx.tesMetadataPorCodigo[linha.tes];
+    if (meta && meta.naturezaOperacao === 'TRANSFERENCIA') return null;
+    return {
+      severidade: 'ALTO',
+      tipo: 'CFOP_TRANSFERENCIA_TES',
+      regraEsperada: 'CFOP de transferência (1152/2152) só deveria aparecer numa TES de transferência entre filiais',
+      informacaoEncontrada: `CFOP ${linha.cfop} na TES ${linha.tes}${meta ? ' (' + meta.grupo + ')' : ''}`,
+      motivo: `TES ${linha.tes} não está marcada como transferência, mas o CFOP indica transferência`,
+      sugestaoCorrecao: 'Verificar se esta nota deveria mesmo usar TES de transferência (ex: 138)',
+    };
+  },
+};
+
 const ruleValorContabil: RuleDef = {
   id: 'generico_valor_contabil',
   descricao: 'Recalcula o Valor Contábil como Total − Desconto + Despesa + Frete + Seguro e compara com o valor informado na nota.',
@@ -205,6 +274,8 @@ export const GENERIC_RULES: RuleDef[] = [
   ruleChaveNfFormato,
   ruleProdutoNaoPermitido,
   ruleCfopUf,
+  ruleCfopTransferencia,
+  ruleProdutoClassificacaoTes,
   ruleValorContabil,
   ruleCalculoImposto('Icms', 'ICMS'),
   ruleCalculoImposto('Pis', 'PIS'),

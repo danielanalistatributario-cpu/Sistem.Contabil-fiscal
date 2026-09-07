@@ -5,7 +5,7 @@
 // rótulo) e a lista de CNPJs do grupo viram dado de banco, por empresa.
 
 import { prisma } from './db';
-import { TES_METADATA, type TesMetadata, type ChaveNfPolicy } from './analise-fiscal-tes-registry';
+import { TES_METADATA, type TesMetadata, type ChaveNfPolicy, type NaturezaOperacao, type ClassificacaoProduto } from './analise-fiscal-tes-registry';
 import { TES_METADATA_SAIDA_DEFAULT } from './analise-fiscal-saida-tes-registry';
 
 // Códigos de TES de Entrada (0xx-3xx) e Saída (9xx) nunca colidem
@@ -36,6 +36,7 @@ export async function garantirSeedTesConfig(companyId: string): Promise<void> {
     chaveNf: meta.chaveNf,
     permiteProdutos: meta.permiteProdutos,
     validarCfopUf: meta.validarCfopUf !== false,
+    naturezaOperacao: meta.naturezaOperacao || 'LIVRE',
   }));
 
   if (dados.length === 0) return;
@@ -53,6 +54,7 @@ export async function carregarTesMetadataPorCodigo(companyId: string): Promise<R
       chaveNf: l.chaveNf as ChaveNfPolicy,
       permiteProdutos: l.permiteProdutos,
       validarCfopUf: l.validarCfopUf,
+      naturezaOperacao: l.naturezaOperacao as NaturezaOperacao,
     };
   }
   return mapa;
@@ -61,4 +63,9 @@ export async function carregarTesMetadataPorCodigo(companyId: string): Promise<R
 export async function carregarCnpjsGrupo(companyId: string): Promise<Set<string>> {
   const linhas = await prisma.analiseFiscalCnpjGrupo.findMany({ where: { companyId } });
   return new Set(linhas.map((l) => l.cnpj.replace(/\D/g, '')));
+}
+
+export async function carregarProdutosClassificacao(companyId: string): Promise<Map<string, ClassificacaoProduto>> {
+  const linhas = await prisma.analiseFiscalProdutoClassificacao.findMany({ where: { companyId } });
+  return new Map(linhas.map((l) => [l.codigoProduto, l.classificacao as ClassificacaoProduto]));
 }

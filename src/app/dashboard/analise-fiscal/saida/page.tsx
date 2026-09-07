@@ -167,9 +167,10 @@ function AnaliseFiscalSaidaInner() {
       }
       const tesMetadataPorCodigo = cfg.tesMetadataPorCodigo as Record<string, TesMetadata>;
       const cnpjsGrupo = new Set<string>(cfg.cnpjsGrupo);
+      const produtosClassificacao = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacao);
 
       setProgresso({ fase: 'Calculando divergências...', loteAtual: 0, totalLotes: 0 });
-      const { itens, resumo } = apurarSaidas(leitura.rows, cfg.company, { tesMetadataPorCodigo, cnpjsGrupo });
+      const { itens, resumo } = apurarSaidas(leitura.rows, cfg.company, { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao });
 
       setProgresso({ fase: 'Criando apuração...', loteAtual: 0, totalLotes: 0 });
       const resIniciar = await fetch('/api/analise-fiscal/saida/apurar/iniciar', {

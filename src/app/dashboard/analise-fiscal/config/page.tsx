@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
+type NaturezaOperacao = 'LIVRE' | 'ISENTA' | 'TRIBUTADA' | 'TRANSFERENCIA';
+
 type TesRow = {
   id: string;
   codigo: string;
@@ -11,15 +13,26 @@ type TesRow = {
   chaveNf: 'obrigatoria' | 'proibida' | 'livre';
   permiteProdutos: boolean;
   validarCfopUf: boolean;
+  naturezaOperacao: NaturezaOperacao;
 };
 
 type CnpjRow = { id: string; nome: string; cnpj: string };
+
+type ProdutoRow = { id: string; codigoProduto: string; descricao: string; classificacao: 'ISENTO' | 'TRIBUTADO'; observacao: string | null };
 
 const CHAVE_NF_OPTIONS: TesRow['chaveNf'][] = ['obrigatoria', 'proibida', 'livre'];
 const CHAVE_NF_LABELS: Record<TesRow['chaveNf'], string> = {
   obrigatoria: 'Obrigatória',
   proibida: 'Proibida',
   livre: 'Livre',
+};
+
+const NATUREZA_OPERACAO_OPTIONS: NaturezaOperacao[] = ['LIVRE', 'ISENTA', 'TRIBUTADA', 'TRANSFERENCIA'];
+const NATUREZA_OPERACAO_LABELS: Record<NaturezaOperacao, string> = {
+  LIVRE: 'Livre (sem cruzamento)',
+  ISENTA: 'Isenta',
+  TRIBUTADA: 'Tributada',
+  TRANSFERENCIA: 'Transferência',
 };
 
 export default function AnaliseFiscalConfigPage() {
@@ -33,9 +46,17 @@ export default function AnaliseFiscalConfigPage() {
   const [novaChaveNf, setNovaChaveNf] = useState<TesRow['chaveNf']>('obrigatoria');
   const [novoPermiteProdutos, setNovoPermiteProdutos] = useState(true);
   const [novoValidarCfopUf, setNovoValidarCfopUf] = useState(true);
+  const [novaNaturezaOperacao, setNovaNaturezaOperacao] = useState<NaturezaOperacao>('LIVRE');
 
   const [novoNomeCnpj, setNovoNomeCnpj] = useState('');
   const [novoCnpj, setNovoCnpj] = useState('');
+
+  const [produtos, setProdutos] = useState<ProdutoRow[]>([]);
+  const [erroProduto, setErroProduto] = useState<string | null>(null);
+  const [novoCodigoProduto, setNovoCodigoProduto] = useState('');
+  const [novaDescricaoProduto, setNovaDescricaoProduto] = useState('');
+  const [novaClassificacaoProduto, setNovaClassificacaoProduto] = useState<'ISENTO' | 'TRIBUTADO'>('TRIBUTADO');
+  const [novaObservacaoProduto, setNovaObservacaoProduto] = useState('');
 
   const carregarTes = useCallback(async () => {
     const res = await fetch('/api/analise-fiscal/config/tes');
@@ -53,10 +74,19 @@ export default function AnaliseFiscalConfigPage() {
     }
   }, []);
 
+  const carregarProdutos = useCallback(async () => {
+    const res = await fetch('/api/analise-fiscal/config/produtos');
+    if (res.ok) {
+      const data = await res.json();
+      setProdutos(data.produtos);
+    }
+  }, []);
+
   useEffect(() => {
     carregarTes();
     carregarCnpjs();
-  }, [carregarTes, carregarCnpjs]);
+    carregarProdutos();
+  }, [carregarTes, carregarCnpjs, carregarProdutos]);
 
   async function handleAddTes(e: React.FormEvent) {
     e.preventDefault();
@@ -70,6 +100,7 @@ export default function AnaliseFiscalConfigPage() {
         chaveNf: novaChaveNf,
         permiteProdutos: novoPermiteProdutos,
         validarCfopUf: novoValidarCfopUf,
+        naturezaOperacao: novaNaturezaOperacao,
       }),
     });
     const data = await res.json();
@@ -82,10 +113,11 @@ export default function AnaliseFiscalConfigPage() {
     setNovaChaveNf('obrigatoria');
     setNovoPermiteProdutos(true);
     setNovoValidarCfopUf(true);
+    setNovaNaturezaOperacao('LIVRE');
     carregarTes();
   }
 
-  async function handleEditTes(id: string, campo: 'grupo' | 'chaveNf' | 'permiteProdutos' | 'validarCfopUf', valor: string | boolean) {
+  async function handleEditTes(id: string, campo: 'grupo' | 'chaveNf' | 'permiteProdutos' | 'validarCfopUf' | 'naturezaOperacao', valor: string | boolean) {
     await fetch(`/api/analise-fiscal/config/tes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -122,6 +154,46 @@ export default function AnaliseFiscalConfigPage() {
     if (!confirm(`Remover "${nome}" da lista de CNPJs do grupo?`)) return;
     await fetch(`/api/analise-fiscal/config/cnpjs-grupo/${id}`, { method: 'DELETE' });
     carregarCnpjs();
+  }
+
+  async function handleAddProduto(e: React.FormEvent) {
+    e.preventDefault();
+    setErroProduto(null);
+    const res = await fetch('/api/analise-fiscal/config/produtos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        codigoProduto: novoCodigoProduto,
+        descricao: novaDescricaoProduto,
+        classificacao: novaClassificacaoProduto,
+        observacao: novaObservacaoProduto || undefined,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setErroProduto(data.error || 'Erro ao cadastrar produto.');
+      return;
+    }
+    setNovoCodigoProduto('');
+    setNovaDescricaoProduto('');
+    setNovaClassificacaoProduto('TRIBUTADO');
+    setNovaObservacaoProduto('');
+    carregarProdutos();
+  }
+
+  async function handleEditProduto(id: string, campo: 'classificacao' | 'observacao', valor: string) {
+    await fetch(`/api/analise-fiscal/config/produtos/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [campo]: valor }),
+    });
+    carregarProdutos();
+  }
+
+  async function handleRemoveProduto(id: string, descricao: string) {
+    if (!confirm(`Remover "${descricao}" da lista de produtos classificados?`)) return;
+    await fetch(`/api/analise-fiscal/config/produtos/${id}`, { method: 'DELETE' });
+    carregarProdutos();
   }
 
   return (
@@ -185,6 +257,18 @@ export default function AnaliseFiscalConfigPage() {
             <input type="checkbox" checked={novoValidarCfopUf} onChange={(e) => setNovoValidarCfopUf(e.target.checked)} />
             Valida CFOP×UF
           </label>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Natureza da operação</label>
+            <select
+              value={novaNaturezaOperacao}
+              onChange={(e) => setNovaNaturezaOperacao(e.target.value as NaturezaOperacao)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            >
+              {NATUREZA_OPERACAO_OPTIONS.map((n) => (
+                <option key={n} value={n}>{NATUREZA_OPERACAO_LABELS[n]}</option>
+              ))}
+            </select>
+          </div>
           <button type="submit" className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
             + Cadastrar TES
           </button>
@@ -200,6 +284,7 @@ export default function AnaliseFiscalConfigPage() {
                 <th className="py-2 pr-3">Chave NF</th>
                 <th className="py-2 pr-3">Permite produtos</th>
                 <th className="py-2 pr-3">Valida CFOP×UF</th>
+                <th className="py-2 pr-3">Natureza da operação</th>
                 <th className="py-2 pr-3"></th>
               </tr>
             </thead>
@@ -238,6 +323,17 @@ export default function AnaliseFiscalConfigPage() {
                       checked={t.validarCfopUf}
                       onChange={(e) => handleEditTes(t.id, 'validarCfopUf', e.target.checked)}
                     />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <select
+                      value={t.naturezaOperacao}
+                      onChange={(e) => handleEditTes(t.id, 'naturezaOperacao', e.target.value)}
+                      className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                    >
+                      {NATUREZA_OPERACAO_OPTIONS.map((n) => (
+                        <option key={n} value={n}>{NATUREZA_OPERACAO_LABELS[n]}</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="py-2 pr-3">
                     <button onClick={() => handleRemoveTes(t.id, t.codigo)} className="text-xs text-red-500 underline">
@@ -309,6 +405,106 @@ export default function AnaliseFiscalConfigPage() {
           </tbody>
         </table>
         {cnpjs.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhum CNPJ cadastrado ainda.</p>}
+      </div>
+
+      <div className="card-surface p-5 space-y-4">
+        <h2 className="font-display font-semibold text-brand">Produtos com classificação tributária</h2>
+        <p className="text-xs text-gray-500">
+          Cadastre aqui produtos cuja classificação (isento ou tributado) precisa ser conferida contra a TES lançada
+          — ex: um produto tributado que apareceu numa TES marcada como &quot;Isenta&quot; (ver coluna &quot;Natureza
+          da operação&quot; na tabela de TES acima). Enquanto um produto não estiver cadastrado aqui, essa checagem
+          não roda pra ele.
+        </p>
+
+        <form onSubmit={handleAddProduto} className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Código do produto</label>
+            <input
+              value={novoCodigoProduto}
+              onChange={(e) => setNovoCodigoProduto(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-32"
+              placeholder="ex: 229.009"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Descrição</label>
+            <input
+              value={novaDescricaoProduto}
+              onChange={(e) => setNovaDescricaoProduto(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-56"
+              placeholder="ex: MORANGO"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Classificação</label>
+            <select
+              value={novaClassificacaoProduto}
+              onChange={(e) => setNovaClassificacaoProduto(e.target.value as 'ISENTO' | 'TRIBUTADO')}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            >
+              <option value="TRIBUTADO">Tributado</option>
+              <option value="ISENTO">Isento</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Observação (opcional)</label>
+            <input
+              value={novaObservacaoProduto}
+              onChange={(e) => setNovaObservacaoProduto(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-56"
+              placeholder="ex: Convênio ICMS..."
+            />
+          </div>
+          <button type="submit" className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
+            + Cadastrar produto
+          </button>
+          {erroProduto && <p className="text-sm text-red-600 w-full">{erroProduto}</p>}
+        </form>
+
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
+              <th className="py-2 pr-3">Código</th>
+              <th className="py-2 pr-3">Descrição</th>
+              <th className="py-2 pr-3">Classificação</th>
+              <th className="py-2 pr-3">Observação</th>
+              <th className="py-2 pr-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {produtos.map((p) => (
+              <tr key={p.id} className="border-b border-gray-50">
+                <td className="py-2 pr-3 font-mono">{p.codigoProduto}</td>
+                <td className="py-2 pr-3">{p.descricao}</td>
+                <td className="py-2 pr-3">
+                  <select
+                    value={p.classificacao}
+                    onChange={(e) => handleEditProduto(p.id, 'classificacao', e.target.value)}
+                    className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                  >
+                    <option value="TRIBUTADO">Tributado</option>
+                    <option value="ISENTO">Isento</option>
+                  </select>
+                </td>
+                <td className="py-2 pr-3">
+                  <input
+                    defaultValue={p.observacao || ''}
+                    onBlur={(e) => e.target.value !== (p.observacao || '') && handleEditProduto(p.id, 'observacao', e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-48"
+                  />
+                </td>
+                <td className="py-2 pr-3">
+                  <button onClick={() => handleRemoveProduto(p.id, p.descricao)} className="text-xs text-red-500 underline">
+                    Remover
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {produtos.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhum produto cadastrado ainda.</p>}
       </div>
     </div>
   );

@@ -41,6 +41,12 @@ export type RuleContext = {
   // As regras profundas (TES_RULES) continuam fixas no código; só os
   // metadados usados pelas regras GENÉRICAS vêm daqui.
   tesMetadataPorCodigo: Record<string, TesMetadata>;
+  // classificação tributária de produtos (ISENTO/TRIBUTADO), cadastrada
+  // pela empresa via tela administrativa — chave é o código do produto
+  // normalizado (ver extrairCodigoProduto). Vazio = empresa ainda não
+  // cadastrou nenhum produto, então a regra de cruzamento produto×TES
+  // não encontra nada pra comparar e não roda.
+  produtosClassificacao: Map<string, ClassificacaoProduto>;
 };
 
 export type RuleDef = {
@@ -53,6 +59,17 @@ export type RuleDef = {
 
 export type ChaveNfPolicy = 'obrigatoria' | 'proibida' | 'livre';
 
+// LIVRE = sem cruzamento produto×TES nem CFOP-de-transferência×TES nesta
+// TES (padrão — evita falso positivo em TES ainda não classificada).
+// ISENTA/TRIBUTADA = a TES é desse tipo, cruza com a classificação do
+// produto (ver ClassificacaoProduto) pra sinalizar produto na TES errada.
+// TRANSFERENCIA = produto sai isento independente da classificação dele
+// (natureza de transferência entre filiais) — também usada pra sinalizar
+// CFOP de transferência (1152/2152) numa TES que não é de transferência.
+export type NaturezaOperacao = 'LIVRE' | 'ISENTA' | 'TRIBUTADA' | 'TRANSFERENCIA';
+
+export type ClassificacaoProduto = 'ISENTO' | 'TRIBUTADO';
+
 export type TesMetadata = {
   codigos: string[];
   grupo: string;
@@ -63,7 +80,17 @@ export type TesMetadata = {
   // — confirmado com dado real e a pedido do usuário). Ausente/undefined
   // equivale a true (comportamento padrão, roda a checagem).
   validarCfopUf?: boolean;
+  naturezaOperacao?: NaturezaOperacao;
 };
+
+// O layout real do Protheus não tem coluna separada de código do produto
+// (ver analise-fiscal-reader.ts) — o código vem embutido no início da
+// descrição, ex: "229.009        -MORANGO". Extrai só o código, pra
+// cruzar com AnaliseFiscalProdutoClassificacao.codigoProduto.
+export function extrairCodigoProduto(produtoDescricao: string): string {
+  const match = (produtoDescricao || '').trim().match(/^([\d.]+)/);
+  return match ? match[1] : '';
+}
 
 type TesRuleGroup = TesMetadata & { rules: RuleDef[] };
 
@@ -399,12 +426,12 @@ const RULES_138: RuleDef[] = [
 
 const TES_RULE_GROUPS: TesRuleGroup[] = [
   { codigos: ['001', '002', '004', '009'], grupo: 'Gerenciais', chaveNf: 'proibida', permiteProdutos: true, rules: RULES_GERENCIAIS },
-  { codigos: ['101'], grupo: 'Revenda isenta ICMS/PIS/COFINS/Funrural', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_101 },
-  { codigos: ['102'], grupo: 'ICMS tributado, PIS/COFINS/Funrural isento', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_102 },
+  { codigos: ['101'], grupo: 'Revenda isenta ICMS/PIS/COFINS/Funrural', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_101 },
+  { codigos: ['102'], grupo: 'ICMS tributado, PIS/COFINS/Funrural isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: RULES_102 },
   // 107/108/109: crédito presumido — ICMS não vem destacado no relatório
   // (evidência real: 100% dos casos com valorICMS = 0)
   { codigos: ['107'], grupo: 'Importado, crédito presumido 4% (sem destaque ICMS)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
-  { codigos: ['108', '109'], grupo: 'Tributado na entrada, isento na saída (crédito presumido)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
+  { codigos: ['108', '109'], grupo: 'Tributado na entrada, isento na saída (crédito presumido)', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: [ruleValorZero('Icms', 'ICMS')] },
   { codigos: ['110'], grupo: 'Prestação de serviços', chaveNf: 'proibida', permiteProdutos: false, rules: [] },
   // TES 128: ICMS isento, PIS 1,65% e COFINS 7,60% sempre tributados
   // (evidência real: 9/9 casos com essas alíquotas exatas)
@@ -416,7 +443,7 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   // CPF ou CNPJ (56 de 489 eram CNPJ no arquivo real) — sem checagem de
   // fornecedor, ao contrário da TES 101
   { codigos: ['130'], grupo: 'Produtores rurais (revenda)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
-  { codigos: ['138'], grupo: 'Transferência entre filiais Fort Fruit', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_138 },
+  { codigos: ['138'], grupo: 'Transferência entre filiais Fort Fruit', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRANSFERENCIA', rules: RULES_138 },
   // TES 141: não apareceu no arquivo real testado — sem base pra calibrar
   // uma regra de alíquota (SENAR/GILRAT); fica metadados só até termos um
   // arquivo com lançamentos dessa TES
@@ -463,8 +490,8 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   // Devolução de operação interna: ICMS pela alíquota interna fixa
   // (evidência real: sempre 19%), PIS/COFINS isentos (evidência real:
   // 100% zerados)
-  { codigos: ['217', '317'], grupo: 'Devolução — ICMS tributado, PIS/COFINS isento', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleIcmsAliquotaInternaFixa(), ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
-  { codigos: ['218', '318'], grupo: 'Devolução — tudo isento', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
+  { codigos: ['217', '317'], grupo: 'Devolução — ICMS tributado, PIS/COFINS isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: [ruleIcmsAliquotaInternaFixa(), ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
+  { codigos: ['218', '318'], grupo: 'Devolução — tudo isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_TUDO_ISENTO },
   // TES 219/319: amostra real muito pequena (1 e 6 linhas) pra confiar
   // numa regra — o pouco que apareceu contraria o nome do grupo ("tudo
   // tributado": ICMS veio isento, só PIS/COFINS tributados), então fica

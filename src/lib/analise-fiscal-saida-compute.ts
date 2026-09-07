@@ -9,7 +9,7 @@
 // servidor, se algum dia for preciso.
 
 import type { LinhaEntradaImportada } from './analise-fiscal-reader';
-import type { Divergencia, Severidade, TesMetadata } from './analise-fiscal-tes-registry';
+import type { Divergencia, Severidade, TesMetadata, ClassificacaoProduto } from './analise-fiscal-tes-registry';
 import { TES_RULES_SAIDA } from './analise-fiscal-saida-tes-registry';
 import { GENERIC_RULES } from './analise-fiscal-generic-rules';
 
@@ -46,13 +46,14 @@ export type ResultadoApuracaoSaida = { itens: ItemApuradoSaida[]; resumo: Resumo
 export function apurarSaidas(
   linhas: LinhaEntradaImportada[],
   company: { ufDestino: string; aliquotaInterna: number },
-  config: { tesMetadataPorCodigo: Record<string, TesMetadata>; cnpjsGrupo: Set<string> }
+  config: { tesMetadataPorCodigo: Record<string, TesMetadata>; cnpjsGrupo: Set<string>; produtosClassificacao?: Map<string, ClassificacaoProduto> }
 ): ResultadoApuracaoSaida {
   const ctxBase = {
     ufPropria: company.ufDestino || '',
     aliquotaInterna: company.aliquotaInterna || 0.19,
     cnpjsGrupo: config.cnpjsGrupo,
     tesMetadataPorCodigo: config.tesMetadataPorCodigo,
+    produtosClassificacao: config.produtosClassificacao || new Map(),
   };
 
   const itens: ItemApuradoSaida[] = linhas.map((linha) => {

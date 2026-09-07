@@ -5,6 +5,7 @@ import { canAccess } from '@/lib/permissions';
 import { garantirSeedTesConfig } from '@/lib/analise-fiscal-config-db';
 
 const CHAVE_NF_VALIDAS = ['obrigatoria', 'proibida', 'livre'];
+const NATUREZA_OPERACAO_VALIDAS = ['LIVRE', 'ISENTA', 'TRIBUTADA', 'TRANSFERENCIA'];
 
 export async function GET() {
   const session = await getSession();
@@ -39,10 +40,11 @@ export async function POST(req: NextRequest) {
   const chaveNf = String(body?.chaveNf || '').trim();
   const permiteProdutos = !!body?.permiteProdutos;
   const validarCfopUf = body?.validarCfopUf === undefined ? true : !!body.validarCfopUf;
+  const naturezaOperacao = body?.naturezaOperacao !== undefined ? String(body.naturezaOperacao).trim() : 'LIVRE';
 
-  if (!codigo || !grupo || !CHAVE_NF_VALIDAS.includes(chaveNf)) {
+  if (!codigo || !grupo || !CHAVE_NF_VALIDAS.includes(chaveNf) || !NATUREZA_OPERACAO_VALIDAS.includes(naturezaOperacao)) {
     return NextResponse.json(
-      { error: 'Código, grupo e política de Chave NF (obrigatoria/proibida/livre) são obrigatórios.' },
+      { error: 'Código, grupo, política de Chave NF (obrigatoria/proibida/livre) e natureza da operação (LIVRE/ISENTA/TRIBUTADA/TRANSFERENCIA) são obrigatórios.' },
       { status: 400 }
     );
   }
@@ -55,7 +57,7 @@ export async function POST(req: NextRequest) {
   }
 
   const tes = await prisma.analiseFiscalTesConfig.create({
-    data: { companyId: session.currentCompanyId, codigo, grupo, chaveNf, permiteProdutos, validarCfopUf },
+    data: { companyId: session.currentCompanyId, codigo, grupo, chaveNf, permiteProdutos, validarCfopUf, naturezaOperacao },
   });
 
   await logActivity(session.id, 'CADASTROU_TES_ANALISE_FISCAL', `TES ${codigo} — ${grupo}`, session.currentCompanyId);

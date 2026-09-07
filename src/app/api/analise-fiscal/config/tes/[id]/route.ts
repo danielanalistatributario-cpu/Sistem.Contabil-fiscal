@@ -4,6 +4,7 @@ import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 
 const CHAVE_NF_VALIDAS = ['obrigatoria', 'proibida', 'livre'];
+const NATUREZA_OPERACAO_VALIDAS = ['LIVRE', 'ISENTA', 'TRIBUTADA', 'TRANSFERENCIA'];
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
@@ -24,17 +25,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const chaveNf = body?.chaveNf !== undefined ? String(body.chaveNf).trim() : tesAtual.chaveNf;
   const permiteProdutos = body?.permiteProdutos !== undefined ? !!body.permiteProdutos : tesAtual.permiteProdutos;
   const validarCfopUf = body?.validarCfopUf !== undefined ? !!body.validarCfopUf : tesAtual.validarCfopUf;
+  const naturezaOperacao = body?.naturezaOperacao !== undefined ? String(body.naturezaOperacao).trim() : tesAtual.naturezaOperacao;
 
-  if (!grupo || !CHAVE_NF_VALIDAS.includes(chaveNf)) {
+  if (!grupo || !CHAVE_NF_VALIDAS.includes(chaveNf) || !NATUREZA_OPERACAO_VALIDAS.includes(naturezaOperacao)) {
     return NextResponse.json(
-      { error: 'Grupo e política de Chave NF (obrigatoria/proibida/livre) são obrigatórios.' },
+      { error: 'Grupo, política de Chave NF (obrigatoria/proibida/livre) e natureza da operação (LIVRE/ISENTA/TRIBUTADA/TRANSFERENCIA) são obrigatórios.' },
       { status: 400 }
     );
   }
 
   const tes = await prisma.analiseFiscalTesConfig.update({
     where: { id: params.id },
-    data: { grupo, chaveNf, permiteProdutos, validarCfopUf },
+    data: { grupo, chaveNf, permiteProdutos, validarCfopUf, naturezaOperacao },
   });
 
   await logActivity(session.id, 'EDITOU_TES_ANALISE_FISCAL', `TES ${tes.codigo} — ${grupo}`, session.currentCompanyId);
