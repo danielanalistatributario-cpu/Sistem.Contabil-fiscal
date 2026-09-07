@@ -28,6 +28,7 @@ const GROUPS: NavGroup[] = [
   {
     label: 'Módulos fiscais',
     items: [
+      { href: '/dashboard/analise-fiscal', label: 'Análise e Apuração Fiscal', icon: ClipboardCheck, moduleKey: 'analiseFiscal', accent: 'text-accent' },
       { href: '/dashboard/sped', label: 'Conversor SPED Fiscal', icon: FileSpreadsheet, moduleKey: 'sped', accent: 'text-lime' },
       { href: '/dashboard/icms', label: 'ICMS Antecipado Especial', icon: Calculator, moduleKey: 'icms', accent: 'text-accent' },
       { href: '/dashboard/difal', label: 'DIFAL', icon: Percent, moduleKey: 'difal', accent: 'text-teal' },
@@ -35,7 +36,6 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/conciliacao/bancaria', label: 'Conciliação Bancária', icon: Landmark, moduleKey: 'conciliacao', accent: 'text-pink' },
       { href: '/dashboard/auditor-rtc', label: 'Auditor RTC (IBS/CBS)', icon: ShieldCheck, moduleKey: 'auditorRtc', accent: 'text-teal' },
       { href: '/dashboard/validacao-cadastro', label: 'Validação de Cadastro', icon: PackageSearch, moduleKey: 'validacaoCadastro', accent: 'text-ruby' },
-      { href: '/dashboard/analise-fiscal', label: 'Análise e Apuração Fiscal', icon: ClipboardCheck, moduleKey: 'analiseFiscal', accent: 'text-accent' },
     ],
   },
   {
