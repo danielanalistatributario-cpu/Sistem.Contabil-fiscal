@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { lerProdutosClassificacao } from '@/lib/analise-fiscal-produtos-import';
 
 type NaturezaOperacao = 'LIVRE' | 'ISENTA' | 'TRIBUTADA' | 'TRANSFERENCIA';
 
@@ -57,6 +59,9 @@ export default function AnaliseFiscalConfigPage() {
   const [novaDescricaoProduto, setNovaDescricaoProduto] = useState('');
   const [novaClassificacaoProduto, setNovaClassificacaoProduto] = useState<'ISENTO' | 'TRIBUTADO'>('TRIBUTADO');
   const [novaObservacaoProduto, setNovaObservacaoProduto] = useState('');
+  const [importando, setImportando] = useState(false);
+  const [resultadoImportacao, setResultadoImportacao] = useState<string | null>(null);
+  const inputImportarRef = useRef<HTMLInputElement>(null);
 
   const carregarTes = useCallback(async () => {
     const res = await fetch('/api/analise-fiscal/config/tes');
@@ -194,6 +199,58 @@ export default function AnaliseFiscalConfigPage() {
     if (!confirm(`Remover "${descricao}" da lista de produtos classificados?`)) return;
     await fetch(`/api/analise-fiscal/config/produtos/${id}`, { method: 'DELETE' });
     carregarProdutos();
+  }
+
+  async function handleImportarProdutos(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErroProduto(null);
+    setResultadoImportacao(null);
+    setImportando(true);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null }) as unknown[][];
+      const leitura = lerProdutosClassificacao(aoa);
+      if (leitura.erro) {
+        setErroProduto(leitura.erro);
+        setImportando(false);
+        if (inputImportarRef.current) inputImportarRef.current.value = '';
+        return;
+      }
+      if (leitura.produtos.length === 0) {
+        setErroProduto('Nenhuma linha válida encontrada na planilha.');
+        setImportando(false);
+        if (inputImportarRef.current) inputImportarRef.current.value = '';
+        return;
+      }
+
+      const res = await fetch('/api/analise-fiscal/config/produtos/importar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ produtos: leitura.produtos }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErroProduto(data.error || 'Erro ao importar produtos.');
+        setImportando(false);
+        if (inputImportarRef.current) inputImportarRef.current.value = '';
+        return;
+      }
+
+      const partes = [`${data.criados} cadastrado(s)`, `${data.atualizados} atualizado(s)`];
+      if (data.invalidos > 0) partes.push(`${data.invalidos} linha(s) inválida(s) ignorada(s)`);
+      if (leitura.ignoradas.length > 0) partes.push(`${leitura.ignoradas.length} linha(s) sem código/descrição/classificação ignorada(s) na leitura`);
+      setResultadoImportacao(partes.join(' · '));
+      carregarProdutos();
+    } catch (err) {
+      setErroProduto('Não foi possível ler o arquivo. Verifique se é um .xlsx/.csv válido.');
+      console.error(err);
+    } finally {
+      setImportando(false);
+      if (inputImportarRef.current) inputImportarRef.current.value = '';
+    }
   }
 
   return (
@@ -415,6 +472,27 @@ export default function AnaliseFiscalConfigPage() {
           da operação&quot; na tabela de TES acima). Enquanto um produto não estiver cadastrado aqui, essa checagem
           não roda pra ele.
         </p>
+
+        <div className="flex flex-wrap items-center gap-3 bg-gray-50 border border-gray-100 rounded-lg px-4 py-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Importar planilha (muitos produtos de uma vez)</label>
+            <input
+              ref={inputImportarRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleImportarProdutos}
+              disabled={importando}
+              className="text-sm"
+            />
+          </div>
+          <p className="text-[11px] text-gray-400 flex-1 min-w-[220px]">
+            Colunas esperadas: <strong>Código do Produto</strong>, <strong>Descrição</strong> e{' '}
+            <strong>Classificação</strong> (Isento ou Tributado) — nomes parecidos são reconhecidos automaticamente.
+            Produto já cadastrado é atualizado; produto novo é criado.
+          </p>
+          {importando && <span className="text-xs text-gray-500">Importando...</span>}
+        </div>
+        {resultadoImportacao && <p className="text-xs text-teal">{resultadoImportacao}</p>}
 
         <form onSubmit={handleAddProduto} className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-4">
           <div>
