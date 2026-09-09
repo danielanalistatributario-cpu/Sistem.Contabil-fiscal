@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 import { montarResumoCompleto, sugerirSaldoCredorAnterior, LANCAMENTOS_PADRAO } from '@/lib/analise-fiscal-icms-apuracao';
+import { carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
 
 export async function GET() {
   const session = await getSession();
@@ -22,6 +23,9 @@ export async function GET() {
       createdAt: true,
       entradaApuracaoId: true,
       saidaApuracaoId: true,
+      empresaAnalisadaNome: true,
+      empresaAnalisadaCnpj: true,
+      empresaAnalisadaUf: true,
     },
   });
 
@@ -53,12 +57,19 @@ export async function POST(req: NextRequest) {
   const periodo = String(body?.periodo || '').trim();
   const entradaApuracaoId: string | null = body?.entradaApuracaoId || null;
   const saidaApuracaoId: string | null = body?.saidaApuracaoId || null;
+  const empresaGrupoIdInformado: string | null = body?.empresaGrupoId || null;
 
   if (!periodo) {
     return NextResponse.json({ error: 'Informe o período.' }, { status: 400 });
   }
   if (!entradaApuracaoId && !saidaApuracaoId) {
     return NextResponse.json({ error: 'Vincule pelo menos uma análise de Entradas ou de Saídas.' }, { status: 400 });
+  }
+
+  const empresasGrupo = await carregarEmpresasGrupo(session.currentCompanyId);
+  const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaGrupoIdInformado) || null;
+  if (empresasGrupo.length > 0 && !empresaSelecionada) {
+    return NextResponse.json({ error: 'Selecione a empresa a ser analisada.' }, { status: 400 });
   }
 
   if (entradaApuracaoId) {
@@ -83,6 +94,9 @@ export async function POST(req: NextRequest) {
       entradaApuracaoId,
       saidaApuracaoId,
       saldoCredorAnterior,
+      empresaAnalisadaNome: empresaSelecionada?.nome || null,
+      empresaAnalisadaCnpj: empresaSelecionada?.cnpj || null,
+      empresaAnalisadaUf: empresaSelecionada?.uf || null,
       lancamentos: { create: LANCAMENTOS_PADRAO },
     },
   });

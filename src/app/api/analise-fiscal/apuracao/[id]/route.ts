@@ -50,6 +50,9 @@ async function montarDetalhe(apuracao: NonNullable<Awaited<ReturnType<typeof car
   return {
     id: apuracao.id,
     periodo: apuracao.periodo,
+    empresaAnalisadaNome: apuracao.empresaAnalisadaNome,
+    empresaAnalisadaCnpj: apuracao.empresaAnalisadaCnpj,
+    empresaAnalisadaUf: apuracao.empresaAnalisadaUf,
     saldoCredorAnterior: apuracao.saldoCredorAnterior,
     createdAt: apuracao.createdAt,
     updatedAt: apuracao.updatedAt,

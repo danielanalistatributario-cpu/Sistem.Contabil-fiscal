@@ -8,6 +8,17 @@ import { canAccess, type Role } from '@/lib/permissions';
 
 type Candidato = { id: string; periodo: string | null; fileName: string | null; processedAt: string; totalLinhas: number };
 
+type EmpresaGrupo = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
+
+// Tela "Pergunte" (Data Base + Empresa) — o <input type="month"> nativo
+// devolve "YYYY-MM"; convertido pra "MM/YYYY" no armazenamento, mesmo
+// formato que já era usado nos exemplos de período em todo o sistema.
+function monthInputParaPeriodo(v: string): string {
+  if (!v) return '';
+  const [ano, mes] = v.split('-');
+  return mes && ano ? `${mes}/${ano}` : '';
+}
+
 type Categoria = 'OUTROS_DEBITOS' | 'ESTORNO_CREDITOS' | 'OUTROS_CREDITOS' | 'ESTORNO_DEBITOS' | 'DEDUCOES';
 
 type Lancamento = { id?: string; categoria: Categoria; descricao: string; valor: number };
@@ -25,6 +36,9 @@ type Resumo = {
 type Detalhe = {
   id: string;
   periodo: string;
+  empresaAnalisadaNome: string | null;
+  empresaAnalisadaCnpj: string | null;
+  empresaAnalisadaUf: string | null;
   saldoCredorAnterior: number;
   company: { name: string; cnpj: string; inscricaoEstadual: string | null };
   entradaApuracao: Candidato | null;
@@ -61,8 +75,9 @@ function ApuracaoFiscalInner() {
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
 
   // form de criação
-  const [periodo, setPeriodo] = useState('');
-  const [periodosSugeridos, setPeriodosSugeridos] = useState<string[]>([]);
+  const [dataBase, setDataBase] = useState('');
+  const [empresasGrupo, setEmpresasGrupo] = useState<EmpresaGrupo[]>([]);
+  const [empresaSelecionadaId, setEmpresaSelecionadaId] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [candidatosEntrada, setCandidatosEntrada] = useState<Candidato[] | null>(null);
@@ -91,20 +106,11 @@ function ApuracaoFiscalInner() {
 
   useEffect(() => {
     (async () => {
-      const [rEnt, rSai] = await Promise.all([
-        fetch('/api/analise-fiscal/apuracoes'),
-        fetch('/api/analise-fiscal/saida/apuracoes'),
-      ]);
-      const periodos = new Set<string>();
-      if (rEnt.ok) {
-        const d = await rEnt.json();
-        for (const a of d.apuracoes) if (a.periodo) periodos.add(a.periodo);
+      const res = await fetch('/api/analise-fiscal/config-runtime');
+      if (res.ok) {
+        const data = await res.json();
+        setEmpresasGrupo(data.empresasGrupo || []);
       }
-      if (rSai.ok) {
-        const d = await rSai.json();
-        for (const a of d.apuracoes) if (a.periodo) periodos.add(a.periodo);
-      }
-      setPeriodosSugeridos(Array.from(periodos).sort());
     })();
   }, []);
 
@@ -125,7 +131,13 @@ function ApuracaoFiscalInner() {
   }, [apuracaoIdParam, carregarDetalhe]);
 
   async function handleBuscarPeriodo() {
-    if (!periodo.trim()) return;
+    if (!dataBase) return;
+    if (empresasGrupo.length > 0 && !empresaSelecionadaId) {
+      setErro('Selecione a empresa a ser analisada.');
+      return;
+    }
+    const periodo = monthInputParaPeriodo(dataBase);
+    const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaSelecionadaId) || null;
     setErro(null);
     setBuscando(true);
     setCandidatosEntrada(null);
@@ -135,7 +147,7 @@ function ApuracaoFiscalInner() {
     const res = await fetch('/api/analise-fiscal/apuracao/candidatos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ periodo: periodo.trim() }),
+      body: JSON.stringify({ periodo, empresaCnpj: empresaSelecionada?.cnpj || null }),
     });
     const data = await res.json().catch(() => null);
     setBuscando(false);
@@ -170,9 +182,10 @@ function ApuracaoFiscalInner() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        periodo: periodo.trim(),
+        periodo: monthInputParaPeriodo(dataBase),
         entradaApuracaoId: entradaEscolhida || null,
         saidaApuracaoId: saidaEscolhida || null,
+        empresaGrupoId: empresaSelecionadaId || null,
       }),
     });
     const data = await res.json().catch(() => null);
@@ -186,7 +199,8 @@ function ApuracaoFiscalInner() {
 
   function handleNovaApuracao() {
     setDetalhe(null);
-    setPeriodo('');
+    setDataBase('');
+    setEmpresaSelecionadaId('');
     setCandidatosEntrada(null);
     setCandidatosSaida(null);
     setEntradaEscolhida('');
@@ -264,6 +278,7 @@ function ApuracaoFiscalInner() {
           <div>
             <h1 className="text-2xl font-display font-semibold text-brand">Apuração Fiscal — {detalhe.periodo}</h1>
             <p className="text-gray-500 text-sm mt-1">
+              {detalhe.empresaAnalisadaNome ? `${detalhe.empresaAnalisadaNome} (${detalhe.empresaAnalisadaUf}) · ` : ''}
               {detalhe.company.name} · Insc. Est. {detalhe.company.inscricaoEstadual || '—'} · CNPJ {detalhe.company.cnpj}
             </p>
           </div>
@@ -295,23 +310,39 @@ function ApuracaoFiscalInner() {
 
       {!detalhe && !carregandoDetalhe && (
         <div className="card-surface p-5 space-y-4">
+          <h2 className="font-display font-semibold text-brand text-sm">Parâmetros da apuração</h2>
+          <p className="text-xs text-gray-500">
+            Mesma lógica da tela "Pergunte" do Protheus — escolha a Data Base e a empresa antes de buscar os dados.
+          </p>
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Período</label>
+              <label className="block text-xs text-gray-500 mb-1">Data Base</label>
               <input
-                list="periodos-sugeridos"
-                value={periodo}
-                onChange={(e) => setPeriodo(e.target.value)}
-                placeholder="ex: 07/2026"
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-48"
+                type="month"
+                value={dataBase}
+                onChange={(e) => setDataBase(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+                required
               />
-              <datalist id="periodos-sugeridos">
-                {periodosSugeridos.map((p) => <option key={p} value={p} />)}
-              </datalist>
             </div>
+            {empresasGrupo.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Empresa a ser analisada</label>
+                <select
+                  value={empresaSelecionadaId}
+                  onChange={(e) => setEmpresaSelecionadaId(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56"
+                >
+                  <option value="">Selecione...</option>
+                  {empresasGrupo.map((e) => (
+                    <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button
               onClick={handleBuscarPeriodo}
-              disabled={!periodo.trim() || buscando}
+              disabled={!dataBase || (empresasGrupo.length > 0 && !empresaSelecionadaId) || buscando}
               className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {buscando ? 'Buscando...' : 'Buscar dados do período'}

@@ -70,6 +70,15 @@ const SEVERIDADE_COLOR: Record<Severidade, string> = {
 const SEVERIDADE_ORDEM: Severidade[] = ['CRITICO', 'ALTO', 'MEDIO', 'BAIXO', 'INFORMATIVO'];
 const TAMANHO_LOTE = 2000;
 
+// Tela "Pergunte" (Data Base + Empresa) — o <input type="month"> nativo
+// devolve "YYYY-MM"; convertido pra "MM/YYYY" no armazenamento, mesmo
+// formato que já era usado nos exemplos de período em todo o sistema.
+function monthInputParaPeriodo(v: string): string {
+  if (!v) return '';
+  const [ano, mes] = v.split('-');
+  return mes && ano ? `${mes}/${ano}` : '';
+}
+
 function paraItemView(item: ItemApuradoSaida): ItemView {
   return {
     linha: item.linha.linha,
@@ -101,7 +110,7 @@ function AnaliseFiscalSaidaInner() {
   const apuracaoIdParam = searchParams.get('apuracaoId');
 
   const [file, setFile] = useState<File | null>(null);
-  const [periodo, setPeriodo] = useState('');
+  const [dataBase, setDataBase] = useState('');
   const [processando, setProcessando] = useState(false);
   const [progresso, setProgresso] = useState<{ fase: string; loteAtual: number; totalLotes: number } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -159,10 +168,15 @@ function AnaliseFiscalSaidaInner() {
 
   async function handleProcessar() {
     if (!file) return;
+    if (!dataBase) {
+      setErro('Selecione a Data Base.');
+      return;
+    }
     if (empresasGrupo.length > 0 && !empresaSelecionadaId) {
       setErro('Selecione a empresa a ser analisada.');
       return;
     }
+    const periodo = monthInputParaPeriodo(dataBase);
     setErro(null);
     setApuracao(null);
     setProcessando(true);
@@ -284,7 +298,7 @@ function AnaliseFiscalSaidaInner() {
   function handleNovaAnalise() {
     setApuracao(null);
     setFile(null);
-    setPeriodo('');
+    setDataBase('');
     setErro(null);
     setFiltroSeveridade('TODOS');
     setFiltroTipo('TODOS');
@@ -293,6 +307,8 @@ function AnaliseFiscalSaidaInner() {
     if (inputRef.current) inputRef.current.value = '';
     router.replace('/dashboard/analise-fiscal/saida');
   }
+
+  const parametrosDefinidos = !!dataBase && (empresasGrupo.length === 0 || !!empresaSelecionadaId);
 
   const divergenciasFlat = useMemo(() => {
     if (!apuracao) return [];
@@ -389,6 +405,49 @@ function AnaliseFiscalSaidaInner() {
 
       {!apuracao && (
         <div className="card-surface p-5 space-y-3">
+          <h2 className="font-display font-semibold text-brand text-sm">Parâmetros da análise</h2>
+          <p className="text-xs text-gray-500">
+            Mesma lógica da tela "Pergunte" do Protheus — escolha a Data Base e a empresa antes de enviar o arquivo.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Data Base</label>
+              <input
+                type="month"
+                value={dataBase}
+                onChange={(e) => setDataBase(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+                disabled={processando}
+                required
+              />
+            </div>
+            {empresasGrupo.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Empresa a ser analisada</label>
+                <select
+                  value={empresaSelecionadaId}
+                  onChange={(e) => setEmpresaSelecionadaId(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56"
+                  disabled={processando}
+                >
+                  <option value="">Selecione...</option>
+                  {empresasGrupo.map((e) => (
+                    <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          {!parametrosDefinidos && (
+            <p className="text-xs text-gray-400">
+              Preencha a Data Base{empresasGrupo.length > 0 ? ' e a Empresa' : ''} pra liberar o envio do arquivo.
+            </p>
+          )}
+        </div>
+      )}
+
+      {!apuracao && parametrosDefinidos && (
+        <div className="card-surface p-5 space-y-3">
           <p className="text-xs text-gray-500">
             Envie o Relatório Fiscal de Saídas (Excel/CSV) exportado do Protheus — mesmas colunas do Relatório de
             Entradas (TES, Produto, CFOP, UF, Fornec./Cliente, CNPJ/CPF, Chave NF, Total).
@@ -402,30 +461,9 @@ function AnaliseFiscalSaidaInner() {
               className="text-sm"
               disabled={processando}
             />
-            <input
-              type="text"
-              placeholder="Período/rótulo (opcional)"
-              value={periodo}
-              onChange={(e) => setPeriodo(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-48"
-              disabled={processando}
-            />
-            {empresasGrupo.length > 0 && (
-              <select
-                value={empresaSelecionadaId}
-                onChange={(e) => setEmpresaSelecionadaId(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56"
-                disabled={processando}
-              >
-                <option value="">Empresa a ser analisada...</option>
-                {empresasGrupo.map((e) => (
-                  <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
-                ))}
-              </select>
-            )}
             <button
               onClick={handleProcessar}
-              disabled={!file || processando || (empresasGrupo.length > 0 && !empresaSelecionadaId)}
+              disabled={!file || processando}
               className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {processando ? 'Processando...' : 'Analisar Saídas'}

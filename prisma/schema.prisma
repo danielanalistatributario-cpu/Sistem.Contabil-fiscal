@@ -728,6 +728,15 @@ model AnaliseFiscalApuracaoIcms {
   entradaApuracaoId   String?
   saidaApuracaoId     String?
   saldoCredorAnterior Float    @default(0)
+  // snapshot da empresa/filial selecionada na tela "Pergunte" (mesmo
+  // padrão de AnaliseFiscalApuracao/AnaliseFiscalSaidaApuracao — não é
+  // FK, continua mostrando certo mesmo se o cadastro em
+  // AnaliseFiscalCnpjGrupo for editado ou removido depois). Ausente =
+  // apuração sem empresa do grupo selecionada (tenant sem grupo
+  // cadastrado, ou apuração anterior a esta feature).
+  empresaAnalisadaNome String?
+  empresaAnalisadaCnpj String?
+  empresaAnalisadaUf   String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   company             Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)

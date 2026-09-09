@@ -91,6 +91,9 @@ async function gerarPdf(apuracao: {
   saldoCredorAnterior: number;
   createdAt: Date;
   company: { name: string; cnpj: string; inscricaoEstadual: string | null };
+  empresaAnalisadaNome: string | null;
+  empresaAnalisadaCnpj: string | null;
+  empresaAnalisadaUf: string | null;
   entradaApuracaoId: string | null;
   saidaApuracaoId: string | null;
   lancamentos: { categoria: string; descricao: string; valor: number }[];
@@ -125,6 +128,11 @@ async function gerarPdf(apuracao: {
 
     doc.fontSize(16).fillColor('#00753A').text('Livro de Apuração do ICMS');
     doc.fontSize(10).fillColor('#666').text(apuracao.company.name);
+    if (apuracao.empresaAnalisadaNome) {
+      doc.text(
+        `Empresa analisada: ${apuracao.empresaAnalisadaNome}${apuracao.empresaAnalisadaCnpj ? ' — CNPJ ' + apuracao.empresaAnalisadaCnpj : ''}${apuracao.empresaAnalisadaUf ? ' — UF ' + apuracao.empresaAnalisadaUf : ''}`
+      );
+    }
     doc.text(
       `Insc. Est.: ${apuracao.company.inscricaoEstadual || '—'}   CNPJ: ${apuracao.company.cnpj}   Período: ${apuracao.periodo}`
     );

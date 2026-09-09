@@ -19,10 +19,11 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   const periodo = String(body?.periodo || '').trim();
+  const empresaCnpj = body?.empresaCnpj ? String(body.empresaCnpj).trim() : null;
   if (!periodo) {
     return NextResponse.json({ error: 'Informe o período.' }, { status: 400 });
   }
 
-  const candidatos = await buscarCandidatosPeriodo(session.currentCompanyId, periodo);
+  const candidatos = await buscarCandidatosPeriodo(session.currentCompanyId, periodo, empresaCnpj);
   return NextResponse.json(candidatos);
 }

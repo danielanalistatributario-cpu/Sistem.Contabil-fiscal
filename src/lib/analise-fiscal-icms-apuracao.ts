@@ -260,20 +260,29 @@ export type CandidatoApuracao = {
 // pro vínculo automático da Apuração Fiscal. período é texto livre
 // digitado em cada análise, então pode haver 0, 1 ou vários candidatos
 // de cada lado; quem chama decide o que fazer com cada caso.
+//
+// empresaCnpj (opcional): quando informado, filtra também por
+// `empresaAnalisadaCnpj` — evita misturar apurações de empresas
+// diferentes do grupo que usaram o mesmo período (ex: Matriz e
+// Distribuidora ambas com "08/2026"). Sem empresa (tenant sem grupo
+// cadastrado, ou apuração de antes dessa feature), comportamento igual
+// a antes: só filtra por companyId + período.
 export async function buscarCandidatosPeriodo(
   companyId: string,
-  periodo: string
+  periodo: string,
+  empresaCnpj?: string | null
 ): Promise<{ entrada: CandidatoApuracao[]; saida: CandidatoApuracao[] }> {
   const periodoNormalizado = periodo.trim();
+  const filtroEmpresa = empresaCnpj ? { empresaAnalisadaCnpj: empresaCnpj } : {};
 
   const [entrada, saida] = await Promise.all([
     prisma.analiseFiscalApuracao.findMany({
-      where: { companyId, periodo: { equals: periodoNormalizado, mode: 'insensitive' } },
+      where: { companyId, periodo: { equals: periodoNormalizado, mode: 'insensitive' }, ...filtroEmpresa },
       orderBy: { processedAt: 'desc' },
       select: { id: true, periodo: true, fileName: true, processedAt: true, totalLinhas: true },
     }),
     prisma.analiseFiscalSaidaApuracao.findMany({
-      where: { companyId, periodo: { equals: periodoNormalizado, mode: 'insensitive' }, status: 'CONCLUIDA' },
+      where: { companyId, periodo: { equals: periodoNormalizado, mode: 'insensitive' }, status: 'CONCLUIDA', ...filtroEmpresa },
       orderBy: { processedAt: 'desc' },
       select: { id: true, periodo: true, fileName: true, processedAt: true, totalLinhas: true },
     }),

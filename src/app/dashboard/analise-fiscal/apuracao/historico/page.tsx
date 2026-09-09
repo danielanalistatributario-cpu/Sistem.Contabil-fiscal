@@ -10,6 +10,9 @@ type ApuracaoResumo = {
   createdAt: string;
   entradaApuracaoId: string | null;
   saidaApuracaoId: string | null;
+  empresaAnalisadaNome: string | null;
+  empresaAnalisadaCnpj: string | null;
+  empresaAnalisadaUf: string | null;
   resumo: {
     saldoDevedor: number;
     impostoARecolher: number;
@@ -73,6 +76,11 @@ export default function HistoricoApuracaoFiscalPage() {
               <div>
                 <h4 className="font-medium text-sm text-gray-800">
                   {a.periodo || 'Sem período informado'}
+                  {a.empresaAnalisadaNome && (
+                    <span className="ml-2 text-[10px] bg-brand/10 text-brand rounded-full px-2 py-0.5">
+                      {a.empresaAnalisadaNome} ({a.empresaAnalisadaUf})
+                    </span>
+                  )}
                   {!a.entradaApuracaoId && (
                     <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">sem Entradas</span>
                   )}
