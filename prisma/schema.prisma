@@ -462,6 +462,14 @@ model AnaliseFiscalApuracao {
   periodo                  String?
   fileName                 String?
   status                   String   @default("PROCESSANDO")
+  // snapshot da empresa/filial selecionada no seletor "Empresa a ser
+  // analisada" no momento da análise (não é FK — apuração já processada
+  // continua mostrando certo mesmo se o cadastro em AnaliseFiscalCnpjGrupo
+  // for editado ou removido depois). Ausente = analisada com a UF/alíquota
+  // padrão do tenant (Company), fluxo de antes desta feature.
+  empresaAnalisadaNome     String?
+  empresaAnalisadaCnpj     String?
+  empresaAnalisadaUf       String?
   totalLinhas              Int
   totalNotas               Int
   totalProdutos            Int
@@ -553,6 +561,9 @@ model AnaliseFiscalSaidaApuracao {
   periodo                  String?
   fileName                 String?
   status                   String   @default("PROCESSANDO")
+  empresaAnalisadaNome     String?
+  empresaAnalisadaCnpj     String?
+  empresaAnalisadaUf       String?
   totalLinhas              Int
   totalNotas               Int
   totalProdutos            Int
@@ -675,15 +686,22 @@ model AnaliseFiscalProdutoClassificacao {
   @@unique([companyId, codigoProduto])
 }
 
-// CNPJs do grupo de empresas relacionadas, usados pela TES de
-// transferência entre filiais (138) para validar o fornecedor/remetente.
+// CNPJs do grupo de empresas relacionadas — dois usos: (1) TES de
+// transferência entre filiais (138), validando o fornecedor/remetente;
+// (2) seletor "Empresa a ser analisada" em Análise de Entradas/Saídas,
+// pra empresas de UF diferente da UF padrão do tenant. uf/aliquotaInterna
+// ficam opcionais — sem uf a empresa não aparece como selecionável no
+// seletor (continua valendo só pra checagem de TES 138); sem
+// aliquotaInterna, usa o padrão do tenant (Company.aliquotaInterna).
 model AnaliseFiscalCnpjGrupo {
-  id        String   @id @default(cuid())
-  companyId String
-  nome      String
-  cnpj      String
-  createdAt DateTime @default(now())
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  companyId       String
+  nome            String
+  cnpj            String
+  uf              String?
+  aliquotaInterna Float?
+  createdAt       DateTime @default(now())
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, cnpj])
 }

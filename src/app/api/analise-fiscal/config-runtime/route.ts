@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
-import { carregarTesMetadataPorCodigo, carregarCnpjsGrupo, carregarProdutosClassificacao } from '@/lib/analise-fiscal-config-db';
+import { carregarTesMetadataPorCodigo, carregarCnpjsGrupo, carregarProdutosClassificacao, carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
 
 // Metadados de TES + CNPJs do grupo prontos pro motor de regras — usado
 // pelo cálculo que roda no navegador (Saídas, que processa em lotes; ver
@@ -19,10 +19,11 @@ export async function GET() {
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 
-  const [tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao, company] = await Promise.all([
+  const [tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao, empresasGrupo, company] = await Promise.all([
     carregarTesMetadataPorCodigo(session.currentCompanyId),
     carregarCnpjsGrupo(session.currentCompanyId),
     carregarProdutosClassificacao(session.currentCompanyId),
+    carregarEmpresasGrupo(session.currentCompanyId),
     prisma.company.findUnique({ where: { id: session.currentCompanyId }, select: { ufDestino: true, aliquotaInterna: true } }),
   ]);
 
@@ -30,6 +31,7 @@ export async function GET() {
     tesMetadataPorCodigo,
     cnpjsGrupo: Array.from(cnpjsGrupo),
     produtosClassificacao: Array.from(produtosClassificacao.entries()),
+    empresasGrupo,
     company: company || { ufDestino: 'PA', aliquotaInterna: 0.19 },
   });
 }

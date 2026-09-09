@@ -19,6 +19,9 @@ type ApuracaoResumo = {
   qtdInformativo: number;
   qtdTesNovas: number;
   processedAt: string;
+  empresaAnalisadaNome: string | null;
+  empresaAnalisadaCnpj: string | null;
+  empresaAnalisadaUf: string | null;
 };
 
 export default function HistoricoAnaliseFiscalSaidaPage() {
@@ -73,6 +76,11 @@ export default function HistoricoAnaliseFiscalSaidaPage() {
               <div>
                 <h4 className="font-medium text-sm text-gray-800">
                   {a.periodo || a.fileName || 'Sem período informado'}
+                  {a.empresaAnalisadaNome && (
+                    <span className="ml-2 text-[10px] bg-brand/10 text-brand rounded-full px-2 py-0.5">
+                      {a.empresaAnalisadaNome} ({a.empresaAnalisadaUf})
+                    </span>
+                  )}
                   {a.status === 'PROCESSANDO' && (
                     <span className="ml-2 text-[10px] bg-gray-200 text-gray-600 rounded-full px-2 py-0.5">
                       Incompleta — processamento não terminou

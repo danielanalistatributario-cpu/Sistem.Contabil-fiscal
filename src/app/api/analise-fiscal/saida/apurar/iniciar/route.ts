@@ -21,6 +21,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const periodo = body?.periodo ? String(body.periodo).trim() : null;
   const fileName = body?.fileName ? String(body.fileName).trim() : null;
+  const empresaNome = body?.empresaNome ? String(body.empresaNome).trim() : null;
+  const empresaCnpj = body?.empresaCnpj ? String(body.empresaCnpj).trim() : null;
+  const empresaUf = body?.empresaUf ? String(body.empresaUf).trim() : null;
   const resumo = body?.resumo as ResumoApuracaoSaida | undefined;
 
   if (!resumo || typeof resumo.totalLinhas !== 'number') {
@@ -33,6 +36,9 @@ export async function POST(req: NextRequest) {
       periodo,
       fileName,
       status: 'PROCESSANDO',
+      empresaAnalisadaNome: empresaNome,
+      empresaAnalisadaCnpj: empresaCnpj,
+      empresaAnalisadaUf: empresaUf,
       totalLinhas: resumo.totalLinhas,
       totalNotas: resumo.totalNotas,
       totalProdutos: resumo.totalProdutos,
@@ -59,7 +65,7 @@ export async function POST(req: NextRequest) {
   await logActivity(
     session.id,
     'INICIOU_ANALISE_FISCAL_SAIDA',
-    `${fileName || periodo || apuracao.id} — ${resumo.totalLinhas} linha(s) previstas`,
+    `${fileName || periodo || apuracao.id}${empresaNome ? ' — ' + empresaNome : ''} — ${resumo.totalLinhas} linha(s) previstas`,
     session.currentCompanyId
   );
 

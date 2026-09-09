@@ -18,7 +18,7 @@ type TesRow = {
   naturezaOperacao: NaturezaOperacao;
 };
 
-type CnpjRow = { id: string; nome: string; cnpj: string };
+type CnpjRow = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
 
 type ProdutoRow = { id: string; codigoProduto: string; descricao: string; classificacao: 'ISENTO' | 'TRIBUTADO'; observacao: string | null };
 
@@ -52,6 +52,8 @@ export default function AnaliseFiscalConfigPage() {
 
   const [novoNomeCnpj, setNovoNomeCnpj] = useState('');
   const [novoCnpj, setNovoCnpj] = useState('');
+  const [novaUfCnpj, setNovaUfCnpj] = useState('');
+  const [novaAliquotaCnpj, setNovaAliquotaCnpj] = useState('');
 
   const [produtos, setProdutos] = useState<ProdutoRow[]>([]);
   const [erroProduto, setErroProduto] = useState<string | null>(null);
@@ -143,7 +145,12 @@ export default function AnaliseFiscalConfigPage() {
     const res = await fetch('/api/analise-fiscal/config/cnpjs-grupo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: novoNomeCnpj, cnpj: novoCnpj }),
+      body: JSON.stringify({
+        nome: novoNomeCnpj,
+        cnpj: novoCnpj,
+        uf: novaUfCnpj || undefined,
+        aliquotaInterna: novaAliquotaCnpj ? parseFloat(novaAliquotaCnpj) / 100 : undefined,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -152,6 +159,20 @@ export default function AnaliseFiscalConfigPage() {
     }
     setNovoNomeCnpj('');
     setNovoCnpj('');
+    setNovaUfCnpj('');
+    setNovaAliquotaCnpj('');
+    carregarCnpjs();
+  }
+
+  async function handleEditCnpj(id: string, campo: 'uf' | 'aliquotaInterna', valor: string) {
+    const payload = campo === 'aliquotaInterna'
+      ? { aliquotaInterna: valor ? parseFloat(valor) / 100 : null }
+      : { uf: valor || null };
+    await fetch(`/api/analise-fiscal/config/cnpjs-grupo/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
     carregarCnpjs();
   }
 
@@ -406,10 +427,12 @@ export default function AnaliseFiscalConfigPage() {
       </div>
 
       <div className="card-surface p-5 space-y-4">
-        <h2 className="font-display font-semibold text-brand">CNPJs do grupo (TES de transferência entre filiais)</h2>
+        <h2 className="font-display font-semibold text-brand">Empresas / CNPJs do grupo</h2>
         <p className="text-xs text-gray-500">
-          Usado pela regra que valida o fornecedor/remetente da TES 138. Enquanto esta lista estiver vazia, essa
-          checagem fica desligada.
+          Duas funções: (1) valida o fornecedor/remetente da TES 138 (transferência entre filiais) — enquanto a lista
+          estiver vazia, essa checagem fica desligada; (2) alimenta o seletor &quot;Empresa a ser analisada&quot; nas
+          telas de Análise de Entradas/Saídas — só empresas com UF preenchida aparecem lá. Alíquota interna é
+          opcional: sem ela, a análise dessa empresa usa a alíquota padrão da empresa (Configurações Fiscais).
         </p>
 
         <form onSubmit={handleAddCnpj} className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-4">
@@ -419,7 +442,7 @@ export default function AnaliseFiscalConfigPage() {
               value={novoNomeCnpj}
               onChange={(e) => setNovoNomeCnpj(e.target.value)}
               className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-56"
-              placeholder="ex: Filial Castanhal"
+              placeholder="ex: Fortfruit Castanhal"
               required
             />
           </div>
@@ -433,8 +456,29 @@ export default function AnaliseFiscalConfigPage() {
               required
             />
           </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">UF</label>
+            <input
+              value={novaUfCnpj}
+              onChange={(e) => setNovaUfCnpj(e.target.value.toUpperCase())}
+              maxLength={2}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-16"
+              placeholder="PA"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Alíquota interna (%)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={novaAliquotaCnpj}
+              onChange={(e) => setNovaAliquotaCnpj(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-24"
+              placeholder="opcional"
+            />
+          </div>
           <button type="submit" className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
-            + Adicionar CNPJ
+            + Adicionar empresa
           </button>
           {erroCnpj && <p className="text-sm text-red-600 w-full">{erroCnpj}</p>}
         </form>
@@ -444,6 +488,8 @@ export default function AnaliseFiscalConfigPage() {
             <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
               <th className="py-2 pr-3">Nome</th>
               <th className="py-2 pr-3">CNPJ</th>
+              <th className="py-2 pr-3">UF</th>
+              <th className="py-2 pr-3">Alíquota interna</th>
               <th className="py-2 pr-3"></th>
             </tr>
           </thead>
@@ -453,6 +499,31 @@ export default function AnaliseFiscalConfigPage() {
                 <td className="py-2 pr-3">{c.nome}</td>
                 <td className="py-2 pr-3 font-mono">{c.cnpj}</td>
                 <td className="py-2 pr-3">
+                  <input
+                    defaultValue={c.uf || ''}
+                    onBlur={(e) => {
+                      const v = e.target.value.toUpperCase();
+                      if (v !== (c.uf || '')) handleEditCnpj(c.id, 'uf', v);
+                    }}
+                    maxLength={2}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-14 uppercase"
+                    placeholder="—"
+                  />
+                </td>
+                <td className="py-2 pr-3">
+                  <input
+                    type="number"
+                    step="0.01"
+                    defaultValue={c.aliquotaInterna != null ? (c.aliquotaInterna * 100).toString() : ''}
+                    onBlur={(e) => {
+                      const atual = c.aliquotaInterna != null ? (c.aliquotaInterna * 100).toString() : '';
+                      if (e.target.value !== atual) handleEditCnpj(c.id, 'aliquotaInterna', e.target.value);
+                    }}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-20"
+                    placeholder="padrão"
+                  />
+                </td>
+                <td className="py-2 pr-3">
                   <button onClick={() => handleRemoveCnpj(c.id, c.nome)} className="text-xs text-red-500 underline">
                     Remover
                   </button>
@@ -461,7 +532,7 @@ export default function AnaliseFiscalConfigPage() {
             ))}
           </tbody>
         </table>
-        {cnpjs.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhum CNPJ cadastrado ainda.</p>}
+        {cnpjs.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhuma empresa cadastrada ainda.</p>}
       </div>
 
       <div className="card-surface p-5 space-y-4">

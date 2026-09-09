@@ -32,9 +32,21 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const nome = String(body?.nome || '').trim();
   const cnpj = String(body?.cnpj || '').trim();
+  const ufRaw = String(body?.uf || '').trim().toUpperCase();
+  const uf = ufRaw === '' ? null : ufRaw;
+  const aliquotaInternaRaw = body?.aliquotaInterna;
+  const aliquotaInterna = aliquotaInternaRaw === undefined || aliquotaInternaRaw === null || aliquotaInternaRaw === ''
+    ? null
+    : Number(aliquotaInternaRaw);
 
   if (!nome || cnpj.replace(/\D/g, '').length !== 14) {
     return NextResponse.json({ error: 'Nome e um CNPJ válido (14 dígitos) são obrigatórios.' }, { status: 400 });
+  }
+  if (uf !== null && uf.length !== 2) {
+    return NextResponse.json({ error: 'UF inválida — use a sigla com 2 letras (ex: PA, SP).' }, { status: 400 });
+  }
+  if (aliquotaInterna !== null && (Number.isNaN(aliquotaInterna) || aliquotaInterna <= 0 || aliquotaInterna >= 1)) {
+    return NextResponse.json({ error: 'Alíquota interna inválida — informe um valor entre 0 e 1 (ex: 0.18 para 18%).' }, { status: 400 });
   }
 
   const existente = await prisma.analiseFiscalCnpjGrupo.findUnique({
@@ -45,7 +57,7 @@ export async function POST(req: NextRequest) {
   }
 
   const registro = await prisma.analiseFiscalCnpjGrupo.create({
-    data: { companyId: session.currentCompanyId, nome, cnpj },
+    data: { companyId: session.currentCompanyId, nome, cnpj, uf, aliquotaInterna },
   });
 
   await logActivity(session.id, 'ADICIONOU_CNPJ_GRUPO_ANALISE_FISCAL', `${nome} (${cnpj})`, session.currentCompanyId);

@@ -38,11 +38,16 @@ type ItemDB = {
   divergencias: DivergenciaDB[];
 };
 
+type EmpresaGrupo = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
+
 type ApuracaoDB = {
   id: string;
   periodo: string | null;
   fileName: string | null;
   status: string;
+  empresaAnalisadaNome?: string | null;
+  empresaAnalisadaCnpj?: string | null;
+  empresaAnalisadaUf?: string | null;
   totalLinhas: number;
   totalNotas: number;
   totalProdutos: number;
@@ -122,6 +127,8 @@ function AnaliseFiscalEntradaInner() {
   const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
   const [role, setRole] = useState<Role | null>(null);
+  const [empresasGrupo, setEmpresasGrupo] = useState<EmpresaGrupo[]>([]);
+  const [empresaSelecionadaId, setEmpresaSelecionadaId] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -130,6 +137,16 @@ function AnaliseFiscalEntradaInner() {
       if (res.ok) {
         const data = await res.json();
         setRole(data.user?.currentRole ?? null);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch('/api/analise-fiscal/config-runtime');
+      if (res.ok) {
+        const data = await res.json();
+        setEmpresasGrupo(data.empresasGrupo || []);
       }
     })();
   }, []);
@@ -147,6 +164,10 @@ function AnaliseFiscalEntradaInner() {
 
   async function handleProcessar() {
     if (!file) return;
+    if (empresasGrupo.length > 0 && !empresaSelecionadaId) {
+      setErro('Selecione a empresa a ser analisada.');
+      return;
+    }
     setErro(null);
     setApuracao(null);
     setProcessando(true);
@@ -177,10 +198,15 @@ function AnaliseFiscalEntradaInner() {
       const cnpjsGrupo = new Set<string>(cfg.cnpjsGrupo);
       const produtosClassificacao = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacao);
 
+      const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaSelecionadaId) || null;
+      const company = empresaSelecionada
+        ? { ufDestino: empresaSelecionada.uf || cfg.company.ufDestino, aliquotaInterna: empresaSelecionada.aliquotaInterna ?? cfg.company.aliquotaInterna }
+        : cfg.company;
+
       setProgresso({ fase: 'Calculando divergências...', loteAtual: 0, totalLotes: 0 });
       const { itens, resumo }: { itens: ItemApurado[]; resumo: ResumoApuracao } = apurarEntradas(
         leitura.rows,
-        cfg.company,
+        company,
         { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao }
       );
 
@@ -188,7 +214,14 @@ function AnaliseFiscalEntradaInner() {
       const resIniciar = await fetch('/api/analise-fiscal/apurar/iniciar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodo: periodo || null, fileName: file.name, resumo }),
+        body: JSON.stringify({
+          periodo: periodo || null,
+          fileName: file.name,
+          resumo,
+          empresaNome: empresaSelecionada?.nome || null,
+          empresaCnpj: empresaSelecionada?.cnpj || null,
+          empresaUf: empresaSelecionada?.uf || null,
+        }),
       });
       const dataIniciar = await resIniciar.json().catch(() => null);
       if (!resIniciar.ok) {
@@ -237,6 +270,9 @@ function AnaliseFiscalEntradaInner() {
         periodo: periodo || null,
         fileName: file.name,
         status: 'CONCLUIDA',
+        empresaAnalisadaNome: empresaSelecionada?.nome || null,
+        empresaAnalisadaCnpj: empresaSelecionada?.cnpj || null,
+        empresaAnalisadaUf: empresaSelecionada?.uf || null,
         processedAt: new Date().toISOString(),
         ...resumo,
         tesNovasEncontradas: resumo.tesNovasEncontradas.join(', ') || null,
@@ -257,6 +293,7 @@ function AnaliseFiscalEntradaInner() {
     setApuracao(null);
     setFile(null);
     setPeriodo('');
+    setEmpresaSelecionadaId('');
     setErro(null);
     setFiltroSeveridade('TODOS');
     setFiltroTipo('TODOS');
@@ -381,9 +418,22 @@ function AnaliseFiscalEntradaInner() {
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-48"
               disabled={processando}
             />
+            {empresasGrupo.length > 0 && (
+              <select
+                value={empresaSelecionadaId}
+                onChange={(e) => setEmpresaSelecionadaId(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56"
+                disabled={processando}
+              >
+                <option value="">Empresa a ser analisada...</option>
+                {empresasGrupo.map((e) => (
+                  <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={handleProcessar}
-              disabled={!file || processando}
+              disabled={!file || processando || (empresasGrupo.length > 0 && !empresaSelecionadaId)}
               className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {processando ? 'Processando...' : 'Analisar Entradas'}
@@ -409,6 +459,7 @@ function AnaliseFiscalEntradaInner() {
       {apuracao && (
         <>
           <p className="text-xs text-gray-400">
+            {apuracao.empresaAnalisadaNome ? `${apuracao.empresaAnalisadaNome} (${apuracao.empresaAnalisadaUf}) · ` : ''}
             {apuracao.periodo ? `${apuracao.periodo} · ` : ''}
             {apuracao.fileName ? `${apuracao.fileName} · ` : ''}
             processado em {new Date(apuracao.processedAt).toLocaleString('pt-BR')}

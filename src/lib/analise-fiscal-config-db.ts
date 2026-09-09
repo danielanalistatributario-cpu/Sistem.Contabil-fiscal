@@ -65,6 +65,20 @@ export async function carregarCnpjsGrupo(companyId: string): Promise<Set<string>
   return new Set(linhas.map((l) => l.cnpj.replace(/\D/g, '')));
 }
 
+export type EmpresaGrupo = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
+
+// Empresas/filiais do grupo com UF cadastrada — alimenta o seletor
+// "Empresa a ser analisada" da Análise de Entradas/Saídas. Empresas sem
+// uf preenchida não aparecem aqui (continuam valendo só pra checagem de
+// CNPJ da TES 138, via carregarCnpjsGrupo).
+export async function carregarEmpresasGrupo(companyId: string): Promise<EmpresaGrupo[]> {
+  const linhas = await prisma.analiseFiscalCnpjGrupo.findMany({
+    where: { companyId, uf: { not: null } },
+    orderBy: { nome: 'asc' },
+  });
+  return linhas.map((l) => ({ id: l.id, nome: l.nome, cnpj: l.cnpj, uf: l.uf, aliquotaInterna: l.aliquotaInterna }));
+}
+
 export async function carregarProdutosClassificacao(companyId: string): Promise<Map<string, ClassificacaoProduto>> {
   const linhas = await prisma.analiseFiscalProdutoClassificacao.findMany({ where: { companyId } });
   return new Map(linhas.map((l) => [l.codigoProduto, l.classificacao as ClassificacaoProduto]));

@@ -29,6 +29,9 @@ function gerarPdf(apuracao: {
   periodo: string | null;
   fileName: string | null;
   processedAt: Date;
+  empresaAnalisadaNome: string | null;
+  empresaAnalisadaCnpj: string | null;
+  empresaAnalisadaUf: string | null;
   totalLinhas: number;
   totalNotas: number;
   totalDivergencias: number;
@@ -47,6 +50,11 @@ function gerarPdf(apuracao: {
 
     doc.fontSize(16).text('Análise e Apuração Fiscal — Saídas — Divergências', { align: 'left' });
     doc.fontSize(10).fillColor('#666').text(companyName);
+    if (apuracao.empresaAnalisadaNome) {
+      doc.text(
+        `Empresa analisada: ${apuracao.empresaAnalisadaNome}${apuracao.empresaAnalisadaCnpj ? ' — CNPJ ' + apuracao.empresaAnalisadaCnpj : ''}${apuracao.empresaAnalisadaUf ? ' — UF ' + apuracao.empresaAnalisadaUf : ''}`
+      );
+    }
     doc.text(
       `${apuracao.periodo ? apuracao.periodo + ' — ' : ''}${apuracao.fileName || ''}  ·  processado em ${apuracao.processedAt.toLocaleString('pt-BR')}`
     );

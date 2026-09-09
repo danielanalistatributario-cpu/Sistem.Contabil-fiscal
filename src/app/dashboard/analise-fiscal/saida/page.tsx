@@ -38,6 +38,8 @@ type ItemView = {
   divergencias: DivergenciaView[];
 };
 
+type EmpresaGrupo = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
+
 type ApuracaoView = {
   id: string;
   periodo: string | null;
@@ -46,6 +48,9 @@ type ApuracaoView = {
   processedAt: string;
   resumo: ResumoApuracaoSaida;
   itens: ItemView[];
+  empresaAnalisadaNome?: string | null;
+  empresaAnalisadaCnpj?: string | null;
+  empresaAnalisadaUf?: string | null;
 };
 
 const SEVERIDADE_LABEL: Record<Severidade, string> = {
@@ -105,6 +110,8 @@ function AnaliseFiscalSaidaInner() {
   const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
   const [role, setRole] = useState<Role | null>(null);
+  const [empresasGrupo, setEmpresasGrupo] = useState<EmpresaGrupo[]>([]);
+  const [empresaSelecionadaId, setEmpresaSelecionadaId] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -113,6 +120,16 @@ function AnaliseFiscalSaidaInner() {
       if (res.ok) {
         const data = await res.json();
         setRole(data.user?.currentRole ?? null);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch('/api/analise-fiscal/config-runtime');
+      if (res.ok) {
+        const data = await res.json();
+        setEmpresasGrupo(data.empresasGrupo || []);
       }
     })();
   }, []);
@@ -132,6 +149,9 @@ function AnaliseFiscalSaidaInner() {
           processedAt: a.processedAt,
           resumo: a,
           itens: a.itens,
+          empresaAnalisadaNome: a.empresaAnalisadaNome,
+          empresaAnalisadaCnpj: a.empresaAnalisadaCnpj,
+          empresaAnalisadaUf: a.empresaAnalisadaUf,
         });
       }
     })();
@@ -139,6 +159,10 @@ function AnaliseFiscalSaidaInner() {
 
   async function handleProcessar() {
     if (!file) return;
+    if (empresasGrupo.length > 0 && !empresaSelecionadaId) {
+      setErro('Selecione a empresa a ser analisada.');
+      return;
+    }
     setErro(null);
     setApuracao(null);
     setProcessando(true);
@@ -169,14 +193,26 @@ function AnaliseFiscalSaidaInner() {
       const cnpjsGrupo = new Set<string>(cfg.cnpjsGrupo);
       const produtosClassificacao = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacao);
 
+      const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaSelecionadaId) || null;
+      const company = empresaSelecionada
+        ? { ufDestino: empresaSelecionada.uf || cfg.company.ufDestino, aliquotaInterna: empresaSelecionada.aliquotaInterna ?? cfg.company.aliquotaInterna }
+        : cfg.company;
+
       setProgresso({ fase: 'Calculando divergências...', loteAtual: 0, totalLotes: 0 });
-      const { itens, resumo } = apurarSaidas(leitura.rows, cfg.company, { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao });
+      const { itens, resumo } = apurarSaidas(leitura.rows, company, { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao });
 
       setProgresso({ fase: 'Criando apuração...', loteAtual: 0, totalLotes: 0 });
       const resIniciar = await fetch('/api/analise-fiscal/saida/apurar/iniciar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodo: periodo || null, fileName: file.name, resumo }),
+        body: JSON.stringify({
+          periodo: periodo || null,
+          fileName: file.name,
+          resumo,
+          empresaNome: empresaSelecionada?.nome || null,
+          empresaCnpj: empresaSelecionada?.cnpj || null,
+          empresaUf: empresaSelecionada?.uf || null,
+        }),
       });
       const dataIniciar = await resIniciar.json().catch(() => null);
       if (!resIniciar.ok) {
@@ -228,6 +264,9 @@ function AnaliseFiscalSaidaInner() {
         processedAt: new Date().toISOString(),
         resumo,
         itens: itens.filter((i) => i.divergencias.length > 0).map(paraItemView),
+        empresaAnalisadaNome: empresaSelecionada?.nome || null,
+        empresaAnalisadaCnpj: empresaSelecionada?.cnpj || null,
+        empresaAnalisadaUf: empresaSelecionada?.uf || null,
       });
       setProcessando(false);
       setProgresso(null);
@@ -248,6 +287,7 @@ function AnaliseFiscalSaidaInner() {
     setFiltroSeveridade('TODOS');
     setFiltroTipo('TODOS');
     setBusca('');
+    setEmpresaSelecionadaId('');
     if (inputRef.current) inputRef.current.value = '';
     router.replace('/dashboard/analise-fiscal/saida');
   }
@@ -368,9 +408,22 @@ function AnaliseFiscalSaidaInner() {
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-48"
               disabled={processando}
             />
+            {empresasGrupo.length > 0 && (
+              <select
+                value={empresaSelecionadaId}
+                onChange={(e) => setEmpresaSelecionadaId(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56"
+                disabled={processando}
+              >
+                <option value="">Empresa a ser analisada...</option>
+                {empresasGrupo.map((e) => (
+                  <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={handleProcessar}
-              disabled={!file || processando}
+              disabled={!file || processando || (empresasGrupo.length > 0 && !empresaSelecionadaId)}
               className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {processando ? 'Processando...' : 'Analisar Saídas'}
@@ -396,6 +449,7 @@ function AnaliseFiscalSaidaInner() {
       {apuracao && (
         <>
           <p className="text-xs text-gray-400">
+            {apuracao.empresaAnalisadaNome ? `${apuracao.empresaAnalisadaNome} (${apuracao.empresaAnalisadaUf}) · ` : ''}
             {apuracao.periodo ? `${apuracao.periodo} · ` : ''}
             {apuracao.fileName ? `${apuracao.fileName} · ` : ''}
             processado em {new Date(apuracao.processedAt).toLocaleString('pt-BR')}
