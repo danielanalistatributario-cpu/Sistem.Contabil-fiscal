@@ -278,6 +278,57 @@ function ruleTipoEsperado(prefixoEsperado: string, labelEsperado: string): RuleD
   };
 }
 
+// oposto de ruleTipoEsperado: sinaliza quando a coluna Tipo do item COMEÇA
+// com o prefixo proibido (ex: "AI-ATIVO IMOBILIZADO") — usado em TES onde
+// ativo imobilizado não deveria aparecer (pedido explícito do usuário nas
+// TES 156/168).
+function ruleTipoProibido(prefixoProibido: string, labelProibido: string): RuleDef {
+  return {
+    id: `tipo_proibido_${prefixoProibido.toLowerCase()}`,
+    descricao: `Sinaliza quando a coluna Tipo do item começa com "${prefixoProibido}" (${labelProibido}) — este tipo de item não deveria ser lançado nesta TES.`,
+    check: (ctx) => {
+      const { linha } = ctx;
+      if (!linha.tipo) return null;
+      const prefixo = (linha.tipo.split('-')[0] || '').trim().toUpperCase();
+      if (prefixo !== prefixoProibido) return null;
+      return {
+        severidade: 'ALTO',
+        tipo: 'CLASSIFICACAO_TES',
+        regraEsperada: `TES ${linha.tes} — ${labelProibido} não deve ser escriturado nesta TES`,
+        informacaoEncontrada: `Tipo: ${linha.tipo}${linha.produtoDescricao ? ' — Produto: ' + linha.produtoDescricao : ''}`,
+        motivo: `Item de ${labelProibido} encontrado numa TES que não aceita esse tipo de item`,
+        sugestaoCorrecao: 'Verificar se a TES lançada está correta para este item',
+      };
+    },
+  };
+}
+
+// checa Base de Cálculo E Valor de ICMS zerados (mais rigoroso que
+// ruleValorZero, que só olha o Valor) — usado nas TES onde o usuário pediu
+// explicitamente pra conferir também a ausência de Base de Cálculo (106
+// desonerado, 214 isento), não só o valor final do imposto.
+function ruleIcmsSemDestaque(): RuleDef {
+  return {
+    id: 'icms_sem_destaque_base_e_valor',
+    descricao: 'Confere se a Base de Cálculo e o Valor de ICMS estão zerados — nesta TES não deve haver nenhum destaque de ICMS.',
+    check: (ctx) => {
+      const { linha } = ctx;
+      const problemas: string[] = [];
+      if (linha.baseIcms != null && Math.abs(linha.baseIcms) >= 0.01) problemas.push(`Base ICMS: ${fmtBRL(linha.baseIcms)}`);
+      if (linha.valorIcms != null && Math.abs(linha.valorIcms) >= 0.01) problemas.push(`Valor ICMS: ${fmtBRL(linha.valorIcms)}`);
+      if (problemas.length === 0) return null;
+      return {
+        severidade: 'ALTO',
+        tipo: 'CALCULO_ICMS',
+        regraEsperada: `TES ${linha.tes} — não deve haver Base de Cálculo nem Valor de ICMS destacados`,
+        informacaoEncontrada: problemas.join(' · '),
+        motivo: `TES ${linha.tes} não deveria ter ICMS destacado (base ou valor) nesta operação`,
+        sugestaoCorrecao: 'Verificar por que há Base de Cálculo/Valor de ICMS nesta nota',
+      };
+    },
+  };
+}
+
 const RULES_TUDO_ISENTO: RuleDef[] = [
   ruleValorZero('Icms', 'ICMS'),
   ruleValorZero('Pis', 'PIS'),
@@ -422,6 +473,22 @@ const RULES_138: RuleDef[] = [
   },
 ];
 
+// ---------------- regras profundas: TES 106 (desonerado de ICMS) ----------------
+// Produtos tributados e isentos podem conviver nesta TES (não entra
+// naturezaOperacao ISENTA/TRIBUTADA, pra não gerar falso positivo no
+// cruzamento produto×TES) — a característica da desoneração é o ICMS em si
+// não vir destacado (nem base, nem valor), não a classificação do produto.
+const RULES_106: RuleDef[] = [ruleIcmsSemDestaque()];
+
+// ---------------- regras profundas: TES 156/168 (isentos de ICMS) ----------------
+const RULES_156_168: RuleDef[] = [ruleValorZero('Icms', 'ICMS'), ruleTipoProibido('AI', 'ATIVO IMOBILIZADO')];
+
+// ---------------- regras profundas: TES 213/215 (tributados) ----------------
+const RULES_213_215: RuleDef[] = [ruleIcmsTabelaPadrao()];
+
+// ---------------- regras profundas: TES 214 (isento) ----------------
+const RULES_214: RuleDef[] = [ruleIcmsSemDestaque()];
+
 // ---------------- registro completo ----------------
 
 const TES_RULE_GROUPS: TesRuleGroup[] = [
@@ -432,6 +499,14 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   // (evidência real: 100% dos casos com valorICMS = 0)
   { codigos: ['107'], grupo: 'Importado, crédito presumido 4% (sem destaque ICMS)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
   { codigos: ['108', '109'], grupo: 'Tributado na entrada, isento na saída (crédito presumido)', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: [ruleValorZero('Icms', 'ICMS')] },
+  // TES 106: produtos desonerados de ICMS — tributados e isentos podem
+  // conviver aqui (por isso sem naturezaOperacao), a característica é o
+  // ICMS não vir destacado (base nem valor). Pedido explícito do usuário.
+  { codigos: ['106'], grupo: 'Produtos desonerados de ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_106 },
+  // TES 162: substituição tributária — mesmo padrão da 106 (tributado e
+  // isento convivem, sem naturezaOperacao; ICMS não deve vir destacado,
+  // nem base nem valor). Pedido explícito do usuário.
+  { codigos: ['162'], grupo: 'Substituição tributária (ST)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_106 },
   { codigos: ['110'], grupo: 'Prestação de serviços', chaveNf: 'proibida', permiteProdutos: false, rules: [] },
   // TES 128: ICMS isento, PIS 1,65% e COFINS 7,60% sempre tributados
   // (evidência real: 9/9 casos com essas alíquotas exatas)
@@ -441,8 +516,13 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   { codigos: ['129'], grupo: 'ICMS + PIS 1,65% + COFINS 7,60%', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleIcmsTabelaPadrao(), ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
   // TES 130: ICMS isento (evidência real: 489/489). Fornecedor pode ser
   // CPF ou CNPJ (56 de 489 eram CNPJ no arquivo real) — sem checagem de
-  // fornecedor, ao contrário da TES 101
-  { codigos: ['130'], grupo: 'Produtores rurais (revenda)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
+  // fornecedor, ao contrário da TES 101. TES 230 (produtor rural) entra no
+  // MESMO grupo, a pedido explícito do usuário ("deve seguir as mesmas
+  // regras da TES 130") — chaveNf/permiteProdutos/rules idênticos; a
+  // checagem de CFOP×UF e a identificação do fornecedor continuam cobertas
+  // pelas regras genéricas (CFOP×UF já roda por padrão; fornecedor
+  // pessoa física/jurídica não é restringido aqui, igual à 130).
+  { codigos: ['130', '230'], grupo: 'Produtores rurais (revenda)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
   { codigos: ['138'], grupo: 'Transferência entre filiais Fort Fruit', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRANSFERENCIA', rules: RULES_138 },
   // TES 141: não apareceu no arquivo real testado — sem base pra calibrar
   // uma regra de alíquota (SENAR/GILRAT); fica metadados só até termos um
@@ -499,6 +579,19 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   { codigos: ['219', '319'], grupo: 'Devolução — a confirmar com mais dados', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [] },
   { codigos: ['223'], grupo: 'Bonificação (revenda, tudo isento)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
   { codigos: ['320'], grupo: 'Devolução — tudo tributado', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [] },
+  // TES 156/168: produtos isentos de ICMS — cruza com a classificação do
+  // produto (naturezaOperacao ISENTA) e sinaliza Ativo Imobilizado, que não
+  // deveria ser lançado nessas TES. Pedido explícito do usuário.
+  { codigos: ['156', '168'], grupo: 'Produtos isentos de ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_156_168 },
+  // TES 213/215: produtos tributados pelo ICMS — cruza com a classificação
+  // do produto (naturezaOperacao TRIBUTADA) e confere Base/Alíquota/Valor
+  // pela tabela padrão de ICMS (mesma regra já usada nas TES 102/129/157).
+  // Pedido explícito do usuário.
+  { codigos: ['213', '215'], grupo: 'Produtos tributados pelo ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: RULES_213_215 },
+  // TES 214: produtos isentos de ICMS, sem destaque indevido — confere
+  // Base de Cálculo e Valor de ICMS zerados, além do cruzamento
+  // produto×TES (naturezaOperacao ISENTA). Pedido explícito do usuário.
+  { codigos: ['214'], grupo: 'Produtos isentos de ICMS (sem destaque)', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_214 },
 ];
 
 export const TES_METADATA: Record<string, TesMetadata> = Object.fromEntries(
@@ -510,7 +603,7 @@ export const TES_RULES: Record<string, RuleDef[]> = Object.fromEntries(
 );
 
 export const TES_GRUPOS_COM_REGRA_PROFUNDA = [
-  '001', '002', '004', '009', '101', '102', '107', '108', '109', '128', '129', '130', '138',
-  '151', '252', '152', '153', '155', '194', '294', '157', '165', '172', '173', '196',
-  '217', '317', '218', '318', '223',
+  '001', '002', '004', '009', '101', '102', '106', '107', '108', '109', '128', '129', '130', '138',
+  '151', '252', '152', '153', '155', '156', '162', '168', '194', '294', '157', '165', '172', '173', '196',
+  '213', '214', '215', '217', '317', '218', '318', '223', '230',
 ];
