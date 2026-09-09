@@ -79,7 +79,17 @@ export async function carregarEmpresasGrupo(companyId: string): Promise<EmpresaG
   return linhas.map((l) => ({ id: l.id, nome: l.nome, cnpj: l.cnpj, uf: l.uf, aliquotaInterna: l.aliquotaInterna }));
 }
 
-export async function carregarProdutosClassificacao(companyId: string): Promise<Map<string, ClassificacaoProduto>> {
-  const linhas = await prisma.analiseFiscalProdutoClassificacao.findMany({ where: { companyId } });
+// Segregado por empresa do grupo (mesmo produto pode ter classificação
+// diferente entre filiais) — sem empresaGrupoId (tenant que nunca
+// cadastrou "empresas do grupo", ou nenhuma empresa selecionada ainda),
+// devolve a lista "geral" (empresaGrupoId null), igual ao comportamento
+// de antes desta segregação existir.
+export async function carregarProdutosClassificacao(
+  companyId: string,
+  empresaGrupoId?: string | null
+): Promise<Map<string, ClassificacaoProduto>> {
+  const linhas = await prisma.analiseFiscalProdutoClassificacao.findMany({
+    where: { companyId, empresaGrupoId: empresaGrupoId ?? null },
+  });
   return new Map(linhas.map((l) => [l.codigoProduto, l.classificacao as ClassificacaoProduto]));
 }

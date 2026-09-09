@@ -671,28 +671,36 @@ model AnaliseFiscalTesConfig {
 // Classificação tributária intrínseca do produto (ISENTO ou TRIBUTADO),
 // cadastrada pelo admin — usada pra cruzar com a natureza da TES
 // (AnaliseFiscalTesConfig.naturezaOperacao) e sinalizar produto lançado
-// na TES errada (ex: produto tributado numa TES isenta).
+// na TES errada (ex: produto tributado numa TES isenta). empresaGrupoId
+// segrega o cadastro por empresa do grupo (mesmo produto pode ter
+// classificação diferente entre filiais) — fica opcional pra não quebrar
+// tenants que nunca cadastraram "empresas do grupo" (nesse caso todo
+// mundo usa a lista com empresaGrupoId null, igual ao comportamento de
+// antes desta segregação existir).
 model AnaliseFiscalProdutoClassificacao {
   id             String   @id @default(cuid())
   companyId      String
+  empresaGrupoId String?
   codigoProduto  String
   descricao      String
   classificacao  String
   observacao     String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaGrupo   AnaliseFiscalCnpjGrupo? @relation(fields: [empresaGrupoId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, codigoProduto])
+  @@unique([companyId, empresaGrupoId, codigoProduto])
 }
 
-// CNPJs do grupo de empresas relacionadas — dois usos: (1) TES de
+// CNPJs do grupo de empresas relacionadas — três usos: (1) TES de
 // transferência entre filiais (138), validando o fornecedor/remetente;
 // (2) seletor "Empresa a ser analisada" em Análise de Entradas/Saídas,
-// pra empresas de UF diferente da UF padrão do tenant. uf/aliquotaInterna
-// ficam opcionais — sem uf a empresa não aparece como selecionável no
-// seletor (continua valendo só pra checagem de TES 138); sem
-// aliquotaInterna, usa o padrão do tenant (Company.aliquotaInterna).
+// pra empresas de UF diferente da UF padrão do tenant; (3) dono do
+// cadastro segregado de Produtos com classificação tributária. uf/
+// aliquotaInterna ficam opcionais — sem uf a empresa não aparece como
+// selecionável no seletor (continua valendo só pra checagem de TES 138);
+// sem aliquotaInterna, usa o padrão do tenant (Company.aliquotaInterna).
 model AnaliseFiscalCnpjGrupo {
   id              String   @id @default(cuid())
   companyId       String
@@ -701,7 +709,8 @@ model AnaliseFiscalCnpjGrupo {
   uf              String?
   aliquotaInterna Float?
   createdAt       DateTime @default(now())
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company         Company                             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  produtos        AnaliseFiscalProdutoClassificacao[]
 
   @@unique([companyId, cnpj])
 }

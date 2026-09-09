@@ -2,10 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
+import { carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
 
 const CLASSIFICACOES_VALIDAS = ['ISENTO', 'TRIBUTADO'];
 
-export async function GET() {
+// Valida e resolve empresaId da query/body contra o cadastro de
+// "empresas do grupo" (uf preenchida) do tenant. Se o tenant tem pelo
+// menos 1 empresa cadastrada, exigir=true faz devolver erro quando não
+// vier um id válido — mesma obrigatoriedade já aplicada no seletor
+// "Empresa a ser analisada" de Entradas/Saídas.
+async function resolverEmpresaGrupoId(
+  companyId: string,
+  empresaIdInformado: string | null,
+  exigir: boolean
+): Promise<{ empresaGrupoId: string | null; erro: string | null }> {
+  const empresasGrupo = await carregarEmpresasGrupo(companyId);
+  if (empresasGrupo.length === 0) return { empresaGrupoId: null, erro: null };
+
+  const valida = empresaIdInformado && empresasGrupo.some((e) => e.id === empresaIdInformado);
+  if (!valida) {
+    if (exigir) return { empresaGrupoId: null, erro: 'Selecione a empresa para gerenciar os produtos.' };
+    return { empresaGrupoId: null, erro: null };
+  }
+  return { empresaGrupoId: empresaIdInformado, erro: null };
+}
+
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.currentCompanyId) {
     return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
@@ -14,8 +36,11 @@ export async function GET() {
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 
+  const empresaIdParam = req.nextUrl.searchParams.get('empresaId');
+  const { empresaGrupoId } = await resolverEmpresaGrupoId(session.currentCompanyId, empresaIdParam, false);
+
   const produtos = await prisma.analiseFiscalProdutoClassificacao.findMany({
-    where: { companyId: session.currentCompanyId },
+    where: { companyId: session.currentCompanyId, empresaGrupoId },
     orderBy: { descricao: 'asc' },
   });
 
@@ -44,15 +69,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existente = await prisma.analiseFiscalProdutoClassificacao.findUnique({
-    where: { companyId_codigoProduto: { companyId: session.currentCompanyId, codigoProduto } },
+  const { empresaGrupoId, erro } = await resolverEmpresaGrupoId(session.currentCompanyId, body?.empresaGrupoId || null, true);
+  if (erro) {
+    return NextResponse.json({ error: erro }, { status: 400 });
+  }
+
+  const existente = await prisma.analiseFiscalProdutoClassificacao.findFirst({
+    where: { companyId: session.currentCompanyId, empresaGrupoId, codigoProduto },
   });
   if (existente) {
-    return NextResponse.json({ error: 'Este código de produto já está cadastrado.' }, { status: 400 });
+    return NextResponse.json({ error: 'Este código de produto já está cadastrado para esta empresa.' }, { status: 400 });
   }
 
   const produto = await prisma.analiseFiscalProdutoClassificacao.create({
-    data: { companyId: session.currentCompanyId, codigoProduto, descricao, classificacao, observacao },
+    data: { companyId: session.currentCompanyId, empresaGrupoId, codigoProduto, descricao, classificacao, observacao },
   });
 
   await logActivity(session.id, 'CADASTROU_PRODUTO_CLASSIFICACAO_ANALISE_FISCAL', `${codigoProduto} — ${descricao} (${classificacao})`, session.currentCompanyId);

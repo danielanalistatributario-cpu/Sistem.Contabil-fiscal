@@ -63,7 +63,13 @@ export default function AnaliseFiscalConfigPage() {
   const [novaObservacaoProduto, setNovaObservacaoProduto] = useState('');
   const [importando, setImportando] = useState(false);
   const [resultadoImportacao, setResultadoImportacao] = useState<string | null>(null);
+  const [empresaProdutoId, setEmpresaProdutoId] = useState('');
   const inputImportarRef = useRef<HTMLInputElement>(null);
+
+  // Só empresas com UF preenchida contam pra segregação de produtos —
+  // mesmo filtro que o seletor "Empresa a ser analisada" de
+  // Entradas/Saídas já usa (carregarEmpresasGrupo no backend).
+  const empresasComUf = cnpjs.filter((c) => c.uf);
 
   const carregarTes = useCallback(async () => {
     const res = await fetch('/api/analise-fiscal/config/tes');
@@ -81,8 +87,9 @@ export default function AnaliseFiscalConfigPage() {
     }
   }, []);
 
-  const carregarProdutos = useCallback(async () => {
-    const res = await fetch('/api/analise-fiscal/config/produtos');
+  const carregarProdutos = useCallback(async (empresaId: string) => {
+    const qs = empresaId ? `?empresaId=${empresaId}` : '';
+    const res = await fetch(`/api/analise-fiscal/config/produtos${qs}`);
     if (res.ok) {
       const data = await res.json();
       setProdutos(data.produtos);
@@ -92,8 +99,15 @@ export default function AnaliseFiscalConfigPage() {
   useEffect(() => {
     carregarTes();
     carregarCnpjs();
-    carregarProdutos();
-  }, [carregarTes, carregarCnpjs, carregarProdutos]);
+  }, [carregarTes, carregarCnpjs]);
+
+  // Recarrega a lista de produtos sempre que a empresa selecionada muda
+  // (inclusive na primeira carga, com empresaProdutoId ainda vazio — nesse
+  // caso devolve a lista "geral", igual ao comportamento de antes desta
+  // segregação existir, pra tenants sem empresa do grupo cadastrada).
+  useEffect(() => {
+    carregarProdutos(empresaProdutoId);
+  }, [carregarProdutos, empresaProdutoId]);
 
   async function handleAddTes(e: React.FormEvent) {
     e.preventDefault();
@@ -193,6 +207,7 @@ export default function AnaliseFiscalConfigPage() {
         descricao: novaDescricaoProduto,
         classificacao: novaClassificacaoProduto,
         observacao: novaObservacaoProduto || undefined,
+        empresaGrupoId: empresaProdutoId || undefined,
       }),
     });
     const data = await res.json();
@@ -204,7 +219,7 @@ export default function AnaliseFiscalConfigPage() {
     setNovaDescricaoProduto('');
     setNovaClassificacaoProduto('TRIBUTADO');
     setNovaObservacaoProduto('');
-    carregarProdutos();
+    carregarProdutos(empresaProdutoId);
   }
 
   async function handleEditProduto(id: string, campo: 'classificacao' | 'observacao', valor: string) {
@@ -213,18 +228,23 @@ export default function AnaliseFiscalConfigPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [campo]: valor }),
     });
-    carregarProdutos();
+    carregarProdutos(empresaProdutoId);
   }
 
   async function handleRemoveProduto(id: string, descricao: string) {
     if (!confirm(`Remover "${descricao}" da lista de produtos classificados?`)) return;
     await fetch(`/api/analise-fiscal/config/produtos/${id}`, { method: 'DELETE' });
-    carregarProdutos();
+    carregarProdutos(empresaProdutoId);
   }
 
   async function handleImportarProdutos(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (empresasComUf.length > 0 && !empresaProdutoId) {
+      setErroProduto('Selecione a empresa para importar os produtos.');
+      if (inputImportarRef.current) inputImportarRef.current.value = '';
+      return;
+    }
     setErroProduto(null);
     setResultadoImportacao(null);
     setImportando(true);
@@ -250,7 +270,7 @@ export default function AnaliseFiscalConfigPage() {
       const res = await fetch('/api/analise-fiscal/config/produtos/importar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ produtos: leitura.produtos }),
+        body: JSON.stringify({ produtos: leitura.produtos, empresaGrupoId: empresaProdutoId || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -264,7 +284,7 @@ export default function AnaliseFiscalConfigPage() {
       if (data.invalidos > 0) partes.push(`${data.invalidos} linha(s) inválida(s) ignorada(s)`);
       if (leitura.ignoradas.length > 0) partes.push(`${leitura.ignoradas.length} linha(s) sem código/descrição/classificação ignorada(s) na leitura`);
       setResultadoImportacao(partes.join(' · '));
-      carregarProdutos();
+      carregarProdutos(empresaProdutoId);
     } catch (err) {
       setErroProduto('Não foi possível ler o arquivo. Verifique se é um .xlsx/.csv válido.');
       console.error(err);
@@ -541,119 +561,143 @@ export default function AnaliseFiscalConfigPage() {
           Cadastre aqui produtos cuja classificação (isento ou tributado) precisa ser conferida contra a TES lançada
           — ex: um produto tributado que apareceu numa TES marcada como &quot;Isenta&quot; (ver coluna &quot;Natureza
           da operação&quot; na tabela de TES acima). Enquanto um produto não estiver cadastrado aqui, essa checagem
-          não roda pra ele.
+          não roda pra ele. {empresasComUf.length > 0 && 'O cadastro é segregado por empresa — cada empresa tem sua própria lista, totalmente independente das demais, e a análise usa automaticamente a lista da empresa selecionada em "Empresa a ser analisada".'}
         </p>
 
-        <div className="flex flex-wrap items-center gap-3 bg-gray-50 border border-gray-100 rounded-lg px-4 py-3">
+        {empresasComUf.length > 0 && (
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Importar planilha (muitos produtos de uma vez)</label>
-            <input
-              ref={inputImportarRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleImportarProdutos}
-              disabled={importando}
-              className="text-sm"
-            />
-          </div>
-          <p className="text-[11px] text-gray-400 flex-1 min-w-[220px]">
-            Colunas esperadas: <strong>Código do Produto</strong>, <strong>Descrição</strong> e{' '}
-            <strong>Classificação</strong> (Isento ou Tributado) — nomes parecidos são reconhecidos automaticamente.
-            Produto já cadastrado é atualizado; produto novo é criado.
-          </p>
-          {importando && <span className="text-xs text-gray-500">Importando...</span>}
-        </div>
-        {resultadoImportacao && <p className="text-xs text-teal">{resultadoImportacao}</p>}
-
-        <form onSubmit={handleAddProduto} className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-4">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Código do produto</label>
-            <input
-              value={novoCodigoProduto}
-              onChange={(e) => setNovoCodigoProduto(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-32"
-              placeholder="ex: 229.009"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Descrição</label>
-            <input
-              value={novaDescricaoProduto}
-              onChange={(e) => setNovaDescricaoProduto(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-56"
-              placeholder="ex: MORANGO"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Classificação</label>
+            <label className="block text-xs text-gray-500 mb-1">Gerenciando produtos da empresa</label>
             <select
-              value={novaClassificacaoProduto}
-              onChange={(e) => setNovaClassificacaoProduto(e.target.value as 'ISENTO' | 'TRIBUTADO')}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+              value={empresaProdutoId}
+              onChange={(e) => setEmpresaProdutoId(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-64"
             >
-              <option value="TRIBUTADO">Tributado</option>
-              <option value="ISENTO">Isento</option>
+              <option value="">Selecione a empresa...</option>
+              {empresasComUf.map((e) => (
+                <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
+              ))}
             </select>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Observação (opcional)</label>
-            <input
-              value={novaObservacaoProduto}
-              onChange={(e) => setNovaObservacaoProduto(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-56"
-              placeholder="ex: Convênio ICMS..."
-            />
-          </div>
-          <button type="submit" className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
-            + Cadastrar produto
-          </button>
-          {erroProduto && <p className="text-sm text-red-600 w-full">{erroProduto}</p>}
-        </form>
+        )}
 
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
-              <th className="py-2 pr-3">Código</th>
-              <th className="py-2 pr-3">Descrição</th>
-              <th className="py-2 pr-3">Classificação</th>
-              <th className="py-2 pr-3">Observação</th>
-              <th className="py-2 pr-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {produtos.map((p) => (
-              <tr key={p.id} className="border-b border-gray-50">
-                <td className="py-2 pr-3 font-mono">{p.codigoProduto}</td>
-                <td className="py-2 pr-3">{p.descricao}</td>
-                <td className="py-2 pr-3">
-                  <select
-                    value={p.classificacao}
-                    onChange={(e) => handleEditProduto(p.id, 'classificacao', e.target.value)}
-                    className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
-                  >
-                    <option value="TRIBUTADO">Tributado</option>
-                    <option value="ISENTO">Isento</option>
-                  </select>
-                </td>
-                <td className="py-2 pr-3">
-                  <input
-                    defaultValue={p.observacao || ''}
-                    onBlur={(e) => e.target.value !== (p.observacao || '') && handleEditProduto(p.id, 'observacao', e.target.value)}
-                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-48"
-                  />
-                </td>
-                <td className="py-2 pr-3">
-                  <button onClick={() => handleRemoveProduto(p.id, p.descricao)} className="text-xs text-red-500 underline">
-                    Remover
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {produtos.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhum produto cadastrado ainda.</p>}
+        {empresasComUf.length > 0 && !empresaProdutoId ? (
+          <p className="text-sm text-gray-400 text-center py-6 bg-gray-50 border border-gray-100 rounded-lg">
+            Selecione uma empresa acima para ver, cadastrar ou importar os produtos dela.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-3 bg-gray-50 border border-gray-100 rounded-lg px-4 py-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Importar planilha (muitos produtos de uma vez)</label>
+                <input
+                  ref={inputImportarRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleImportarProdutos}
+                  disabled={importando}
+                  className="text-sm"
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 flex-1 min-w-[220px]">
+                Colunas esperadas: <strong>Código do Produto</strong>, <strong>Descrição</strong> e{' '}
+                <strong>Classificação</strong> (Isento ou Tributado) — nomes parecidos são reconhecidos automaticamente.
+                Produto já cadastrado (pra essa empresa) é atualizado; produto novo é criado.
+              </p>
+              {importando && <span className="text-xs text-gray-500">Importando...</span>}
+            </div>
+            {resultadoImportacao && <p className="text-xs text-teal">{resultadoImportacao}</p>}
+
+            <form onSubmit={handleAddProduto} className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Código do produto</label>
+                <input
+                  value={novoCodigoProduto}
+                  onChange={(e) => setNovoCodigoProduto(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-32"
+                  placeholder="ex: 229.009"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Descrição</label>
+                <input
+                  value={novaDescricaoProduto}
+                  onChange={(e) => setNovaDescricaoProduto(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-56"
+                  placeholder="ex: MORANGO"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Classificação</label>
+                <select
+                  value={novaClassificacaoProduto}
+                  onChange={(e) => setNovaClassificacaoProduto(e.target.value as 'ISENTO' | 'TRIBUTADO')}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                >
+                  <option value="TRIBUTADO">Tributado</option>
+                  <option value="ISENTO">Isento</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Observação (opcional)</label>
+                <input
+                  value={novaObservacaoProduto}
+                  onChange={(e) => setNovaObservacaoProduto(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-56"
+                  placeholder="ex: Convênio ICMS..."
+                />
+              </div>
+              <button type="submit" className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
+                + Cadastrar produto
+              </button>
+              {erroProduto && <p className="text-sm text-red-600 w-full">{erroProduto}</p>}
+            </form>
+
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
+                  <th className="py-2 pr-3">Código</th>
+                  <th className="py-2 pr-3">Descrição</th>
+                  <th className="py-2 pr-3">Classificação</th>
+                  <th className="py-2 pr-3">Observação</th>
+                  <th className="py-2 pr-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {produtos.map((p) => (
+                  <tr key={p.id} className="border-b border-gray-50">
+                    <td className="py-2 pr-3 font-mono">{p.codigoProduto}</td>
+                    <td className="py-2 pr-3">{p.descricao}</td>
+                    <td className="py-2 pr-3">
+                      <select
+                        value={p.classificacao}
+                        onChange={(e) => handleEditProduto(p.id, 'classificacao', e.target.value)}
+                        className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                      >
+                        <option value="TRIBUTADO">Tributado</option>
+                        <option value="ISENTO">Isento</option>
+                      </select>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <input
+                        defaultValue={p.observacao || ''}
+                        onBlur={(e) => e.target.value !== (p.observacao || '') && handleEditProduto(p.id, 'observacao', e.target.value)}
+                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-48"
+                      />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <button onClick={() => handleRemoveProduto(p.id, p.descricao)} className="text-xs text-red-500 underline">
+                        Remover
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {produtos.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhum produto cadastrado ainda.</p>}
+          </>
+        )}
       </div>
     </div>
   );

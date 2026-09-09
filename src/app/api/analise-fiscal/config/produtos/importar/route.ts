@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
+import { carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -10,9 +11,11 @@ const CLASSIFICACOES_VALIDAS = ['ISENTO', 'TRIBUTADO'];
 
 // Importação em massa — o Excel já foi lido e mapeado no navegador (ver
 // analise-fiscal-produtos-import.ts), aqui só valida e grava. Faz
-// upsert por código: produto já cadastrado tem descrição/classificação
+// upsert por código dentro da empresa selecionada (empresaGrupoId): produto
+// já cadastrado pra aquela empresa tem descrição/classificação
 // atualizadas, produto novo é criado — permite reimportar uma planilha
-// corrigida sem duplicar nem precisar apagar tudo antes.
+// corrigida sem duplicar nem precisar apagar tudo antes. Não afeta o
+// cadastro de outras empresas do grupo.
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.currentCompanyId) {
@@ -27,6 +30,14 @@ export async function POST(req: NextRequest) {
   if (linhas.length === 0) {
     return NextResponse.json({ error: 'Nenhum produto para importar.' }, { status: 400 });
   }
+
+  const empresasGrupo = await carregarEmpresasGrupo(session.currentCompanyId);
+  const empresaIdInformado = body?.empresaGrupoId || null;
+  const empresaValida = empresaIdInformado && empresasGrupo.some((e) => e.id === empresaIdInformado);
+  if (empresasGrupo.length > 0 && !empresaValida) {
+    return NextResponse.json({ error: 'Selecione a empresa para importar os produtos.' }, { status: 400 });
+  }
+  const empresaGrupoId = empresaValida ? empresaIdInformado : null;
 
   const validos: { codigoProduto: string; descricao: string; classificacao: string; observacao: string | null }[] = [];
   let invalidos = 0;
@@ -53,8 +64,14 @@ export async function POST(req: NextRequest) {
   await prisma.$transaction(async (tx) => {
     for (const p of validos) {
       const resultado = await tx.analiseFiscalProdutoClassificacao.upsert({
-        where: { companyId_codigoProduto: { companyId: session.currentCompanyId!, codigoProduto: p.codigoProduto } },
-        create: { companyId: session.currentCompanyId!, ...p },
+        where: {
+          companyId_empresaGrupoId_codigoProduto: {
+            companyId: session.currentCompanyId!,
+            empresaGrupoId,
+            codigoProduto: p.codigoProduto,
+          },
+        },
+        create: { companyId: session.currentCompanyId!, empresaGrupoId, ...p },
         update: { descricao: p.descricao, classificacao: p.classificacao, observacao: p.observacao },
       });
       if (resultado.createdAt.getTime() === resultado.updatedAt.getTime()) criados++;

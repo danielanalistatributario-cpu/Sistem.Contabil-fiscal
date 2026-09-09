@@ -181,7 +181,9 @@ function AnaliseFiscalSaidaInner() {
       }
 
       setProgresso({ fase: 'Carregando configuração da empresa...', loteAtual: 0, totalLotes: 0 });
-      const resCfg = await fetch('/api/analise-fiscal/config-runtime');
+      const resCfg = await fetch(
+        `/api/analise-fiscal/config-runtime${empresaSelecionadaId ? `?empresaId=${empresaSelecionadaId}` : ''}`
+      );
       const cfg = await resCfg.json().catch(() => null);
       if (!resCfg.ok || !cfg) {
         setErro(cfg?.error || 'Não foi possível carregar a configuração da empresa.');
