@@ -61,12 +61,19 @@ export async function POST(req: NextRequest) {
   const descricao = String(body?.descricao || '').trim();
   const classificacao = String(body?.classificacao || '').trim();
   const observacao = body?.observacao ? String(body.observacao).trim() : null;
+  const aliquotaBeneficioInterna = body?.aliquotaBeneficioInterna ? Number(body.aliquotaBeneficioInterna) : null;
+  const aliquotaBeneficioInterestadual = body?.aliquotaBeneficioInterestadual ? Number(body.aliquotaBeneficioInterestadual) : null;
 
   if (!codigoProduto || !descricao || !CLASSIFICACOES_VALIDAS.includes(classificacao)) {
     return NextResponse.json(
       { error: 'Código do produto, descrição e classificação (ISENTO/TRIBUTADO) são obrigatórios.' },
       { status: 400 }
     );
+  }
+  for (const [label, valor] of [['interna', aliquotaBeneficioInterna], ['interestadual', aliquotaBeneficioInterestadual]] as const) {
+    if (valor !== null && (Number.isNaN(valor) || valor <= 0 || valor >= 1)) {
+      return NextResponse.json({ error: `Alíquota de benefício (${label}) inválida — informe um valor entre 0 e 1 (ex: 0.12 para 12%).` }, { status: 400 });
+    }
   }
 
   const { empresaGrupoId, erro } = await resolverEmpresaGrupoId(session.currentCompanyId, body?.empresaGrupoId || null, true);
@@ -82,7 +89,7 @@ export async function POST(req: NextRequest) {
   }
 
   const produto = await prisma.analiseFiscalProdutoClassificacao.create({
-    data: { companyId: session.currentCompanyId, empresaGrupoId, codigoProduto, descricao, classificacao, observacao },
+    data: { companyId: session.currentCompanyId, empresaGrupoId, codigoProduto, descricao, classificacao, observacao, aliquotaBeneficioInterna, aliquotaBeneficioInterestadual },
   });
 
   await logActivity(session.id, 'CADASTROU_PRODUTO_CLASSIFICACAO_ANALISE_FISCAL', `${codigoProduto} — ${descricao} (${classificacao})`, session.currentCompanyId);

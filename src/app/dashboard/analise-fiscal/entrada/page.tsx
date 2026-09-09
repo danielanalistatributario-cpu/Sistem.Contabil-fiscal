@@ -215,6 +215,7 @@ function AnaliseFiscalEntradaInner() {
       const tesMetadataPorCodigo = cfg.tesMetadataPorCodigo as Record<string, TesMetadata>;
       const cnpjsGrupo = new Set<string>(cfg.cnpjsGrupo);
       const produtosClassificacao = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacao);
+      const produtosBeneficioAliquota = new Map<string, { interna: number; interestadual: number }>(cfg.produtosBeneficioAliquota);
 
       const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaSelecionadaId) || null;
       const company = empresaSelecionada
@@ -225,7 +226,7 @@ function AnaliseFiscalEntradaInner() {
       const { itens, resumo }: { itens: ItemApurado[]; resumo: ResumoApuracao } = apurarEntradas(
         leitura.rows,
         company,
-        { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao }
+        { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao, produtosBeneficioAliquota }
       );
 
       setProgresso({ fase: 'Criando apuração...', loteAtual: 0, totalLotes: 0 });

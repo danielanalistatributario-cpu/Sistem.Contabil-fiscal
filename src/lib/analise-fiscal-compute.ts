@@ -40,7 +40,12 @@ export type ResultadoApuracao = { itens: ItemApurado[]; resumo: ResumoApuracao }
 export function apurarEntradas(
   linhas: LinhaEntradaImportada[],
   company: { ufDestino: string; aliquotaInterna: number },
-  config: { tesMetadataPorCodigo: Record<string, TesMetadata>; cnpjsGrupo: Set<string>; produtosClassificacao?: Map<string, ClassificacaoProduto> }
+  config: {
+    tesMetadataPorCodigo: Record<string, TesMetadata>;
+    cnpjsGrupo: Set<string>;
+    produtosClassificacao?: Map<string, ClassificacaoProduto>;
+    produtosBeneficioAliquota?: Map<string, { interna: number; interestadual: number }>;
+  }
 ): ResultadoApuracao {
   const ctxBase = {
     ufPropria: company.ufDestino || '',
@@ -48,6 +53,8 @@ export function apurarEntradas(
     cnpjsGrupo: config.cnpjsGrupo,
     tesMetadataPorCodigo: config.tesMetadataPorCodigo,
     produtosClassificacao: config.produtosClassificacao || new Map(),
+    produtosBeneficioAliquota: config.produtosBeneficioAliquota || new Map(),
+    direcao: 'entrada' as const,
   };
 
   const itens: ItemApurado[] = linhas.map((linha) => {

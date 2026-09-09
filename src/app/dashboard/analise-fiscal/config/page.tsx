@@ -20,7 +20,15 @@ type TesRow = {
 
 type CnpjRow = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
 
-type ProdutoRow = { id: string; codigoProduto: string; descricao: string; classificacao: 'ISENTO' | 'TRIBUTADO'; observacao: string | null };
+type ProdutoRow = {
+  id: string;
+  codigoProduto: string;
+  descricao: string;
+  classificacao: 'ISENTO' | 'TRIBUTADO';
+  observacao: string | null;
+  aliquotaBeneficioInterna: number | null;
+  aliquotaBeneficioInterestadual: number | null;
+};
 
 const CHAVE_NF_OPTIONS: TesRow['chaveNf'][] = ['obrigatoria', 'proibida', 'livre'];
 const CHAVE_NF_LABELS: Record<TesRow['chaveNf'], string> = {
@@ -222,11 +230,17 @@ export default function AnaliseFiscalConfigPage() {
     carregarProdutos(empresaProdutoId);
   }
 
-  async function handleEditProduto(id: string, campo: 'classificacao' | 'observacao', valor: string) {
+  async function handleEditProduto(
+    id: string,
+    campo: 'classificacao' | 'observacao' | 'aliquotaBeneficioInterna' | 'aliquotaBeneficioInterestadual',
+    valor: string
+  ) {
+    const ehAliquota = campo === 'aliquotaBeneficioInterna' || campo === 'aliquotaBeneficioInterestadual';
+    const payload = ehAliquota ? { [campo]: valor ? parseFloat(valor) / 100 : null } : { [campo]: valor };
     await fetch(`/api/analise-fiscal/config/produtos/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [campo]: valor }),
+      body: JSON.stringify(payload),
     });
     carregarProdutos(empresaProdutoId);
   }
@@ -561,7 +575,10 @@ export default function AnaliseFiscalConfigPage() {
           Cadastre aqui produtos cuja classificação (isento ou tributado) precisa ser conferida contra a TES lançada
           — ex: um produto tributado que apareceu numa TES marcada como &quot;Isenta&quot; (ver coluna &quot;Natureza
           da operação&quot; na tabela de TES acima). Enquanto um produto não estiver cadastrado aqui, essa checagem
-          não roda pra ele. {empresasComUf.length > 0 && 'O cadastro é segregado por empresa — cada empresa tem sua própria lista, totalmente independente das demais, e a análise usa automaticamente a lista da empresa selecionada em "Empresa a ser analisada".'}
+          não roda pra ele. {empresasComUf.length > 0 && 'O cadastro é segregado por empresa — cada empresa tem sua própria lista, totalmente independente das demais, e a análise usa automaticamente a lista da empresa selecionada em "Empresa a ser analisada".'}{' '}
+          As colunas de benefício (opcionais) são pra produtos com redução de base de cálculo/alíquota reduzida
+          (ex: Convênio ICMS) — quando preenchidas as duas, a alíquota de ICMS esperada passa a ser essa, em vez da
+          alíquota interna padrão/tabela interestadual, só pra esse produto.
         </p>
 
         {empresasComUf.length > 0 && (
@@ -661,6 +678,8 @@ export default function AnaliseFiscalConfigPage() {
                   <th className="py-2 pr-3">Descrição</th>
                   <th className="py-2 pr-3">Classificação</th>
                   <th className="py-2 pr-3">Observação</th>
+                  <th className="py-2 pr-3">Benefício interna (%)</th>
+                  <th className="py-2 pr-3">Benefício interestadual (%)</th>
                   <th className="py-2 pr-3"></th>
                 </tr>
               </thead>
@@ -684,6 +703,32 @@ export default function AnaliseFiscalConfigPage() {
                         defaultValue={p.observacao || ''}
                         onBlur={(e) => e.target.value !== (p.observacao || '') && handleEditProduto(p.id, 'observacao', e.target.value)}
                         className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-48"
+                      />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <input
+                        type="number"
+                        step="0.01"
+                        defaultValue={p.aliquotaBeneficioInterna != null ? (p.aliquotaBeneficioInterna * 100).toString() : ''}
+                        onBlur={(e) => {
+                          const atual = p.aliquotaBeneficioInterna != null ? (p.aliquotaBeneficioInterna * 100).toString() : '';
+                          if (e.target.value !== atual) handleEditProduto(p.id, 'aliquotaBeneficioInterna', e.target.value);
+                        }}
+                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-20"
+                        placeholder="—"
+                      />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <input
+                        type="number"
+                        step="0.01"
+                        defaultValue={p.aliquotaBeneficioInterestadual != null ? (p.aliquotaBeneficioInterestadual * 100).toString() : ''}
+                        onBlur={(e) => {
+                          const atual = p.aliquotaBeneficioInterestadual != null ? (p.aliquotaBeneficioInterestadual * 100).toString() : '';
+                          if (e.target.value !== atual) handleEditProduto(p.id, 'aliquotaBeneficioInterestadual', e.target.value);
+                        }}
+                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-20"
+                        placeholder="—"
                       />
                     </td>
                     <td className="py-2 pr-3">

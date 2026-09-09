@@ -47,6 +47,22 @@ export type RuleContext = {
   // cadastrou nenhum produto, então a regra de cruzamento produto×TES
   // não encontra nada pra comparar e não roda.
   produtosClassificacao: Map<string, ClassificacaoProduto>;
+  // benefício fiscal de redução de base de cálculo/alíquota reduzida por
+  // produto (ex: Convênio ICMS do Amapá pra alho/batata) — chave é o
+  // código do produto normalizado; valor são as alíquotas fixas
+  // esperadas pra operação interna e interestadual desse produto,
+  // substituindo a alíquota interna padrão/tabela interestadual só pra
+  // ele. Vazio = nenhum produto tem benefício cadastrado, regra usa
+  // sempre a tabela padrão (comportamento de antes dessa feature).
+  produtosBeneficioAliquota: Map<string, { interna: number; interestadual: number }>;
+  // Direção da análise — usada por `ruleIcmsTabelaPadrao` pra saber qual
+  // UF representa o "Estado de origem" da mercadoria na tabela
+  // interestadual (Resolução do Senado 22/1989): em ENTRADA é a UF do
+  // fornecedor (linha.uf); em SAÍDA é a UF da própria empresa
+  // (ufPropria), porque quem está expedindo a mercadoria é a empresa,
+  // não o cliente — o destino (linha.uf) não entra na definição de
+  // 7%/12%, só o Estado de origem entra.
+  direcao: 'entrada' | 'saida';
 };
 
 export type RuleDef = {
@@ -190,27 +206,43 @@ export function ruleValorTributadoFixo(campo: 'Pis' | 'Cofins', label: string, a
 
 // mesma lógica da checagem de alíquota de ICMS da TES 102 (tabela
 // 19%/12%/7%/4% conforme UF de origem), reaproveitada por outras TES que
-// seguem a tabela normal de ICMS (129, 157)
+// seguem a tabela normal de ICMS (129, 157, 902 na Saída)
 export function ruleIcmsTabelaPadrao(): RuleDef {
   return {
     id: 'icms_tabela_padrao',
     descricao:
-      'Confere a alíquota de ICMS pela tabela padrão: alíquota interna da empresa quando o fornecedor está na mesma UF, ou a tabela interestadual (19%/12%/7%/4%, conforme a UF de origem e se o produto é importado) quando o fornecedor está em outro estado.',
+      'Confere a alíquota de ICMS pela tabela padrão: alíquota interna da empresa quando o fornecedor/cliente está na mesma UF, ou a tabela interestadual (19%/12%/7%/4%, conforme o Estado de origem da mercadoria e se o produto é importado) quando está em outro estado — em Entradas o Estado de origem é o do fornecedor, em Saídas é o da própria empresa (quem está expedindo). Produtos com benefício de redução de base/alíquota cadastrado (Configurar TES → Produtos) usam a alíquota fixa do benefício em vez da tabela padrão.',
     check: (ctx) => {
-      const { linha, ufPropria, aliquotaInterna } = ctx;
+      const { linha, ufPropria, aliquotaInterna, produtosBeneficioAliquota, direcao } = ctx;
       if (linha.aliquotaIcms == null || !linha.uf) return null;
       const interna = normalizarUf(linha.uf) === normalizarUf(ufPropria);
+      const codigoProduto = extrairCodigoProduto(linha.produtoDescricao);
+      const beneficio = codigoProduto ? produtosBeneficioAliquota.get(codigoProduto) : undefined;
       let esperada: number;
       let motivoBase: string;
-      if (interna) {
+      if (beneficio) {
+        esperada = interna ? beneficio.interna : beneficio.interestadual;
+        motivoBase = `Produto com benefício fiscal (redução de base/alíquota) — operação ${interna ? 'interna' : 'interestadual'}, alíquota fixa esperada`;
+      } else if (interna) {
         esperada = aliquotaInterna;
         motivoBase = `Operação interna (fornecedor em ${linha.uf}, mesma UF da empresa) — alíquota interna esperada`;
       } else {
         const origemCodigo = terminaEmAL(linha.produtoDescricao) ? '1' : somenteDigitos(linha.origem).slice(0, 1) || '0';
-        const resultado = determinarAliquotaInterestadual(origemCodigo, linha.uf);
+        // Resolução do Senado 22/1989: o que define 7%/12% é o Estado de
+        // ORIGEM da mercadoria (de onde ela está sendo expedida), não o
+        // destino. Em Entradas (compra) a origem é a UF do fornecedor
+        // (linha.uf); em Saídas (venda) quem expede é a própria empresa,
+        // então a origem é `ufPropria` — usar linha.uf (UF do cliente,
+        // destino) aqui daria 7% errado sempre que o cliente estivesse em
+        // MG/PR/RS/RJ/SC/SP, mesmo a empresa não sendo dessas UFs.
+        const ufOrigemMercadoria = direcao === 'saida' ? ufPropria : linha.uf;
+        const resultado = determinarAliquotaInterestadual(origemCodigo, ufOrigemMercadoria);
         if (!resultado) return null;
         esperada = resultado.aliquota;
-        motivoBase = resultado.motivo;
+        motivoBase =
+          direcao === 'saida'
+            ? `Venda interestadual (empresa em ${ufPropria} para cliente em ${linha.uf}) — ${resultado.motivo}`
+            : resultado.motivo;
       }
       const encontrada = comoFracao(linha.aliquotaIcms);
       if (Math.abs(encontrada - esperada) > 0.005) {

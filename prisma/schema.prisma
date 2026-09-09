@@ -685,6 +685,15 @@ model AnaliseFiscalProdutoClassificacao {
   descricao      String
   classificacao  String
   observacao     String?
+  // Benefício fiscal de redução de base de cálculo/alíquota reduzida
+  // (ex: Convênio ICMS do Amapá pra alho/batata) — os dois ficam opcionais
+  // e independentes de `classificacao` (um produto pode ser TRIBUTADO e
+  // ainda assim ter alíquota reduzida). Só tem efeito quando os DOIS
+  // estão preenchidos — `ruleIcmsTabelaPadrao` passa a usar esses valores
+  // fixos em vez da alíquota interna padrão/tabela interestadual, só pra
+  // este produto nesta empresa.
+  aliquotaBeneficioInterna       Float?
+  aliquotaBeneficioInterestadual Float?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
