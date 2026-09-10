@@ -145,7 +145,7 @@ const ruleCfopUf: RuleDef = {
 // dele na transferência) não geram divergência.
 const ruleProdutoClassificacaoTes: RuleDef = {
   id: 'generico_produto_classificacao_tes',
-  descricao: 'Confere se a classificação tributária do produto (ISENTO/TRIBUTADO, cadastrada em Configurar TES) bate com a natureza da TES lançada (ISENTA/TRIBUTADA). Não roda em TES de transferência (produto sai isento independente da classificação) nem em produto/TES ainda não classificados.',
+  descricao: 'Confere se a classificação tributária do produto (ISENTO/TRIBUTADO, cadastrada em Configurar TES) bate com a natureza da TES lançada (ISENTA/TRIBUTADA). Não roda em TES de transferência (produto sai isento independente da classificação) nem em produto/TES ainda não classificados. Mensagem exibida: "Inconsistência fiscal: produto classificado como TRIBUTADO foi lançado com TES ISENTA" (ou o inverso, ISENTO com TES TRIBUTADA).',
   check: (ctx) => {
     const { linha } = ctx;
     const meta = ctx.tesMetadataPorCodigo[linha.tes];
