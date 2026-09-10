@@ -93,12 +93,16 @@ const RULES_BAIXA_ESTOQUE: RuleDef[] = [...RULES_TUDO_ISENTO];
 
 const TES_RULE_GROUPS_SAIDA: TesRuleGroupSaida[] = [
   // TES 900/989: venda de mercadoria, tudo isento (evidência real:
-  // 46587/46587 e 426/426 — ICMS, PIS e COFINS sempre zerados)
-  { codigos: ['900'], grupo: 'Venda de mercadoria', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
-  { codigos: ['989'], grupo: 'Venda de mercadoria', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
+  // 46587/46587 e 426/426 — ICMS, PIS e COFINS sempre zerados).
+  // naturezaOperacao ISENTA adicionada em 10/09/2026 — faltava desde a
+  // entrega original, por isso o cruzamento produto×TES nunca rodava
+  // pra Saídas (pego com dado real: produto tributado lançado na 900
+  // sem gerar divergência nenhuma).
+  { codigos: ['900'], grupo: 'Venda de mercadoria', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_TUDO_ISENTO },
+  { codigos: ['989'], grupo: 'Venda de mercadoria', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_TUDO_ISENTO },
   // TES 902: ICMS tributado pela tabela normal, PIS/COFINS isento
   // (evidência real: 9443/9443 com ICMS>0, PIS/COFINS sempre zerados)
-  { codigos: ['902'], grupo: 'Venda com ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_ICMS_TRIBUTADO_PISCOFINS_ISENTO },
+  { codigos: ['902'], grupo: 'Venda com ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: RULES_ICMS_TRIBUTADO_PISCOFINS_ISENTO },
   // TES 903: transferência entre filiais — CFOP fixo não segue a
   // convenção normal de CFOP×UF (evidência real: sempre 5152, mas a
   // amostra só tem casos internos PA→PA; por analogia direta com o CFOP
