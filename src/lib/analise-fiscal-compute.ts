@@ -44,7 +44,7 @@ export function apurarEntradas(
     tesMetadataPorCodigo: Record<string, TesMetadata>;
     cnpjsGrupo: Set<string>;
     produtosClassificacao?: Map<string, ClassificacaoProduto>;
-    produtosBeneficioAliquota?: Map<string, { interna: number; interestadual: number }>;
+    produtosBeneficioAliquota?: Map<string, { interna: number | null; interestadual: number | null }>;
   }
 ): ResultadoApuracao {
   const ctxBase = {

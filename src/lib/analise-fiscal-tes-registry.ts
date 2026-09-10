@@ -54,7 +54,7 @@ export type RuleContext = {
   // substituindo a alíquota interna padrão/tabela interestadual só pra
   // ele. Vazio = nenhum produto tem benefício cadastrado, regra usa
   // sempre a tabela padrão (comportamento de antes dessa feature).
-  produtosBeneficioAliquota: Map<string, { interna: number; interestadual: number }>;
+  produtosBeneficioAliquota: Map<string, { interna: number | null; interestadual: number | null }>;
   // Direção da análise — usada por `ruleIcmsTabelaPadrao` pra saber qual
   // UF representa o "Estado de origem" da mercadoria na tabela
   // interestadual (Resolução do Senado 22/1989): em ENTRADA é a UF do
@@ -220,9 +220,16 @@ export function ruleIcmsTabelaPadrao(): RuleDef {
       const beneficio = codigoProduto ? produtosBeneficioAliquota.get(codigoProduto) : undefined;
       let esperada: number;
       let motivoBase: string;
-      if (beneficio) {
-        esperada = interna ? beneficio.interna : beneficio.interestadual;
-        motivoBase = `Produto com benefício fiscal (redução de base/alíquota) — operação ${interna ? 'interna' : 'interestadual'}, alíquota fixa esperada`;
+      // interna/interestadual são independentes — um produto pode ter só
+      // a interna com benefício (caso real do alho/batata: a redução de
+      // base só vale pra operação interna, a interestadual segue a
+      // tabela padrão normalmente).
+      if (interna && beneficio?.interna != null) {
+        esperada = beneficio.interna;
+        motivoBase = 'Produto com benefício fiscal (redução de base/alíquota) — operação interna, alíquota fixa esperada';
+      } else if (!interna && beneficio?.interestadual != null) {
+        esperada = beneficio.interestadual;
+        motivoBase = 'Produto com benefício fiscal (redução de base/alíquota) — operação interestadual, alíquota fixa esperada';
       } else if (interna) {
         esperada = aliquotaInterna;
         motivoBase = `Operação interna (fornecedor em ${linha.uf}, mesma UF da empresa) — alíquota interna esperada`;

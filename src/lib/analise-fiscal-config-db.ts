@@ -96,22 +96,22 @@ export async function carregarProdutosClassificacao(
 
 // Benefício fiscal de redução de base/alíquota por produto (ex: Convênio
 // ICMS do Amapá pra alho/batata) — mesma segregação por empresa do grupo
-// que a classificação ISENTO/TRIBUTADO. Só entra no mapa quando os dois
-// campos (interna + interestadual) estão preenchidos — produto com só um
-// dos dois não tem efeito na regra (evita alíquota incompleta/ambígua).
+// que a classificação ISENTO/TRIBUTADO. `interna`/`interestadual` são
+// independentes: um produto pode ter só a interna com benefício (caso
+// real de alho/batata — a redução de base só vale pra operação interna;
+// a interestadual segue a tabela padrão normalmente, por isso fica null).
 export async function carregarProdutosBeneficioAliquota(
   companyId: string,
   empresaGrupoId?: string | null
-): Promise<Map<string, { interna: number; interestadual: number }>> {
+): Promise<Map<string, { interna: number | null; interestadual: number | null }>> {
   const linhas = await prisma.analiseFiscalProdutoClassificacao.findMany({
     where: {
       companyId,
       empresaGrupoId: empresaGrupoId ?? null,
-      aliquotaBeneficioInterna: { not: null },
-      aliquotaBeneficioInterestadual: { not: null },
+      OR: [{ aliquotaBeneficioInterna: { not: null } }, { aliquotaBeneficioInterestadual: { not: null } }],
     },
   });
   return new Map(
-    linhas.map((l) => [l.codigoProduto, { interna: l.aliquotaBeneficioInterna as number, interestadual: l.aliquotaBeneficioInterestadual as number }])
+    linhas.map((l) => [l.codigoProduto, { interna: l.aliquotaBeneficioInterna, interestadual: l.aliquotaBeneficioInterestadual }])
   );
 }

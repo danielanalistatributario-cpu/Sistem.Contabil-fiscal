@@ -208,7 +208,7 @@ function AnaliseFiscalSaidaInner() {
       const tesMetadataPorCodigo = cfg.tesMetadataPorCodigo as Record<string, TesMetadata>;
       const cnpjsGrupo = new Set<string>(cfg.cnpjsGrupo);
       const produtosClassificacao = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacao);
-      const produtosBeneficioAliquota = new Map<string, { interna: number; interestadual: number }>(cfg.produtosBeneficioAliquota);
+      const produtosBeneficioAliquota = new Map<string, { interna: number | null; interestadual: number | null }>(cfg.produtosBeneficioAliquota);
 
       const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaSelecionadaId) || null;
       const company = empresaSelecionada

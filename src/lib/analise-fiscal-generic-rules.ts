@@ -181,6 +181,35 @@ const ruleProdutoClassificacaoTes: RuleDef = {
   },
 };
 
+// Produto cadastrado com benefício de alíquota reduzida (Configurar TES
+// → Produtos, ex: alho/batata no Amapá) só faz sentido pra produto
+// TRIBUTADO — o benefício é uma REDUÇÃO da alíquota que incidiria; um
+// produto ISENTO já não tem alíquota nenhuma pra reduzir. Pedido
+// explícito do usuário: sempre que um produto com benefício cadastrado
+// aparecer como ISENTO, sinalizar pra ser tratado (é erro de cadastro,
+// não caso legítimo).
+const ruleProdutoBeneficioIsento: RuleDef = {
+  id: 'generico_produto_beneficio_isento',
+  descricao: 'Sinaliza produto cadastrado com benefício de alíquota reduzida (Configurar TES → Produtos) mas classificado como ISENTO — o benefício só faz sentido pra produto tributado; produto isento não deveria ter esse cadastro.',
+  check: (ctx) => {
+    const { linha } = ctx;
+    const codigo = extrairCodigoProduto(linha.produtoDescricao);
+    if (!codigo) return null;
+    const beneficio = ctx.produtosBeneficioAliquota.get(codigo);
+    if (!beneficio) return null;
+    const classificacao = ctx.produtosClassificacao.get(codigo);
+    if (classificacao !== 'ISENTO') return null;
+    return {
+      severidade: 'ALTO',
+      tipo: 'PRODUTO_BENEFICIO_ISENTO',
+      regraEsperada: `Produto "${linha.produtoDescricao}" tem benefício de alíquota reduzida cadastrado — deveria estar classificado como TRIBUTADO`,
+      informacaoEncontrada: `Produto está cadastrado como ISENTO`,
+      motivo: 'Produto com benefício fiscal de redução de alíquota cadastrado como ISENTO — cadastro inconsistente',
+      sugestaoCorrecao: 'Corrigir a classificação do produto para TRIBUTADO em Configurar TES → Produtos',
+    };
+  },
+};
+
 // CFOP 1152/2152 (transferência entre estabelecimentos, mesmo padrão já
 // calibrado na TES 138 — ver analise-fiscal-tes-registry.ts) numa TES que
 // não está marcada como TRANSFERENCIA é sinal de TES incorreta, mesmo sem
@@ -276,6 +305,7 @@ export const GENERIC_RULES: RuleDef[] = [
   ruleCfopUf,
   ruleCfopTransferencia,
   ruleProdutoClassificacaoTes,
+  ruleProdutoBeneficioIsento,
   ruleValorContabil,
   ruleCalculoImposto('Icms', 'ICMS'),
   ruleCalculoImposto('Pis', 'PIS'),
