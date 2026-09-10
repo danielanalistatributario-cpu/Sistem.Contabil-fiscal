@@ -157,23 +157,25 @@ const ruleProdutoClassificacaoTes: RuleDef = {
     const classificacao = ctx.produtosClassificacao.get(codigo);
     if (!classificacao) return null;
 
+    // Produto TRIBUTADO × TES ISENTA
     if (meta.naturezaOperacao === 'ISENTA' && classificacao === 'TRIBUTADO') {
       return {
         severidade: 'ALTO',
         tipo: 'PRODUTO_CLASSIFICACAO_TES',
         regraEsperada: `TES ${linha.tes} (${meta.grupo}) é isenta — produtos tributados não deveriam ser lançados aqui`,
-        informacaoEncontrada: `Produto "${linha.produtoDescricao}" está cadastrado como TRIBUTADO`,
-        motivo: `Produto classificado como tributado lançado numa TES isenta (${linha.tes})`,
+        informacaoEncontrada: `Produto "${linha.produtoDescricao}" está cadastrado como TRIBUTADO, lançado na TES ${linha.tes}`,
+        motivo: 'Inconsistência fiscal: produto classificado como TRIBUTADO foi lançado com TES ISENTA. Verifique a classificação fiscal do produto ou a TES utilizada.',
         sugestaoCorrecao: 'Verificar se a TES correta seria uma TES tributada para este produto',
       };
     }
+    // Produto ISENTO × TES TRIBUTADA
     if (meta.naturezaOperacao === 'TRIBUTADA' && classificacao === 'ISENTO') {
       return {
         severidade: 'ALTO',
         tipo: 'PRODUTO_CLASSIFICACAO_TES',
         regraEsperada: `TES ${linha.tes} (${meta.grupo}) é tributada — produtos isentos não deveriam ser lançados aqui`,
-        informacaoEncontrada: `Produto "${linha.produtoDescricao}" está cadastrado como ISENTO`,
-        motivo: `Produto classificado como isento lançado numa TES tributada (${linha.tes})`,
+        informacaoEncontrada: `Produto "${linha.produtoDescricao}" está cadastrado como ISENTO, lançado na TES ${linha.tes}`,
+        motivo: 'Inconsistência fiscal: produto classificado como ISENTO foi lançado com TES TRIBUTADA. Verifique a classificação fiscal do produto ou a TES utilizada.',
         sugestaoCorrecao: 'Verificar se a TES correta seria uma TES isenta para este produto',
       };
     }
