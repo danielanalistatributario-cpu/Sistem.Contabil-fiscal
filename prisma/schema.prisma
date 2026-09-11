@@ -656,9 +656,23 @@ model AnaliseFiscalSaidaDivergencia {
 // das TES tem naturezaOperacao calibrada só pra ICMS (ex: TES 102 é
 // "ICMS tributado, PIS/COFINS isento"), então esse campo cobre o
 // tratamento de PIS/COFINS separadamente.
+// empresaGrupoId: mesmo código de TES pode significar coisas diferentes
+// entre filiais do grupo (ex: TES 904 é "Devolução de compras" numa
+// empresa e "Baixa de deterioração" noutra) — segrega o cadastro
+// inteiro por empresa do grupo, cópia completa e independente (não é
+// "geral + exceções"). Opcional pra não quebrar tenants que nunca
+// cadastraram "empresas do grupo" (nesse caso todo mundo usa a lista
+// com empresaGrupoId null, igual ao comportamento de antes desta
+// segregação existir — mesmo padrão de AnaliseFiscalProdutoClassificacao).
+// Cuidado: Postgres trata NULL como distinto num índice único, então o
+// @@unique abaixo sozinho não impede duplicar código quando
+// empresaGrupoId é null (caso geral) — garantirSeedTesConfig cuida
+// disso checando os códigos já existentes antes de inserir, em vez de
+// confiar em skipDuplicates só pro caso geral.
 model AnaliseFiscalTesConfig {
   id                        String   @id @default(cuid())
   companyId                 String
+  empresaGrupoId            String?
   codigo                    String
   grupo                     String
   chaveNf                   String
@@ -668,9 +682,10 @@ model AnaliseFiscalTesConfig {
   naturezaOperacaoPisCofins String   @default("LIVRE")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaGrupo    AnaliseFiscalCnpjGrupo? @relation(fields: [empresaGrupoId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, codigo])
+  @@unique([companyId, empresaGrupoId, codigo])
 }
 
 // Classificação tributária intrínseca do produto (ISENTO ou TRIBUTADO),
@@ -733,6 +748,7 @@ model AnaliseFiscalCnpjGrupo {
   createdAt       DateTime @default(now())
   company         Company                             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   produtos        AnaliseFiscalProdutoClassificacao[]
+  tesConfig       AnaliseFiscalTesConfig[]
 
   @@unique([companyId, cnpj])
 }

@@ -61,6 +61,7 @@ export default function AnaliseFiscalConfigPage() {
   const [novoValidarCfopUf, setNovoValidarCfopUf] = useState(true);
   const [novaNaturezaOperacao, setNovaNaturezaOperacao] = useState<NaturezaOperacao>('LIVRE');
   const [novaNaturezaOperacaoPisCofins, setNovaNaturezaOperacaoPisCofins] = useState<NaturezaOperacao>('LIVRE');
+  const [empresaTesId, setEmpresaTesId] = useState('');
 
   const [novoNomeCnpj, setNovoNomeCnpj] = useState('');
   const [novoCnpj, setNovoCnpj] = useState('');
@@ -95,8 +96,9 @@ export default function AnaliseFiscalConfigPage() {
       )
     : produtos;
 
-  const carregarTes = useCallback(async () => {
-    const res = await fetch('/api/analise-fiscal/config/tes');
+  const carregarTes = useCallback(async (empresaId: string) => {
+    const qs = empresaId ? `?empresaId=${empresaId}` : '';
+    const res = await fetch(`/api/analise-fiscal/config/tes${qs}`);
     if (res.ok) {
       const data = await res.json();
       setTes(data.tes);
@@ -121,9 +123,17 @@ export default function AnaliseFiscalConfigPage() {
   }, []);
 
   useEffect(() => {
-    carregarTes();
     carregarCnpjs();
-  }, [carregarTes, carregarCnpjs]);
+  }, [carregarCnpjs]);
+
+  // Cadastro de TES 100% independente por empresa (não é "geral +
+  // exceções") — recarrega sempre que a empresa selecionada muda,
+  // inclusive na primeira carga com empresaTesId vazio (nesse caso
+  // devolve o cadastro geral, igual ao comportamento de antes desta
+  // segregação existir, pra tenants sem empresa do grupo cadastrada).
+  useEffect(() => {
+    carregarTes(empresaTesId);
+  }, [carregarTes, empresaTesId]);
 
   // Recarrega a lista de produtos sempre que a empresa selecionada muda
   // (inclusive na primeira carga, com empresaProdutoId ainda vazio — nesse
@@ -148,6 +158,7 @@ export default function AnaliseFiscalConfigPage() {
         validarCfopUf: novoValidarCfopUf,
         naturezaOperacao: novaNaturezaOperacao,
         naturezaOperacaoPisCofins: novaNaturezaOperacaoPisCofins,
+        empresaGrupoId: empresaTesId || undefined,
       }),
     });
     const data = await res.json();
@@ -162,7 +173,7 @@ export default function AnaliseFiscalConfigPage() {
     setNovoValidarCfopUf(true);
     setNovaNaturezaOperacao('LIVRE');
     setNovaNaturezaOperacaoPisCofins('LIVRE');
-    carregarTes();
+    carregarTes(empresaTesId);
   }
 
   async function handleEditTes(id: string, campo: 'grupo' | 'chaveNf' | 'permiteProdutos' | 'validarCfopUf' | 'naturezaOperacao' | 'naturezaOperacaoPisCofins', valor: string | boolean) {
@@ -171,13 +182,13 @@ export default function AnaliseFiscalConfigPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [campo]: valor }),
     });
-    carregarTes();
+    carregarTes(empresaTesId);
   }
 
   async function handleRemoveTes(id: string, codigo: string) {
     if (!confirm(`Excluir a TES ${codigo}? Ela voltará a aparecer como "TES nova" na próxima apuração.`)) return;
     await fetch(`/api/analise-fiscal/config/tes/${id}`, { method: 'DELETE' });
-    carregarTes();
+    carregarTes(empresaTesId);
   }
 
   async function handleAddCnpj(e: React.FormEvent) {
@@ -351,7 +362,36 @@ export default function AnaliseFiscalConfigPage() {
 
       <div className="card-surface p-5 space-y-4">
         <h2 className="font-display font-semibold text-brand">TES cadastradas</h2>
+        {empresasComUf.length > 0 && (
+          <p className="text-xs text-gray-500">
+            Cadastro de TES 100% independente por empresa — o mesmo código pode significar coisas diferentes entre
+            filiais (ex: uma TES de devolução numa empresa e de baixa de estoque noutra), então cada empresa tem sua
+            própria lista completa, sem herdar nada de outra.
+          </p>
+        )}
 
+        {empresasComUf.length > 0 && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Gerenciando TES da empresa</label>
+            <select
+              value={empresaTesId}
+              onChange={(e) => setEmpresaTesId(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-64"
+            >
+              <option value="">Selecione a empresa...</option>
+              {empresasComUf.map((e) => (
+                <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {empresasComUf.length > 0 && !empresaTesId ? (
+          <p className="text-sm text-gray-400 text-center py-6 bg-gray-50 border border-gray-100 rounded-lg">
+            Selecione uma empresa acima para ver ou cadastrar as TES dela.
+          </p>
+        ) : (
+          <>
         <form onSubmit={handleAddTes} className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-4">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Código</label>
@@ -506,6 +546,8 @@ export default function AnaliseFiscalConfigPage() {
           </table>
           {tes.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Carregando...</p>}
         </div>
+          </>
+        )}
       </div>
 
       <div className="card-surface p-5 space-y-4">

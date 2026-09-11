@@ -28,15 +28,15 @@ export async function GET(req: NextRequest) {
 
   const empresaIdParam = req.nextUrl.searchParams.get('empresaId');
 
-  const [tesMetadataPorCodigo, cnpjsGrupo, empresasGrupo, company] = await Promise.all([
-    carregarTesMetadataPorCodigo(session.currentCompanyId),
+  const [cnpjsGrupo, empresasGrupo, company] = await Promise.all([
     carregarCnpjsGrupo(session.currentCompanyId),
     carregarEmpresasGrupo(session.currentCompanyId),
     prisma.company.findUnique({ where: { id: session.currentCompanyId }, select: { ufDestino: true, aliquotaInterna: true } }),
   ]);
 
   const empresaValida = empresaIdParam && empresasGrupo.some((e) => e.id === empresaIdParam) ? empresaIdParam : null;
-  const [produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota] = await Promise.all([
+  const [tesMetadataPorCodigo, produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota] = await Promise.all([
+    carregarTesMetadataPorCodigo(session.currentCompanyId, empresaValida),
     carregarProdutosClassificacao(session.currentCompanyId, empresaValida),
     carregarProdutosClassificacaoPisCofins(session.currentCompanyId, empresaValida),
     carregarProdutosBeneficioAliquota(session.currentCompanyId, empresaValida),

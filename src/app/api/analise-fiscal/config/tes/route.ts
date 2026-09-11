@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
-import { garantirSeedTesConfig } from '@/lib/analise-fiscal-config-db';
+import { garantirSeedTesConfig, resolverEmpresaGrupoId } from '@/lib/analise-fiscal-config-db';
 
 const CHAVE_NF_VALIDAS = ['obrigatoria', 'proibida', 'livre'];
 const NATUREZA_OPERACAO_VALIDAS = ['LIVRE', 'ISENTA', 'TRIBUTADA', 'TRANSFERENCIA'];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.currentCompanyId) {
     return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
@@ -16,9 +16,12 @@ export async function GET() {
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 
-  await garantirSeedTesConfig(session.currentCompanyId);
+  const empresaIdParam = req.nextUrl.searchParams.get('empresaId');
+  const { empresaGrupoId } = await resolverEmpresaGrupoId(session.currentCompanyId, empresaIdParam, false);
+
+  await garantirSeedTesConfig(session.currentCompanyId, empresaGrupoId);
   const tes = await prisma.analiseFiscalTesConfig.findMany({
-    where: { companyId: session.currentCompanyId },
+    where: { companyId: session.currentCompanyId, empresaGrupoId },
     orderBy: { codigo: 'asc' },
   });
 
@@ -56,15 +59,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existente = await prisma.analiseFiscalTesConfig.findUnique({
-    where: { companyId_codigo: { companyId: session.currentCompanyId, codigo } },
+  const { empresaGrupoId, erro } = await resolverEmpresaGrupoId(
+    session.currentCompanyId,
+    body?.empresaGrupoId || null,
+    true,
+    'Selecione a empresa para gerenciar as TES.'
+  );
+  if (erro) {
+    return NextResponse.json({ error: erro }, { status: 400 });
+  }
+
+  const existente = await prisma.analiseFiscalTesConfig.findFirst({
+    where: { companyId: session.currentCompanyId, empresaGrupoId, codigo },
   });
   if (existente) {
     return NextResponse.json({ error: `A TES ${codigo} já está cadastrada.` }, { status: 400 });
   }
 
   const tes = await prisma.analiseFiscalTesConfig.create({
-    data: { companyId: session.currentCompanyId, codigo, grupo, chaveNf, permiteProdutos, validarCfopUf, naturezaOperacao, naturezaOperacaoPisCofins },
+    data: { companyId: session.currentCompanyId, empresaGrupoId, codigo, grupo, chaveNf, permiteProdutos, validarCfopUf, naturezaOperacao, naturezaOperacaoPisCofins },
   });
 
   await logActivity(session.id, 'CADASTROU_TES_ANALISE_FISCAL', `TES ${codigo} — ${grupo}`, session.currentCompanyId);
