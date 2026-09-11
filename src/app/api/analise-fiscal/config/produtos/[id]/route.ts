@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const classificacaoPisCofins = body?.classificacaoPisCofins !== undefined
     ? (body.classificacaoPisCofins === null || body.classificacaoPisCofins === '' ? null : String(body.classificacaoPisCofins).trim())
     : atual.classificacaoPisCofins;
+  const ncm = body?.ncm !== undefined ? (String(body.ncm).trim() || null) : atual.ncm;
   const observacao = body?.observacao !== undefined ? (String(body.observacao).trim() || null) : atual.observacao;
   const aliquotaBeneficioInterna = body?.aliquotaBeneficioInterna !== undefined
     ? (body.aliquotaBeneficioInterna === null || body.aliquotaBeneficioInterna === '' ? null : Number(body.aliquotaBeneficioInterna))
@@ -50,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const produto = await prisma.analiseFiscalProdutoClassificacao.update({
     where: { id: params.id },
-    data: { descricao, classificacao, classificacaoPisCofins, observacao, aliquotaBeneficioInterna, aliquotaBeneficioInterestadual },
+    data: { descricao, classificacao, classificacaoPisCofins, ncm, observacao, aliquotaBeneficioInterna, aliquotaBeneficioInterestadual },
   });
 
   await logActivity(session.id, 'EDITOU_PRODUTO_CLASSIFICACAO_ANALISE_FISCAL', `${atual.codigoProduto} — ${descricao} (${classificacao})`, session.currentCompanyId);

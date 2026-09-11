@@ -694,6 +694,9 @@ model AnaliseFiscalProdutoClassificacao {
   // preenchido simplesmente não entra no cruzamento produto×TES de
   // PIS/COFINS.
   classificacaoPisCofins String?
+  // NCM do produto (Nomenclatura Comum do Mercosul) — opcional, só
+  // cadastro de referência, não entra em nenhuma regra de divergência.
+  ncm            String?
   observacao     String?
   // Benefício fiscal de redução de base de cálculo/alíquota reduzida
   // (ex: Convênio ICMS do Amapá pra alho/batata) — os dois ficam opcionais

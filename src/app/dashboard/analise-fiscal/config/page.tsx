@@ -27,6 +27,7 @@ type ProdutoRow = {
   descricao: string;
   classificacao: 'ISENTO' | 'TRIBUTADO';
   classificacaoPisCofins: 'ISENTO' | 'TRIBUTADO' | null;
+  ncm: string | null;
   observacao: string | null;
   aliquotaBeneficioInterna: number | null;
   aliquotaBeneficioInterestadual: number | null;
@@ -72,15 +73,27 @@ export default function AnaliseFiscalConfigPage() {
   const [novaDescricaoProduto, setNovaDescricaoProduto] = useState('');
   const [novaClassificacaoProduto, setNovaClassificacaoProduto] = useState<'ISENTO' | 'TRIBUTADO'>('TRIBUTADO');
   const [novaObservacaoProduto, setNovaObservacaoProduto] = useState('');
+  const [novoNcmProduto, setNovoNcmProduto] = useState('');
   const [importando, setImportando] = useState(false);
   const [resultadoImportacao, setResultadoImportacao] = useState<string | null>(null);
   const [empresaProdutoId, setEmpresaProdutoId] = useState('');
+  const [buscaProduto, setBuscaProduto] = useState('');
   const inputImportarRef = useRef<HTMLInputElement>(null);
 
   // Só empresas com UF preenchida contam pra segregação de produtos —
   // mesmo filtro que o seletor "Empresa a ser analisada" de
   // Entradas/Saídas já usa (carregarEmpresasGrupo no backend).
   const empresasComUf = cnpjs.filter((c) => c.uf);
+
+  // Filtro client-side por código ou descrição — a lista já vem inteira
+  // da empresa selecionada (pode ter centenas/milhares de produtos), não
+  // precisa de ida ao servidor pra buscar.
+  const termoBusca = buscaProduto.trim().toLowerCase();
+  const produtosFiltrados = termoBusca
+    ? produtos.filter(
+        (p) => p.codigoProduto.toLowerCase().includes(termoBusca) || p.descricao.toLowerCase().includes(termoBusca)
+      )
+    : produtos;
 
   const carregarTes = useCallback(async () => {
     const res = await fetch('/api/analise-fiscal/config/tes');
@@ -118,6 +131,7 @@ export default function AnaliseFiscalConfigPage() {
   // segregação existir, pra tenants sem empresa do grupo cadastrada).
   useEffect(() => {
     carregarProdutos(empresaProdutoId);
+    setBuscaProduto('');
   }, [carregarProdutos, empresaProdutoId]);
 
   async function handleAddTes(e: React.FormEvent) {
@@ -220,6 +234,7 @@ export default function AnaliseFiscalConfigPage() {
         descricao: novaDescricaoProduto,
         classificacao: novaClassificacaoProduto,
         observacao: novaObservacaoProduto || undefined,
+        ncm: novoNcmProduto || undefined,
         empresaGrupoId: empresaProdutoId || undefined,
       }),
     });
@@ -232,18 +247,20 @@ export default function AnaliseFiscalConfigPage() {
     setNovaDescricaoProduto('');
     setNovaClassificacaoProduto('TRIBUTADO');
     setNovaObservacaoProduto('');
+    setNovoNcmProduto('');
     carregarProdutos(empresaProdutoId);
   }
 
   async function handleEditProduto(
     id: string,
-    campo: 'classificacao' | 'classificacaoPisCofins' | 'observacao' | 'aliquotaBeneficioInterna' | 'aliquotaBeneficioInterestadual',
+    campo: 'classificacao' | 'classificacaoPisCofins' | 'observacao' | 'ncm' | 'aliquotaBeneficioInterna' | 'aliquotaBeneficioInterestadual',
     valor: string
   ) {
     const ehAliquota = campo === 'aliquotaBeneficioInterna' || campo === 'aliquotaBeneficioInterestadual';
+    const ehOpcionalTexto = campo === 'classificacaoPisCofins' || campo === 'ncm';
     const payload = ehAliquota
       ? { [campo]: valor ? parseFloat(valor) / 100 : null }
-      : { [campo]: campo === 'classificacaoPisCofins' && !valor ? null : valor };
+      : { [campo]: ehOpcionalTexto && !valor ? null : valor };
     await fetch(`/api/analise-fiscal/config/produtos/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -655,6 +672,16 @@ export default function AnaliseFiscalConfigPage() {
             </div>
             {resultadoImportacao && <p className="text-xs text-teal">{resultadoImportacao}</p>}
 
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Pesquisar produto cadastrado (código ou descrição)</label>
+              <input
+                value={buscaProduto}
+                onChange={(e) => setBuscaProduto(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-72"
+                placeholder="ex: 229.009 ou MORANGO"
+              />
+            </div>
+
             <form onSubmit={handleAddProduto} className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Código do produto</label>
@@ -688,6 +715,15 @@ export default function AnaliseFiscalConfigPage() {
                 </select>
               </div>
               <div>
+                <label className="block text-xs text-gray-500 mb-1">NCM (opcional)</label>
+                <input
+                  value={novoNcmProduto}
+                  onChange={(e) => setNovoNcmProduto(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-28"
+                  placeholder="ex: 0803.10.10"
+                />
+              </div>
+              <div>
                 <label className="block text-xs text-gray-500 mb-1">Observação (opcional)</label>
                 <input
                   value={novaObservacaoProduto}
@@ -709,6 +745,7 @@ export default function AnaliseFiscalConfigPage() {
                   <th className="py-2 pr-3">Descrição</th>
                   <th className="py-2 pr-3">Classificação ICMS</th>
                   <th className="py-2 pr-3">Classificação PIS/COFINS</th>
+                  <th className="py-2 pr-3">NCM</th>
                   <th className="py-2 pr-3">Observação</th>
                   <th className="py-2 pr-3">Benefício interna (%)</th>
                   <th className="py-2 pr-3">Benefício interestadual (%)</th>
@@ -716,7 +753,7 @@ export default function AnaliseFiscalConfigPage() {
                 </tr>
               </thead>
               <tbody>
-                {produtos.map((p) => (
+                {produtosFiltrados.map((p) => (
                   <tr key={p.id} className="border-b border-gray-50">
                     <td className="py-2 pr-3 font-mono">{p.codigoProduto}</td>
                     <td className="py-2 pr-3">{p.descricao}</td>
@@ -740,6 +777,14 @@ export default function AnaliseFiscalConfigPage() {
                         <option value="TRIBUTADO">Tributado</option>
                         <option value="ISENTO">Isento</option>
                       </select>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <input
+                        defaultValue={p.ncm || ''}
+                        onBlur={(e) => e.target.value !== (p.ncm || '') && handleEditProduto(p.id, 'ncm', e.target.value)}
+                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-24 font-mono"
+                        placeholder="—"
+                      />
                     </td>
                     <td className="py-2 pr-3">
                       <input
@@ -784,6 +829,9 @@ export default function AnaliseFiscalConfigPage() {
               </tbody>
             </table>
             {produtos.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhum produto cadastrado ainda.</p>}
+            {produtos.length > 0 && produtosFiltrados.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-6">Nenhum produto encontrado para &quot;{buscaProduto}&quot;.</p>
+            )}
           </>
         )}
       </div>

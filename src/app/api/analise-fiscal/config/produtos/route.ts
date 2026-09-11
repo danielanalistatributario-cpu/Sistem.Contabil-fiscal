@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
   const descricao = String(body?.descricao || '').trim();
   const classificacao = String(body?.classificacao || '').trim();
   const classificacaoPisCofins = body?.classificacaoPisCofins ? String(body.classificacaoPisCofins).trim() : null;
+  const ncm = body?.ncm ? String(body.ncm).trim() : null;
   const observacao = body?.observacao ? String(body.observacao).trim() : null;
   const aliquotaBeneficioInterna = body?.aliquotaBeneficioInterna ? Number(body.aliquotaBeneficioInterna) : null;
   const aliquotaBeneficioInterestadual = body?.aliquotaBeneficioInterestadual ? Number(body.aliquotaBeneficioInterestadual) : null;
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest) {
   }
 
   const produto = await prisma.analiseFiscalProdutoClassificacao.create({
-    data: { companyId: session.currentCompanyId, empresaGrupoId, codigoProduto, descricao, classificacao, classificacaoPisCofins, observacao, aliquotaBeneficioInterna, aliquotaBeneficioInterestadual },
+    data: { companyId: session.currentCompanyId, empresaGrupoId, codigoProduto, descricao, classificacao, classificacaoPisCofins, ncm, observacao, aliquotaBeneficioInterna, aliquotaBeneficioInterestadual },
   });
 
   await logActivity(session.id, 'CADASTROU_PRODUTO_CLASSIFICACAO_ANALISE_FISCAL', `${codigoProduto} — ${descricao} (${classificacao})`, session.currentCompanyId);
