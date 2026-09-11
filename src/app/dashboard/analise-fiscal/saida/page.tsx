@@ -208,6 +208,7 @@ function AnaliseFiscalSaidaInner() {
       const tesMetadataPorCodigo = cfg.tesMetadataPorCodigo as Record<string, TesMetadata>;
       const cnpjsGrupo = new Set<string>(cfg.cnpjsGrupo);
       const produtosClassificacao = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacao);
+      const produtosClassificacaoPisCofins = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacaoPisCofins);
       const produtosBeneficioAliquota = new Map<string, { interna: number | null; interestadual: number | null }>(cfg.produtosBeneficioAliquota);
 
       const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaSelecionadaId) || null;
@@ -216,7 +217,7 @@ function AnaliseFiscalSaidaInner() {
         : cfg.company;
 
       setProgresso({ fase: 'Calculando divergências...', loteAtual: 0, totalLotes: 0 });
-      const { itens, resumo } = apurarSaidas(leitura.rows, company, { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao, produtosBeneficioAliquota });
+      const { itens, resumo } = apurarSaidas(leitura.rows, company, { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota });
 
       setProgresso({ fase: 'Criando apuração...', loteAtual: 0, totalLotes: 0 });
       const resIniciar = await fetch('/api/analise-fiscal/saida/apurar/iniciar', {

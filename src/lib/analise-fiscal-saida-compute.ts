@@ -50,6 +50,7 @@ export function apurarSaidas(
     tesMetadataPorCodigo: Record<string, TesMetadata>;
     cnpjsGrupo: Set<string>;
     produtosClassificacao?: Map<string, ClassificacaoProduto>;
+    produtosClassificacaoPisCofins?: Map<string, ClassificacaoProduto>;
     produtosBeneficioAliquota?: Map<string, { interna: number | null; interestadual: number | null }>;
   }
 ): ResultadoApuracaoSaida {
@@ -59,6 +60,7 @@ export function apurarSaidas(
     cnpjsGrupo: config.cnpjsGrupo,
     tesMetadataPorCodigo: config.tesMetadataPorCodigo,
     produtosClassificacao: config.produtosClassificacao || new Map(),
+    produtosClassificacaoPisCofins: config.produtosClassificacaoPisCofins || new Map(),
     produtosBeneficioAliquota: config.produtosBeneficioAliquota || new Map(),
     direcao: 'saida' as const,
   };

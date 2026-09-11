@@ -26,17 +26,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const permiteProdutos = body?.permiteProdutos !== undefined ? !!body.permiteProdutos : tesAtual.permiteProdutos;
   const validarCfopUf = body?.validarCfopUf !== undefined ? !!body.validarCfopUf : tesAtual.validarCfopUf;
   const naturezaOperacao = body?.naturezaOperacao !== undefined ? String(body.naturezaOperacao).trim() : tesAtual.naturezaOperacao;
+  const naturezaOperacaoPisCofins = body?.naturezaOperacaoPisCofins !== undefined
+    ? String(body.naturezaOperacaoPisCofins).trim()
+    : tesAtual.naturezaOperacaoPisCofins;
 
-  if (!grupo || !CHAVE_NF_VALIDAS.includes(chaveNf) || !NATUREZA_OPERACAO_VALIDAS.includes(naturezaOperacao)) {
+  if (
+    !grupo ||
+    !CHAVE_NF_VALIDAS.includes(chaveNf) ||
+    !NATUREZA_OPERACAO_VALIDAS.includes(naturezaOperacao) ||
+    !NATUREZA_OPERACAO_VALIDAS.includes(naturezaOperacaoPisCofins)
+  ) {
     return NextResponse.json(
-      { error: 'Grupo, política de Chave NF (obrigatoria/proibida/livre) e natureza da operação (LIVRE/ISENTA/TRIBUTADA/TRANSFERENCIA) são obrigatórios.' },
+      { error: 'Grupo, política de Chave NF (obrigatoria/proibida/livre) e natureza da operação de ICMS e de PIS/COFINS (LIVRE/ISENTA/TRIBUTADA/TRANSFERENCIA) são obrigatórios.' },
       { status: 400 }
     );
   }
 
   const tes = await prisma.analiseFiscalTesConfig.update({
     where: { id: params.id },
-    data: { grupo, chaveNf, permiteProdutos, validarCfopUf, naturezaOperacao },
+    data: { grupo, chaveNf, permiteProdutos, validarCfopUf, naturezaOperacao, naturezaOperacaoPisCofins },
   });
 
   await logActivity(session.id, 'EDITOU_TES_ANALISE_FISCAL', `TES ${tes.codigo} — ${grupo}`, session.currentCompanyId);

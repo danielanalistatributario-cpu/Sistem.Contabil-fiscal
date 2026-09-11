@@ -98,17 +98,17 @@ const TES_RULE_GROUPS_SAIDA: TesRuleGroupSaida[] = [
   // entrega original, por isso o cruzamento produto×TES nunca rodava
   // pra Saídas (pego com dado real: produto tributado lançado na 900
   // sem gerar divergência nenhuma).
-  { codigos: ['900'], grupo: 'Venda de mercadoria', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_TUDO_ISENTO },
-  { codigos: ['989'], grupo: 'Venda de mercadoria', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_TUDO_ISENTO },
+  { codigos: ['900'], grupo: 'Venda de mercadoria', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_TUDO_ISENTO },
+  { codigos: ['989'], grupo: 'Venda de mercadoria', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_TUDO_ISENTO },
   // TES 902: ICMS tributado pela tabela normal, PIS/COFINS isento
   // (evidência real: 9443/9443 com ICMS>0, PIS/COFINS sempre zerados)
-  { codigos: ['902'], grupo: 'Venda com ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: RULES_ICMS_TRIBUTADO_PISCOFINS_ISENTO },
+  { codigos: ['902'], grupo: 'Venda com ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_ICMS_TRIBUTADO_PISCOFINS_ISENTO },
   // TES 903: transferência entre filiais — CFOP fixo não segue a
   // convenção normal de CFOP×UF (evidência real: sempre 5152, mas a
   // amostra só tem casos internos PA→PA; por analogia direta com o CFOP
   // fixo de compra da TES 138, a regra própria já cobre 5152/6152 sem
   // precisar da checagem genérica)
-  { codigos: ['903'], grupo: 'Transferência entre filiais', chaveNf: 'obrigatoria', permiteProdutos: true, validarCfopUf: false, rules: RULES_903 },
+  { codigos: ['903'], grupo: 'Transferência entre filiais', chaveNf: 'obrigatoria', permiteProdutos: true, validarCfopUf: false, naturezaOperacaoPisCofins: 'TRANSFERENCIA', rules: RULES_903 },
   // TES 919/907: baixa de deterioração/estoque — CFOP de ajuste interno
   // (5927), não segue a convenção de CFOP×UF (evidência real: sempre
   // 5927, cliente é a própria empresa)
@@ -117,10 +117,10 @@ const TES_RULE_GROUPS_SAIDA: TesRuleGroupSaida[] = [
   // TES 939: venda sem ICMS, com PIS/COFINS tributado a 1,65%/7,60%
   // (evidência real: 767/767 com ICMS sempre zerado, PIS/COFINS sempre
   // tributado nessas alíquotas exatas)
-  { codigos: ['939'], grupo: 'Venda s/ICMS c/PIS,COFINS', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_ICMS_ISENTO_PISCOFINS_TRIBUTADO },
+  { codigos: ['939'], grupo: 'Venda s/ICMS c/PIS,COFINS', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'TRIBUTADA', rules: RULES_ICMS_ISENTO_PISCOFINS_TRIBUTADO },
   // TES 955: venda Suframa (Zona Franca) sem ICMS — CFOP fixo 6110,
   // sempre interestadual (evidência real: 362/362), tudo isento
-  { codigos: ['955'], grupo: 'Venda Suframa s/ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
+  { codigos: ['955'], grupo: 'Venda Suframa s/ICMS', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_TUDO_ISENTO },
 
   // ---- metadados só (amostra pequena no arquivo real testado: <1% das
   // linhas cada, insuficiente pra calibrar regra profunda com confiança)

@@ -16,6 +16,7 @@ type TesRow = {
   permiteProdutos: boolean;
   validarCfopUf: boolean;
   naturezaOperacao: NaturezaOperacao;
+  naturezaOperacaoPisCofins: NaturezaOperacao;
 };
 
 type CnpjRow = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
@@ -25,6 +26,7 @@ type ProdutoRow = {
   codigoProduto: string;
   descricao: string;
   classificacao: 'ISENTO' | 'TRIBUTADO';
+  classificacaoPisCofins: 'ISENTO' | 'TRIBUTADO' | null;
   observacao: string | null;
   aliquotaBeneficioInterna: number | null;
   aliquotaBeneficioInterestadual: number | null;
@@ -57,6 +59,7 @@ export default function AnaliseFiscalConfigPage() {
   const [novoPermiteProdutos, setNovoPermiteProdutos] = useState(true);
   const [novoValidarCfopUf, setNovoValidarCfopUf] = useState(true);
   const [novaNaturezaOperacao, setNovaNaturezaOperacao] = useState<NaturezaOperacao>('LIVRE');
+  const [novaNaturezaOperacaoPisCofins, setNovaNaturezaOperacaoPisCofins] = useState<NaturezaOperacao>('LIVRE');
 
   const [novoNomeCnpj, setNovoNomeCnpj] = useState('');
   const [novoCnpj, setNovoCnpj] = useState('');
@@ -130,6 +133,7 @@ export default function AnaliseFiscalConfigPage() {
         permiteProdutos: novoPermiteProdutos,
         validarCfopUf: novoValidarCfopUf,
         naturezaOperacao: novaNaturezaOperacao,
+        naturezaOperacaoPisCofins: novaNaturezaOperacaoPisCofins,
       }),
     });
     const data = await res.json();
@@ -143,10 +147,11 @@ export default function AnaliseFiscalConfigPage() {
     setNovoPermiteProdutos(true);
     setNovoValidarCfopUf(true);
     setNovaNaturezaOperacao('LIVRE');
+    setNovaNaturezaOperacaoPisCofins('LIVRE');
     carregarTes();
   }
 
-  async function handleEditTes(id: string, campo: 'grupo' | 'chaveNf' | 'permiteProdutos' | 'validarCfopUf' | 'naturezaOperacao', valor: string | boolean) {
+  async function handleEditTes(id: string, campo: 'grupo' | 'chaveNf' | 'permiteProdutos' | 'validarCfopUf' | 'naturezaOperacao' | 'naturezaOperacaoPisCofins', valor: string | boolean) {
     await fetch(`/api/analise-fiscal/config/tes/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -232,11 +237,13 @@ export default function AnaliseFiscalConfigPage() {
 
   async function handleEditProduto(
     id: string,
-    campo: 'classificacao' | 'observacao' | 'aliquotaBeneficioInterna' | 'aliquotaBeneficioInterestadual',
+    campo: 'classificacao' | 'classificacaoPisCofins' | 'observacao' | 'aliquotaBeneficioInterna' | 'aliquotaBeneficioInterestadual',
     valor: string
   ) {
     const ehAliquota = campo === 'aliquotaBeneficioInterna' || campo === 'aliquotaBeneficioInterestadual';
-    const payload = ehAliquota ? { [campo]: valor ? parseFloat(valor) / 100 : null } : { [campo]: valor };
+    const payload = ehAliquota
+      ? { [campo]: valor ? parseFloat(valor) / 100 : null }
+      : { [campo]: campo === 'classificacaoPisCofins' && !valor ? null : valor };
     await fetch(`/api/analise-fiscal/config/produtos/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -370,10 +377,22 @@ export default function AnaliseFiscalConfigPage() {
             Valida CFOP×UF
           </label>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Natureza da operação</label>
+            <label className="block text-xs text-gray-500 mb-1">Natureza da operação (ICMS)</label>
             <select
               value={novaNaturezaOperacao}
               onChange={(e) => setNovaNaturezaOperacao(e.target.value as NaturezaOperacao)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+            >
+              {NATUREZA_OPERACAO_OPTIONS.map((n) => (
+                <option key={n} value={n}>{NATUREZA_OPERACAO_LABELS[n]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Natureza PIS/COFINS</label>
+            <select
+              value={novaNaturezaOperacaoPisCofins}
+              onChange={(e) => setNovaNaturezaOperacaoPisCofins(e.target.value as NaturezaOperacao)}
               className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
             >
               {NATUREZA_OPERACAO_OPTIONS.map((n) => (
@@ -396,7 +415,8 @@ export default function AnaliseFiscalConfigPage() {
                 <th className="py-2 pr-3">Chave NF</th>
                 <th className="py-2 pr-3">Permite produtos</th>
                 <th className="py-2 pr-3">Valida CFOP×UF</th>
-                <th className="py-2 pr-3">Natureza da operação</th>
+                <th className="py-2 pr-3">Natureza da operação (ICMS)</th>
+                <th className="py-2 pr-3">Natureza PIS/COFINS</th>
                 <th className="py-2 pr-3"></th>
               </tr>
             </thead>
@@ -440,6 +460,17 @@ export default function AnaliseFiscalConfigPage() {
                     <select
                       value={t.naturezaOperacao}
                       onChange={(e) => handleEditTes(t.id, 'naturezaOperacao', e.target.value)}
+                      className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                    >
+                      {NATUREZA_OPERACAO_OPTIONS.map((n) => (
+                        <option key={n} value={n}>{NATUREZA_OPERACAO_LABELS[n]}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="py-2 pr-3">
+                    <select
+                      value={t.naturezaOperacaoPisCofins}
+                      onChange={(e) => handleEditTes(t.id, 'naturezaOperacaoPisCofins', e.target.value)}
                       className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
                     >
                       {NATUREZA_OPERACAO_OPTIONS.map((n) => (
@@ -676,7 +707,8 @@ export default function AnaliseFiscalConfigPage() {
                 <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
                   <th className="py-2 pr-3">Código</th>
                   <th className="py-2 pr-3">Descrição</th>
-                  <th className="py-2 pr-3">Classificação</th>
+                  <th className="py-2 pr-3">Classificação ICMS</th>
+                  <th className="py-2 pr-3">Classificação PIS/COFINS</th>
                   <th className="py-2 pr-3">Observação</th>
                   <th className="py-2 pr-3">Benefício interna (%)</th>
                   <th className="py-2 pr-3">Benefício interestadual (%)</th>
@@ -694,6 +726,17 @@ export default function AnaliseFiscalConfigPage() {
                         onChange={(e) => handleEditProduto(p.id, 'classificacao', e.target.value)}
                         className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
                       >
+                        <option value="TRIBUTADO">Tributado</option>
+                        <option value="ISENTO">Isento</option>
+                      </select>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <select
+                        value={p.classificacaoPisCofins || ''}
+                        onChange={(e) => handleEditProduto(p.id, 'classificacaoPisCofins', e.target.value)}
+                        className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                      >
+                        <option value="">— não classificado —</option>
                         <option value="TRIBUTADO">Tributado</option>
                         <option value="ISENTO">Isento</option>
                       </select>

@@ -183,6 +183,51 @@ const ruleProdutoClassificacaoTes: RuleDef = {
   },
 };
 
+// Mesmo cruzamento produto×TES da regra acima, eixo independente de
+// PIS/COFINS — a maioria das TES tem naturezaOperacao calibrada só pra
+// ICMS (ex: TES 102 é "ICMS tributado, PIS/COFINS isento"), por isso
+// existe um segundo cadastro (classificacaoPisCofins/naturezaOperacaoPisCofins)
+// pra não confundir os dois tributos. Pedido explícito do usuário.
+const ruleProdutoClassificacaoPisCofinsTes: RuleDef = {
+  id: 'generico_produto_classificacao_piscofins_tes',
+  descricao: 'Confere se a classificação de PIS/COFINS do produto (ISENTO/TRIBUTADO, cadastrada em Configurar TES) bate com a natureza de PIS/COFINS da TES lançada (ISENTA/TRIBUTADA). Eixo independente da classificação de ICMS — um produto pode ser tributado de ICMS e isento de PIS/COFINS, por exemplo. Não roda em TES de transferência nem em produto/TES ainda não classificados nesse eixo.',
+  check: (ctx) => {
+    const { linha } = ctx;
+    const meta = ctx.tesMetadataPorCodigo[linha.tes];
+    if (!meta || !meta.naturezaOperacaoPisCofins) return null;
+    if (meta.naturezaOperacaoPisCofins === 'LIVRE' || meta.naturezaOperacaoPisCofins === 'TRANSFERENCIA') return null;
+
+    const codigo = extrairCodigoProduto(linha.produtoDescricao);
+    if (!codigo) return null;
+    const classificacao = ctx.produtosClassificacaoPisCofins.get(codigo);
+    if (!classificacao) return null;
+
+    // Produto TRIBUTADO de PIS/COFINS × TES ISENTA de PIS/COFINS
+    if (meta.naturezaOperacaoPisCofins === 'ISENTA' && classificacao === 'TRIBUTADO') {
+      return {
+        severidade: 'ALTO',
+        tipo: 'PRODUTO_CLASSIFICACAO_PISCOFINS_TES',
+        regraEsperada: `TES ${linha.tes} (${meta.grupo}) é isenta de PIS/COFINS — produtos tributados de PIS/COFINS não deveriam ser lançados aqui`,
+        informacaoEncontrada: `Produto "${linha.produtoDescricao}" está cadastrado como TRIBUTADO de PIS/COFINS, lançado na TES ${linha.tes}`,
+        motivo: 'Inconsistência fiscal (PIS/COFINS): produto classificado como TRIBUTADO de PIS/COFINS foi lançado com TES isenta de PIS/COFINS. Verifique a classificação fiscal do produto ou a TES utilizada.',
+        sugestaoCorrecao: 'Verificar se a TES correta seria uma TES tributada de PIS/COFINS para este produto',
+      };
+    }
+    // Produto ISENTO de PIS/COFINS × TES TRIBUTADA de PIS/COFINS
+    if (meta.naturezaOperacaoPisCofins === 'TRIBUTADA' && classificacao === 'ISENTO') {
+      return {
+        severidade: 'ALTO',
+        tipo: 'PRODUTO_CLASSIFICACAO_PISCOFINS_TES',
+        regraEsperada: `TES ${linha.tes} (${meta.grupo}) é tributada de PIS/COFINS — produtos isentos de PIS/COFINS não deveriam ser lançados aqui`,
+        informacaoEncontrada: `Produto "${linha.produtoDescricao}" está cadastrado como ISENTO de PIS/COFINS, lançado na TES ${linha.tes}`,
+        motivo: 'Inconsistência fiscal (PIS/COFINS): produto classificado como ISENTO de PIS/COFINS foi lançado com TES tributada de PIS/COFINS. Verifique a classificação fiscal do produto ou a TES utilizada.',
+        sugestaoCorrecao: 'Verificar se a TES correta seria uma TES isenta de PIS/COFINS para este produto',
+      };
+    }
+    return null;
+  },
+};
+
 // Produto cadastrado com benefício de alíquota reduzida (Configurar TES
 // → Produtos, ex: alho/batata no Amapá) só faz sentido pra produto
 // TRIBUTADO — o benefício é uma REDUÇÃO da alíquota que incidiria; um
@@ -307,6 +352,7 @@ export const GENERIC_RULES: RuleDef[] = [
   ruleCfopUf,
   ruleCfopTransferencia,
   ruleProdutoClassificacaoTes,
+  ruleProdutoClassificacaoPisCofinsTes,
   ruleProdutoBeneficioIsento,
   ruleValorContabil,
   ruleCalculoImposto('Icms', 'ICMS'),

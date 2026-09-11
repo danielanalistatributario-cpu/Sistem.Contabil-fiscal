@@ -652,15 +652,20 @@ model AnaliseFiscalSaidaDivergencia {
 // naturezaOperacao: LIVRE (padrão — sem cruzamento produto×TES) | ISENTA |
 // TRIBUTADA | TRANSFERENCIA (produto sai isento independente da
 // classificação dele — natureza da operação de transferência).
+// naturezaOperacaoPisCofins: mesmo enum, eixo independente — a maioria
+// das TES tem naturezaOperacao calibrada só pra ICMS (ex: TES 102 é
+// "ICMS tributado, PIS/COFINS isento"), então esse campo cobre o
+// tratamento de PIS/COFINS separadamente.
 model AnaliseFiscalTesConfig {
-  id              String   @id @default(cuid())
-  companyId       String
-  codigo          String
-  grupo           String
-  chaveNf         String
-  permiteProdutos Boolean  @default(true)
-  validarCfopUf   Boolean  @default(true)
-  naturezaOperacao String  @default("LIVRE")
+  id                        String   @id @default(cuid())
+  companyId                 String
+  codigo                    String
+  grupo                     String
+  chaveNf                   String
+  permiteProdutos           Boolean  @default(true)
+  validarCfopUf             Boolean  @default(true)
+  naturezaOperacao          String   @default("LIVRE")
+  naturezaOperacaoPisCofins String   @default("LIVRE")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -684,6 +689,11 @@ model AnaliseFiscalProdutoClassificacao {
   codigoProduto  String
   descricao      String
   classificacao  String
+  // Classificação de PIS/COFINS, eixo independente de `classificacao`
+  // (que na prática só cobre ICMS) — opcional, produto sem esse campo
+  // preenchido simplesmente não entra no cruzamento produto×TES de
+  // PIS/COFINS.
+  classificacaoPisCofins String?
   observacao     String?
   // Benefício fiscal de redução de base de cálculo/alíquota reduzida
   // (ex: Convênio ICMS do Amapá pra alho/batata) — os dois ficam opcionais

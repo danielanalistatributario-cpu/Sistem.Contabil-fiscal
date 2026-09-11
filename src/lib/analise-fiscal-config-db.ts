@@ -37,6 +37,7 @@ export async function garantirSeedTesConfig(companyId: string): Promise<void> {
     permiteProdutos: meta.permiteProdutos,
     validarCfopUf: meta.validarCfopUf !== false,
     naturezaOperacao: meta.naturezaOperacao || 'LIVRE',
+    naturezaOperacaoPisCofins: meta.naturezaOperacaoPisCofins || 'LIVRE',
   }));
 
   if (dados.length === 0) return;
@@ -55,6 +56,7 @@ export async function carregarTesMetadataPorCodigo(companyId: string): Promise<R
       permiteProdutos: l.permiteProdutos,
       validarCfopUf: l.validarCfopUf,
       naturezaOperacao: l.naturezaOperacao as NaturezaOperacao,
+      naturezaOperacaoPisCofins: l.naturezaOperacaoPisCofins as NaturezaOperacao,
     };
   }
   return mapa;
@@ -92,6 +94,20 @@ export async function carregarProdutosClassificacao(
     where: { companyId, empresaGrupoId: empresaGrupoId ?? null },
   });
   return new Map(linhas.map((l) => [l.codigoProduto, l.classificacao as ClassificacaoProduto]));
+}
+
+// Mesma segregação por empresa do grupo, eixo independente de PIS/COFINS
+// (ver comentário de `classificacaoPisCofins` no schema) — produto sem
+// esse campo preenchido não entra no Map, então não participa do
+// cruzamento produto×TES de PIS/COFINS.
+export async function carregarProdutosClassificacaoPisCofins(
+  companyId: string,
+  empresaGrupoId?: string | null
+): Promise<Map<string, ClassificacaoProduto>> {
+  const linhas = await prisma.analiseFiscalProdutoClassificacao.findMany({
+    where: { companyId, empresaGrupoId: empresaGrupoId ?? null, classificacaoPisCofins: { not: null } },
+  });
+  return new Map(linhas.map((l) => [l.codigoProduto, l.classificacaoPisCofins as ClassificacaoProduto]));
 }
 
 // Benefício fiscal de redução de base/alíquota por produto (ex: Convênio

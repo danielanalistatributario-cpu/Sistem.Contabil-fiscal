@@ -47,6 +47,9 @@ export type RuleContext = {
   // cadastrou nenhum produto, então a regra de cruzamento produto×TES
   // não encontra nada pra comparar e não roda.
   produtosClassificacao: Map<string, ClassificacaoProduto>;
+  // mesma ideia, eixo independente de PIS/COFINS — ver ClassificacaoProduto
+  // e o comentário de naturezaOperacaoPisCofins em TesMetadata.
+  produtosClassificacaoPisCofins: Map<string, ClassificacaoProduto>;
   // benefício fiscal de redução de base de cálculo/alíquota reduzida por
   // produto (ex: Convênio ICMS do Amapá pra alho/batata) — chave é o
   // código do produto normalizado; valor são as alíquotas fixas
@@ -97,6 +100,10 @@ export type TesMetadata = {
   // equivale a true (comportamento padrão, roda a checagem).
   validarCfopUf?: boolean;
   naturezaOperacao?: NaturezaOperacao;
+  // Mesmo enum, eixo independente — a maioria das TES com naturezaOperacao
+  // calibrada só reflete ICMS (ex: TES 102 é "ICMS tributado, PIS/COFINS
+  // isento"), então esse campo cobre o tratamento de PIS/COFINS separado.
+  naturezaOperacaoPisCofins?: NaturezaOperacao;
 };
 
 // O layout real do Protheus não tem coluna separada de código do produto
@@ -532,8 +539,8 @@ const RULES_214: RuleDef[] = [ruleIcmsSemDestaque()];
 
 const TES_RULE_GROUPS: TesRuleGroup[] = [
   { codigos: ['001', '002', '004', '009'], grupo: 'Gerenciais', chaveNf: 'proibida', permiteProdutos: true, rules: RULES_GERENCIAIS },
-  { codigos: ['101'], grupo: 'Revenda isenta ICMS/PIS/COFINS/Funrural', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_101 },
-  { codigos: ['102'], grupo: 'ICMS tributado, PIS/COFINS/Funrural isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: RULES_102 },
+  { codigos: ['101'], grupo: 'Revenda isenta ICMS/PIS/COFINS/Funrural', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_101 },
+  { codigos: ['102'], grupo: 'ICMS tributado, PIS/COFINS/Funrural isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_102 },
   // 107/108/109: crédito presumido — ICMS não vem destacado no relatório
   // (evidência real: 100% dos casos com valorICMS = 0)
   { codigos: ['107'], grupo: 'Importado, crédito presumido 4% (sem destaque ICMS)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
@@ -549,10 +556,10 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   { codigos: ['110'], grupo: 'Prestação de serviços', chaveNf: 'proibida', permiteProdutos: false, rules: [] },
   // TES 128: ICMS isento, PIS 1,65% e COFINS 7,60% sempre tributados
   // (evidência real: 9/9 casos com essas alíquotas exatas)
-  { codigos: ['128'], grupo: 'PIS 1,65% / COFINS 7,60%', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
+  { codigos: ['128'], grupo: 'PIS 1,65% / COFINS 7,60%', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'TRIBUTADA', rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
   // TES 129: ICMS tributado pela tabela normal + PIS 1,65% + COFINS 7,60%
   // (evidência real: 48/48 casos com ICMS>0 e PIS/COFINS nessas alíquotas)
-  { codigos: ['129'], grupo: 'ICMS + PIS 1,65% + COFINS 7,60%', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleIcmsTabelaPadrao(), ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
+  { codigos: ['129'], grupo: 'ICMS + PIS 1,65% + COFINS 7,60%', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'TRIBUTADA', rules: [ruleIcmsTabelaPadrao(), ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
   // TES 130: ICMS isento (evidência real: 489/489). Fornecedor pode ser
   // CPF ou CNPJ (56 de 489 eram CNPJ no arquivo real) — sem checagem de
   // fornecedor, ao contrário da TES 101. TES 230 (produtor rural) entra no
@@ -562,7 +569,7 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   // pelas regras genéricas (CFOP×UF já roda por padrão; fornecedor
   // pessoa física/jurídica não é restringido aqui, igual à 130).
   { codigos: ['130', '230'], grupo: 'Produtores rurais (revenda)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Icms', 'ICMS')] },
-  { codigos: ['138'], grupo: 'Transferência entre filiais Fort Fruit', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRANSFERENCIA', rules: RULES_138 },
+  { codigos: ['138'], grupo: 'Transferência entre filiais Fort Fruit', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRANSFERENCIA', naturezaOperacaoPisCofins: 'TRANSFERENCIA', rules: RULES_138 },
   // TES 141: não apareceu no arquivo real testado — sem base pra calibrar
   // uma regra de alíquota (SENAR/GILRAT); fica metadados só até termos um
   // arquivo com lançamentos dessa TES
@@ -574,13 +581,13 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   { codigos: ['151', '252'], grupo: 'Ativo Imobilizado', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleTipoEsperado('AI', 'ATIVO IMOBILIZADO')] },
   // TES 152 (frete tributado): ICMS/PIS/COFINS sempre tributados
   // (evidência real: 0/12 zerados), PIS 1,65%/COFINS 7,60%
-  { codigos: ['152'], grupo: 'Frete tributado', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
+  { codigos: ['152'], grupo: 'Frete tributado', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'TRIBUTADA', rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
   // TES 153 (frete isento): ICMS isento, mas PIS/COFINS continuam
   // tributados (evidência real: ICMS 0/146, PIS/COFINS nunca zerados)
   // CFOP de frete (evidência real: sempre 2353, independente da UF do
   // fornecedor) não segue a convenção interna/interestadual normal — a
   // pedido do usuário, sem checagem de CFOP x UF
-  { codigos: ['153'], grupo: 'Frete isento', chaveNf: 'obrigatoria', permiteProdutos: true, validarCfopUf: false, rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
+  { codigos: ['153'], grupo: 'Frete isento', chaveNf: 'obrigatoria', permiteProdutos: true, validarCfopUf: false, naturezaOperacaoPisCofins: 'TRIBUTADA', rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
   // TES 211/212 "Frete iniciado UF": evidência real (Chave NF 100%
   // preenchida, CFOP sempre 2932 independente da UF) — mesmo padrão de
   // frete da TES 153, sem checagem de CFOP x UF
@@ -591,9 +598,9 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   // tabela normal) — PIS/COFINS tributados 1,65%/7,60% em ambos.
   // A pedido do usuário, 155/194/157 não validam mais ICMS (só PIS/COFINS)
   // — 294 continua validando ICMS isento normalmente.
-  { codigos: ['155', '194'], grupo: 'Manutenção (predial/elétrica/máquinas)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
-  { codigos: ['294'], grupo: 'Manutenção (predial/elétrica/máquinas)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
-  { codigos: ['157'], grupo: 'Manutenção (veículos)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
+  { codigos: ['155', '194'], grupo: 'Manutenção (predial/elétrica/máquinas)', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'TRIBUTADA', rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
+  { codigos: ['294'], grupo: 'Manutenção (predial/elétrica/máquinas)', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'TRIBUTADA', rules: RULES_ICMS_ISENTO_PISCOFINS_PADRAO },
+  { codigos: ['157'], grupo: 'Manutenção (veículos)', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'TRIBUTADA', rules: [ruleValorTributadoFixo('Pis', 'PIS', 1.65), ruleValorTributadoFixo('Cofins', 'COFINS', 7.6)] },
   // TES 165: ICMS isento no relatório (evidência real: 44/44) —
   // PIS/COFINS aparecem mistos (tributado e isento) no arquivo real, sem
   // padrão único, por isso sem checagem de PIS/COFINS aqui
@@ -602,21 +609,21 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   // isento de ICMS/PIS/COFINS (evidência real: 100% zerados). A pedido do
   // usuário, TES 172 não valida mais ICMS (só PIS/COFINS isentos) — 173 e
   // 196 continuam validando os três normalmente.
-  { codigos: ['172'], grupo: 'Limpeza / escritório / informática', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
-  { codigos: ['173', '196'], grupo: 'Limpeza / escritório / informática', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
+  { codigos: ['172'], grupo: 'Limpeza / escritório / informática', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'ISENTA', rules: [ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
+  { codigos: ['173', '196'], grupo: 'Limpeza / escritório / informática', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_TUDO_ISENTO },
   // TES 175: não apareceu no arquivo real testado — fica metadados só
   { codigos: ['175'], grupo: 'ST, PIS/COFINS tributado', chaveNf: 'livre', permiteProdutos: true, rules: [] },
   // Devolução de operação interna: ICMS pela alíquota interna fixa
   // (evidência real: sempre 19%), PIS/COFINS isentos (evidência real:
   // 100% zerados)
-  { codigos: ['217', '317'], grupo: 'Devolução — ICMS tributado, PIS/COFINS isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', rules: [ruleIcmsAliquotaInternaFixa(), ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
-  { codigos: ['218', '318'], grupo: 'Devolução — tudo isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', rules: RULES_TUDO_ISENTO },
+  { codigos: ['217', '317'], grupo: 'Devolução — ICMS tributado, PIS/COFINS isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', naturezaOperacaoPisCofins: 'ISENTA', rules: [ruleIcmsAliquotaInternaFixa(), ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
+  { codigos: ['218', '318'], grupo: 'Devolução — tudo isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_TUDO_ISENTO },
   // TES 219/319: amostra real muito pequena (1 e 6 linhas) pra confiar
   // numa regra — o pouco que apareceu contraria o nome do grupo ("tudo
   // tributado": ICMS veio isento, só PIS/COFINS tributados), então fica
   // metadados só até validar com mais dados
   { codigos: ['219', '319'], grupo: 'Devolução — a confirmar com mais dados', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [] },
-  { codigos: ['223'], grupo: 'Bonificação (revenda, tudo isento)', chaveNf: 'obrigatoria', permiteProdutos: true, rules: RULES_TUDO_ISENTO },
+  { codigos: ['223'], grupo: 'Bonificação (revenda, tudo isento)', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_TUDO_ISENTO },
   { codigos: ['320'], grupo: 'Devolução — tudo tributado', chaveNf: 'obrigatoria', permiteProdutos: true, rules: [] },
   // TES 156/168: produtos isentos de ICMS — cruza com a classificação do
   // produto (naturezaOperacao ISENTA) e sinaliza Ativo Imobilizado, que não

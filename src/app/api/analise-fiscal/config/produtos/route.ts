@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
   const codigoProduto = String(body?.codigoProduto || '').trim();
   const descricao = String(body?.descricao || '').trim();
   const classificacao = String(body?.classificacao || '').trim();
+  const classificacaoPisCofins = body?.classificacaoPisCofins ? String(body.classificacaoPisCofins).trim() : null;
   const observacao = body?.observacao ? String(body.observacao).trim() : null;
   const aliquotaBeneficioInterna = body?.aliquotaBeneficioInterna ? Number(body.aliquotaBeneficioInterna) : null;
   const aliquotaBeneficioInterestadual = body?.aliquotaBeneficioInterestadual ? Number(body.aliquotaBeneficioInterestadual) : null;
@@ -69,6 +70,9 @@ export async function POST(req: NextRequest) {
       { error: 'Código do produto, descrição e classificação (ISENTO/TRIBUTADO) são obrigatórios.' },
       { status: 400 }
     );
+  }
+  if (classificacaoPisCofins !== null && !CLASSIFICACOES_VALIDAS.includes(classificacaoPisCofins)) {
+    return NextResponse.json({ error: 'Classificação de PIS/COFINS inválida — informe ISENTO ou TRIBUTADO.' }, { status: 400 });
   }
   for (const [label, valor] of [['interna', aliquotaBeneficioInterna], ['interestadual', aliquotaBeneficioInterestadual]] as const) {
     if (valor !== null && (Number.isNaN(valor) || valor <= 0 || valor >= 1)) {
@@ -89,7 +93,7 @@ export async function POST(req: NextRequest) {
   }
 
   const produto = await prisma.analiseFiscalProdutoClassificacao.create({
-    data: { companyId: session.currentCompanyId, empresaGrupoId, codigoProduto, descricao, classificacao, observacao, aliquotaBeneficioInterna, aliquotaBeneficioInterestadual },
+    data: { companyId: session.currentCompanyId, empresaGrupoId, codigoProduto, descricao, classificacao, classificacaoPisCofins, observacao, aliquotaBeneficioInterna, aliquotaBeneficioInterestadual },
   });
 
   await logActivity(session.id, 'CADASTROU_PRODUTO_CLASSIFICACAO_ANALISE_FISCAL', `${codigoProduto} — ${descricao} (${classificacao})`, session.currentCompanyId);

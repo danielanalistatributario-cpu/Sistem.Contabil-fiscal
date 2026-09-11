@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
-import { carregarTesMetadataPorCodigo, carregarCnpjsGrupo, carregarProdutosClassificacao, carregarProdutosBeneficioAliquota, carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
+import { carregarTesMetadataPorCodigo, carregarCnpjsGrupo, carregarProdutosClassificacao, carregarProdutosClassificacaoPisCofins, carregarProdutosBeneficioAliquota, carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
 
 // Metadados de TES + CNPJs do grupo prontos pro motor de regras — usado
 // pelo cálculo que roda no navegador (Saídas, que processa em lotes; ver
@@ -36,8 +36,9 @@ export async function GET(req: NextRequest) {
   ]);
 
   const empresaValida = empresaIdParam && empresasGrupo.some((e) => e.id === empresaIdParam) ? empresaIdParam : null;
-  const [produtosClassificacao, produtosBeneficioAliquota] = await Promise.all([
+  const [produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota] = await Promise.all([
     carregarProdutosClassificacao(session.currentCompanyId, empresaValida),
+    carregarProdutosClassificacaoPisCofins(session.currentCompanyId, empresaValida),
     carregarProdutosBeneficioAliquota(session.currentCompanyId, empresaValida),
   ]);
 
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
     tesMetadataPorCodigo,
     cnpjsGrupo: Array.from(cnpjsGrupo),
     produtosClassificacao: Array.from(produtosClassificacao.entries()),
+    produtosClassificacaoPisCofins: Array.from(produtosClassificacaoPisCofins.entries()),
     produtosBeneficioAliquota: Array.from(produtosBeneficioAliquota.entries()),
     empresasGrupo,
     company: company || { ufDestino: 'PA', aliquotaInterna: 0.19 },
