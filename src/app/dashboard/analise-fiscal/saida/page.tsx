@@ -80,6 +80,17 @@ function monthInputParaPeriodo(v: string): string {
   return mes && ano ? `${mes}/${ano}` : '';
 }
 
+// `resumo.tesNovasEncontradas` vem como string[] logo após processar
+// (saída direta de apurarSaidas), mas como string já unida por vírgula
+// quando a apuração é recarregada do histórico (coluna do banco,
+// `resumo: a` reaproveita o objeto inteiro da API) — normaliza os dois
+// formatos pra exibição.
+function formatarTesNovas(v: string[] | string | null | undefined): string | null {
+  if (!v) return null;
+  const texto = Array.isArray(v) ? v.join(', ') : v;
+  return texto || null;
+}
+
 function paraItemView(item: ItemApuradoSaida): ItemView {
   return {
     linha: item.linha.linha,
@@ -524,6 +535,11 @@ function AnaliseFiscalSaidaInner() {
               <p className={`text-2xl font-bold mt-1 ${apuracao.resumo.qtdTesNovas > 0 ? 'text-teal' : 'text-gray-800'}`}>
                 {apuracao.resumo.qtdTesNovas}
               </p>
+              {formatarTesNovas(apuracao.resumo.tesNovasEncontradas) && (
+                <p className="text-[10px] text-gray-400 mt-1 truncate" title={formatarTesNovas(apuracao.resumo.tesNovasEncontradas) || ''}>
+                  {formatarTesNovas(apuracao.resumo.tesNovasEncontradas)}
+                </p>
+              )}
             </div>
             <div className={`card-surface p-4 ${apuracao.resumo.qtdNotasSemChave > 0 ? 'border border-ruby/40' : ''}`}>
               <p className="text-[10px] uppercase tracking-wide text-gray-400">Notas sem chave</p>
