@@ -7,6 +7,7 @@ import { ArrowLeft, History, Settings, BookOpenText } from 'lucide-react';
 import { ImportHero } from '@/components/ImportHero';
 import * as XLSX from 'xlsx';
 import { lerRelatorioEntradas } from '@/lib/analise-fiscal-reader';
+import { lerPrimeiraAbaValida } from '@/lib/ler-planilha-multi-aba';
 import { apurarEntradas, type ItemApurado, type ResumoApuracao } from '@/lib/analise-fiscal-compute';
 import type { TesMetadata } from '@/lib/analise-fiscal-tes-registry';
 import { canAccess, type Role } from '@/lib/permissions';
@@ -192,8 +193,7 @@ function AnaliseFiscalEntradaInner() {
       setProgresso({ fase: 'Lendo arquivo...', loteAtual: 0, totalLotes: 0 });
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
-      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null }) as unknown[][];
-      const leitura = lerRelatorioEntradas(aoa);
+      const leitura = lerPrimeiraAbaValida(wb, lerRelatorioEntradas);
       if (leitura.erro) {
         setErro(leitura.erro);
         setProcessando(false);
