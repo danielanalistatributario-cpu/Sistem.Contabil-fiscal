@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
-import { carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
+import { resolverEmpresaGrupoId } from '@/lib/analise-fiscal-config-db';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -31,13 +31,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Nenhum produto para importar.' }, { status: 400 });
   }
 
-  const empresasGrupo = await carregarEmpresasGrupo(session.currentCompanyId);
-  const empresaIdInformado = body?.empresaGrupoId || null;
-  const empresaValida = empresaIdInformado && empresasGrupo.some((e) => e.id === empresaIdInformado);
-  if (empresasGrupo.length > 0 && !empresaValida) {
-    return NextResponse.json({ error: 'Selecione a empresa para importar os produtos.' }, { status: 400 });
+  const { empresaGrupoId, erro } = await resolverEmpresaGrupoId(
+    session.currentCompanyId,
+    session.currentEmpresaGrupoId,
+    true,
+    'Selecione a filial no topo da tela para importar os produtos.'
+  );
+  if (erro) {
+    return NextResponse.json({ error: erro }, { status: 400 });
   }
-  const empresaGrupoId = empresaValida ? empresaIdInformado : null;
 
   const validos: { codigoProduto: string; descricao: string; classificacao: string; observacao: string | null }[] = [];
   let invalidos = 0;
@@ -61,21 +63,30 @@ export async function POST(req: NextRequest) {
   let criados = 0;
   let atualizados = 0;
 
+  // Não dá pra usar upsert() com a chave composta aqui — o tipo gerado
+  // pelo Prisma pra `companyId_empresaGrupoId_codigoProduto` exige
+  // `empresaGrupoId: string` (não aceita null), mesmo a coluna sendo
+  // opcional no schema (Postgres não suporta bem índice único composto
+  // com campo nulo nesse tipo de lookup). findFirst + create/update
+  // manual contorna isso, mesmo padrão já usado no restante do arquivo.
   await prisma.$transaction(async (tx) => {
     for (const p of validos) {
-      const resultado = await tx.analiseFiscalProdutoClassificacao.upsert({
-        where: {
-          companyId_empresaGrupoId_codigoProduto: {
-            companyId: session.currentCompanyId!,
-            empresaGrupoId,
-            codigoProduto: p.codigoProduto,
-          },
-        },
-        create: { companyId: session.currentCompanyId!, empresaGrupoId, ...p },
-        update: { descricao: p.descricao, classificacao: p.classificacao, observacao: p.observacao },
+      const existente = await tx.analiseFiscalProdutoClassificacao.findFirst({
+        where: { companyId: session.currentCompanyId!, empresaGrupoId, codigoProduto: p.codigoProduto },
+        select: { id: true },
       });
-      if (resultado.createdAt.getTime() === resultado.updatedAt.getTime()) criados++;
-      else atualizados++;
+      if (existente) {
+        await tx.analiseFiscalProdutoClassificacao.update({
+          where: { id: existente.id },
+          data: { descricao: p.descricao, classificacao: p.classificacao, observacao: p.observacao },
+        });
+        atualizados++;
+      } else {
+        await tx.analiseFiscalProdutoClassificacao.create({
+          data: { companyId: session.currentCompanyId!, empresaGrupoId, ...p },
+        });
+        criados++;
+      }
     }
   });
 

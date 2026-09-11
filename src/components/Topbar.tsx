@@ -8,6 +8,7 @@ import { ROLE_LABELS } from '@/lib/permissions';
 import type { Role } from '@/lib/permissions';
 
 type Membership = { companyId: string; companyName: string; role: Role };
+type EmpresaGrupo = { id: string; nome: string; uf: string | null };
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -19,14 +20,19 @@ export default function Topbar({
   memberships,
   currentCompanyId,
   currentRole,
+  empresasGrupo,
+  currentEmpresaGrupoId,
 }: {
   userName: string;
   memberships: Membership[];
   currentCompanyId: string | null;
   currentRole: Role | null;
+  empresasGrupo?: EmpresaGrupo[];
+  currentEmpresaGrupoId?: string | null;
 }) {
   const router = useRouter();
   const [switching, setSwitching] = useState(false);
+  const [switchingEmpresa, setSwitchingEmpresa] = useState(false);
 
   async function handleSwitch(companyId: string) {
     setSwitching(true);
@@ -37,6 +43,24 @@ export default function Topbar({
     });
     setSwitching(false);
     router.refresh();
+  }
+
+  // Filial ativa (Análise e Apuração Fiscal) — mesmo padrão do seletor de
+  // empresa/tenant acima, só que grava num cookie separado
+  // (portal_empresa_grupo_id), sem afetar login/permissões do sistema.
+  // Usa reload completo (não router.refresh()) de propósito: as telas de
+  // Entrada/Saída/Apuração/Configurar TES são Client Components que leem
+  // a filial ativa uma vez ao montar (via /api/auth/me) — um
+  // router.refresh() atualiza o Topbar (Server Component), mas não
+  // reexecuta esse fetch em componentes cliente irmãos já montados.
+  async function handleSwitchEmpresaGrupo(empresaGrupoId: string) {
+    setSwitchingEmpresa(true);
+    await fetch('/api/analise-fiscal/empresa-grupo/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ empresaGrupoId: empresaGrupoId || null }),
+    });
+    window.location.reload();
   }
 
   async function handleLogout() {
@@ -69,6 +93,28 @@ export default function Topbar({
           <span className="text-sm font-medium text-gray-700">{memberships[0]?.companyName}</span>
         )}
       </div>
+
+      {empresasGrupo && empresasGrupo.length > 0 && (
+        <div className="flex items-center gap-2.5 bg-gray-50 border border-gray-100 rounded-full pl-3 pr-2 py-1.5">
+          <span className="text-[11px] uppercase tracking-wide text-gray-400">Filial</span>
+          <div className="relative flex items-center">
+            <select
+              value={currentEmpresaGrupoId ?? ''}
+              disabled={switchingEmpresa}
+              onChange={(e) => handleSwitchEmpresaGrupo(e.target.value)}
+              className="appearance-none bg-transparent text-sm font-medium text-gray-700 focus:outline-none pr-5 cursor-pointer max-w-[220px]"
+            >
+              <option value="">Selecione...</option>
+              {empresasGrupo.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nome} — {e.uf}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={13} className="text-gray-400 absolute right-0 pointer-events-none" />
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-full bg-accent text-white flex items-center justify-center text-xs font-semibold font-display shrink-0">

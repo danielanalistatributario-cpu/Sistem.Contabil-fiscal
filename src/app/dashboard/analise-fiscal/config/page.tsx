@@ -61,7 +61,6 @@ export default function AnaliseFiscalConfigPage() {
   const [novoValidarCfopUf, setNovoValidarCfopUf] = useState(true);
   const [novaNaturezaOperacao, setNovaNaturezaOperacao] = useState<NaturezaOperacao>('LIVRE');
   const [novaNaturezaOperacaoPisCofins, setNovaNaturezaOperacaoPisCofins] = useState<NaturezaOperacao>('LIVRE');
-  const [empresaTesId, setEmpresaTesId] = useState('');
 
   const [novoNomeCnpj, setNovoNomeCnpj] = useState('');
   const [novoCnpj, setNovoCnpj] = useState('');
@@ -77,13 +76,26 @@ export default function AnaliseFiscalConfigPage() {
   const [novoNcmProduto, setNovoNcmProduto] = useState('');
   const [importando, setImportando] = useState(false);
   const [resultadoImportacao, setResultadoImportacao] = useState<string | null>(null);
-  const [empresaProdutoId, setEmpresaProdutoId] = useState('');
   const [buscaProduto, setBuscaProduto] = useState('');
   const inputImportarRef = useRef<HTMLInputElement>(null);
 
-  // Só empresas com UF preenchida contam pra segregação de produtos —
-  // mesmo filtro que o seletor "Empresa a ser analisada" de
-  // Entradas/Saídas já usa (carregarEmpresasGrupo no backend).
+  // Filial ativa é lida do seletor "Filial" no topo da aplicação (Topbar)
+  // — esta tela não tem mais seletores próprios pra TES nem Produtos.
+  const [currentEmpresaGrupoId, setCurrentEmpresaGrupoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch('/api/auth/me');
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentEmpresaGrupoId(data.user?.currentEmpresaGrupoId ?? null);
+      }
+    })();
+  }, []);
+
+  // Só empresas com UF preenchida contam pra segregação — mesmo filtro
+  // que o seletor "Filial" do Topbar já usa (carregarEmpresasGrupo no
+  // backend).
   const empresasComUf = cnpjs.filter((c) => c.uf);
 
   // Filtro client-side por código ou descrição — a lista já vem inteira
@@ -96,9 +108,8 @@ export default function AnaliseFiscalConfigPage() {
       )
     : produtos;
 
-  const carregarTes = useCallback(async (empresaId: string) => {
-    const qs = empresaId ? `?empresaId=${empresaId}` : '';
-    const res = await fetch(`/api/analise-fiscal/config/tes${qs}`);
+  const carregarTes = useCallback(async () => {
+    const res = await fetch('/api/analise-fiscal/config/tes');
     if (res.ok) {
       const data = await res.json();
       setTes(data.tes);
@@ -113,9 +124,8 @@ export default function AnaliseFiscalConfigPage() {
     }
   }, []);
 
-  const carregarProdutos = useCallback(async (empresaId: string) => {
-    const qs = empresaId ? `?empresaId=${empresaId}` : '';
-    const res = await fetch(`/api/analise-fiscal/config/produtos${qs}`);
+  const carregarProdutos = useCallback(async () => {
+    const res = await fetch('/api/analise-fiscal/config/produtos');
     if (res.ok) {
       const data = await res.json();
       setProdutos(data.produtos);
@@ -126,23 +136,19 @@ export default function AnaliseFiscalConfigPage() {
     carregarCnpjs();
   }, [carregarCnpjs]);
 
-  // Cadastro de TES 100% independente por empresa (não é "geral +
-  // exceções") — recarrega sempre que a empresa selecionada muda,
-  // inclusive na primeira carga com empresaTesId vazio (nesse caso
-  // devolve o cadastro geral, igual ao comportamento de antes desta
-  // segregação existir, pra tenants sem empresa do grupo cadastrada).
+  // Cadastro de TES e Produtos 100% independente por empresa (não é
+  // "geral + exceções") — recarrega sempre que a filial ativa (seletor
+  // "Filial" no Topbar) muda. Sem filial (tenant sem empresa do grupo
+  // cadastrada), devolve o cadastro geral, igual ao comportamento de
+  // antes desta segregação existir.
   useEffect(() => {
-    carregarTes(empresaTesId);
-  }, [carregarTes, empresaTesId]);
+    carregarTes();
+  }, [carregarTes, currentEmpresaGrupoId]);
 
-  // Recarrega a lista de produtos sempre que a empresa selecionada muda
-  // (inclusive na primeira carga, com empresaProdutoId ainda vazio — nesse
-  // caso devolve a lista "geral", igual ao comportamento de antes desta
-  // segregação existir, pra tenants sem empresa do grupo cadastrada).
   useEffect(() => {
-    carregarProdutos(empresaProdutoId);
+    carregarProdutos();
     setBuscaProduto('');
-  }, [carregarProdutos, empresaProdutoId]);
+  }, [carregarProdutos, currentEmpresaGrupoId]);
 
   async function handleAddTes(e: React.FormEvent) {
     e.preventDefault();
@@ -158,7 +164,6 @@ export default function AnaliseFiscalConfigPage() {
         validarCfopUf: novoValidarCfopUf,
         naturezaOperacao: novaNaturezaOperacao,
         naturezaOperacaoPisCofins: novaNaturezaOperacaoPisCofins,
-        empresaGrupoId: empresaTesId || undefined,
       }),
     });
     const data = await res.json();
@@ -173,7 +178,7 @@ export default function AnaliseFiscalConfigPage() {
     setNovoValidarCfopUf(true);
     setNovaNaturezaOperacao('LIVRE');
     setNovaNaturezaOperacaoPisCofins('LIVRE');
-    carregarTes(empresaTesId);
+    carregarTes();
   }
 
   async function handleEditTes(id: string, campo: 'grupo' | 'chaveNf' | 'permiteProdutos' | 'validarCfopUf' | 'naturezaOperacao' | 'naturezaOperacaoPisCofins', valor: string | boolean) {
@@ -182,13 +187,13 @@ export default function AnaliseFiscalConfigPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [campo]: valor }),
     });
-    carregarTes(empresaTesId);
+    carregarTes();
   }
 
   async function handleRemoveTes(id: string, codigo: string) {
     if (!confirm(`Excluir a TES ${codigo}? Ela voltará a aparecer como "TES nova" na próxima apuração.`)) return;
     await fetch(`/api/analise-fiscal/config/tes/${id}`, { method: 'DELETE' });
-    carregarTes(empresaTesId);
+    carregarTes();
   }
 
   async function handleAddCnpj(e: React.FormEvent) {
@@ -246,7 +251,6 @@ export default function AnaliseFiscalConfigPage() {
         classificacao: novaClassificacaoProduto,
         observacao: novaObservacaoProduto || undefined,
         ncm: novoNcmProduto || undefined,
-        empresaGrupoId: empresaProdutoId || undefined,
       }),
     });
     const data = await res.json();
@@ -259,7 +263,7 @@ export default function AnaliseFiscalConfigPage() {
     setNovaClassificacaoProduto('TRIBUTADO');
     setNovaObservacaoProduto('');
     setNovoNcmProduto('');
-    carregarProdutos(empresaProdutoId);
+    carregarProdutos();
   }
 
   async function handleEditProduto(
@@ -277,20 +281,20 @@ export default function AnaliseFiscalConfigPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    carregarProdutos(empresaProdutoId);
+    carregarProdutos();
   }
 
   async function handleRemoveProduto(id: string, descricao: string) {
     if (!confirm(`Remover "${descricao}" da lista de produtos classificados?`)) return;
     await fetch(`/api/analise-fiscal/config/produtos/${id}`, { method: 'DELETE' });
-    carregarProdutos(empresaProdutoId);
+    carregarProdutos();
   }
 
   async function handleImportarProdutos(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (empresasComUf.length > 0 && !empresaProdutoId) {
-      setErroProduto('Selecione a empresa para importar os produtos.');
+    if (empresasComUf.length > 0 && !currentEmpresaGrupoId) {
+      setErroProduto('Selecione a filial no topo da tela para importar os produtos.');
       if (inputImportarRef.current) inputImportarRef.current.value = '';
       return;
     }
@@ -319,7 +323,7 @@ export default function AnaliseFiscalConfigPage() {
       const res = await fetch('/api/analise-fiscal/config/produtos/importar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ produtos: leitura.produtos, empresaGrupoId: empresaProdutoId || undefined }),
+        body: JSON.stringify({ produtos: leitura.produtos }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -333,7 +337,7 @@ export default function AnaliseFiscalConfigPage() {
       if (data.invalidos > 0) partes.push(`${data.invalidos} linha(s) inválida(s) ignorada(s)`);
       if (leitura.ignoradas.length > 0) partes.push(`${leitura.ignoradas.length} linha(s) sem código/descrição/classificação ignorada(s) na leitura`);
       setResultadoImportacao(partes.join(' · '));
-      carregarProdutos(empresaProdutoId);
+      carregarProdutos();
     } catch (err) {
       setErroProduto('Não foi possível ler o arquivo. Verifique se é um .xlsx/.csv válido.');
       console.error(err);
@@ -366,29 +370,14 @@ export default function AnaliseFiscalConfigPage() {
           <p className="text-xs text-gray-500">
             Cadastro de TES 100% independente por empresa — o mesmo código pode significar coisas diferentes entre
             filiais (ex: uma TES de devolução numa empresa e de baixa de estoque noutra), então cada empresa tem sua
-            própria lista completa, sem herdar nada de outra.
+            própria lista completa, sem herdar nada de outra. A empresa é a selecionada no seletor &quot;Filial&quot;
+            no topo da tela.
           </p>
         )}
 
-        {empresasComUf.length > 0 && (
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Gerenciando TES da empresa</label>
-            <select
-              value={empresaTesId}
-              onChange={(e) => setEmpresaTesId(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-64"
-            >
-              <option value="">Selecione a empresa...</option>
-              {empresasComUf.map((e) => (
-                <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {empresasComUf.length > 0 && !empresaTesId ? (
+        {empresasComUf.length > 0 && !currentEmpresaGrupoId ? (
           <p className="text-sm text-gray-400 text-center py-6 bg-gray-50 border border-gray-100 rounded-lg">
-            Selecione uma empresa acima para ver ou cadastrar as TES dela.
+            Selecione a filial no topo da tela para ver ou cadastrar as TES dela.
           </p>
         ) : (
           <>
@@ -665,31 +654,15 @@ export default function AnaliseFiscalConfigPage() {
           Cadastre aqui produtos cuja classificação (isento ou tributado) precisa ser conferida contra a TES lançada
           — ex: um produto tributado que apareceu numa TES marcada como &quot;Isenta&quot; (ver coluna &quot;Natureza
           da operação&quot; na tabela de TES acima). Enquanto um produto não estiver cadastrado aqui, essa checagem
-          não roda pra ele. {empresasComUf.length > 0 && 'O cadastro é segregado por empresa — cada empresa tem sua própria lista, totalmente independente das demais, e a análise usa automaticamente a lista da empresa selecionada em "Empresa a ser analisada".'}{' '}
+          não roda pra ele. {empresasComUf.length > 0 && 'O cadastro é segregado por empresa — cada empresa tem sua própria lista, totalmente independente das demais, e a análise usa automaticamente a lista da filial selecionada no topo da tela.'}{' '}
           As colunas de benefício (opcionais) são pra produtos com redução de base de cálculo/alíquota reduzida
           (ex: Convênio ICMS) — quando preenchidas as duas, a alíquota de ICMS esperada passa a ser essa, em vez da
           alíquota interna padrão/tabela interestadual, só pra esse produto.
         </p>
 
-        {empresasComUf.length > 0 && (
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Gerenciando produtos da empresa</label>
-            <select
-              value={empresaProdutoId}
-              onChange={(e) => setEmpresaProdutoId(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-64"
-            >
-              <option value="">Selecione a empresa...</option>
-              {empresasComUf.map((e) => (
-                <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {empresasComUf.length > 0 && !empresaProdutoId ? (
+        {empresasComUf.length > 0 && !currentEmpresaGrupoId ? (
           <p className="text-sm text-gray-400 text-center py-6 bg-gray-50 border border-gray-100 rounded-lg">
-            Selecione uma empresa acima para ver, cadastrar ou importar os produtos dela.
+            Selecione a filial no topo da tela para ver, cadastrar ou importar os produtos dela.
           </p>
         ) : (
           <>

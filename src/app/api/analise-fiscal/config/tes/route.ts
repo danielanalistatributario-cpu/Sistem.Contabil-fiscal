@@ -7,7 +7,7 @@ import { garantirSeedTesConfig, resolverEmpresaGrupoId } from '@/lib/analise-fis
 const CHAVE_NF_VALIDAS = ['obrigatoria', 'proibida', 'livre'];
 const NATUREZA_OPERACAO_VALIDAS = ['LIVRE', 'ISENTA', 'TRIBUTADA', 'TRANSFERENCIA'];
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getSession();
   if (!session || !session.currentCompanyId) {
     return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
@@ -16,8 +16,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 
-  const empresaIdParam = req.nextUrl.searchParams.get('empresaId');
-  const { empresaGrupoId } = await resolverEmpresaGrupoId(session.currentCompanyId, empresaIdParam, false);
+  const empresaGrupoId = session.currentEmpresaGrupoId;
 
   await garantirSeedTesConfig(session.currentCompanyId, empresaGrupoId);
   const tes = await prisma.analiseFiscalTesConfig.findMany({
@@ -61,9 +60,9 @@ export async function POST(req: NextRequest) {
 
   const { empresaGrupoId, erro } = await resolverEmpresaGrupoId(
     session.currentCompanyId,
-    body?.empresaGrupoId || null,
+    session.currentEmpresaGrupoId,
     true,
-    'Selecione a empresa para gerenciar as TES.'
+    'Selecione a filial no topo da tela para gerenciar as TES.'
   );
   if (erro) {
     return NextResponse.json({ error: erro }, { status: 400 });

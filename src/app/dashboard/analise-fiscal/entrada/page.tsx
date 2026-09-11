@@ -39,8 +39,6 @@ type ItemDB = {
   divergencias: DivergenciaDB[];
 };
 
-type EmpresaGrupo = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
-
 type ApuracaoDB = {
   id: string;
   periodo: string | null;
@@ -139,8 +137,13 @@ function AnaliseFiscalEntradaInner() {
   const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
   const [role, setRole] = useState<Role | null>(null);
-  const [empresasGrupo, setEmpresasGrupo] = useState<EmpresaGrupo[]>([]);
-  const [empresaSelecionadaId, setEmpresaSelecionadaId] = useState('');
+  // Filial ativa é lida do seletor "Filial" no topo da aplicação (Topbar),
+  // global pra todo o módulo Análise e Apuração Fiscal — esta tela não tem
+  // mais seletor próprio. temEmpresasGrupo só serve pra saber se o gate
+  // "selecione a filial" deve aparecer (tenant sem filial cadastrada
+  // continua funcionando igual a antes desse recurso existir).
+  const [currentEmpresaGrupoId, setCurrentEmpresaGrupoId] = useState<string | null>(null);
+  const [temEmpresasGrupo, setTemEmpresasGrupo] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -149,6 +152,7 @@ function AnaliseFiscalEntradaInner() {
       if (res.ok) {
         const data = await res.json();
         setRole(data.user?.currentRole ?? null);
+        setCurrentEmpresaGrupoId(data.user?.currentEmpresaGrupoId ?? null);
       }
     })();
   }, []);
@@ -158,7 +162,7 @@ function AnaliseFiscalEntradaInner() {
       const res = await fetch('/api/analise-fiscal/config-runtime');
       if (res.ok) {
         const data = await res.json();
-        setEmpresasGrupo(data.empresasGrupo || []);
+        setTemEmpresasGrupo((data.empresasGrupo || []).length > 0);
       }
     })();
   }, []);
@@ -180,8 +184,8 @@ function AnaliseFiscalEntradaInner() {
       setErro('Selecione a Data Base.');
       return;
     }
-    if (empresasGrupo.length > 0 && !empresaSelecionadaId) {
-      setErro('Selecione a empresa a ser analisada.');
+    if (temEmpresasGrupo && !currentEmpresaGrupoId) {
+      setErro('Selecione a filial no topo da tela antes de continuar.');
       return;
     }
     const periodo = monthInputParaPeriodo(dataBase);
@@ -202,9 +206,7 @@ function AnaliseFiscalEntradaInner() {
       }
 
       setProgresso({ fase: 'Carregando configuração da empresa...', loteAtual: 0, totalLotes: 0 });
-      const resCfg = await fetch(
-        `/api/analise-fiscal/config-runtime${empresaSelecionadaId ? `?empresaId=${empresaSelecionadaId}` : ''}`
-      );
+      const resCfg = await fetch('/api/analise-fiscal/config-runtime');
       const cfg = await resCfg.json().catch(() => null);
       if (!resCfg.ok || !cfg) {
         setErro(cfg?.error || 'Não foi possível carregar a configuração da empresa.');
@@ -218,15 +220,12 @@ function AnaliseFiscalEntradaInner() {
       const produtosClassificacaoPisCofins = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacaoPisCofins);
       const produtosBeneficioAliquota = new Map<string, { interna: number | null; interestadual: number | null }>(cfg.produtosBeneficioAliquota);
 
-      const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaSelecionadaId) || null;
-      const company = empresaSelecionada
-        ? { ufDestino: empresaSelecionada.uf || cfg.company.ufDestino, aliquotaInterna: empresaSelecionada.aliquotaInterna ?? cfg.company.aliquotaInterna }
-        : cfg.company;
-
+      // cfg.company já vem resolvido pro lado servidor (UF/alíquota da
+      // filial ativa, se houver — ver config-runtime/route.ts).
       setProgresso({ fase: 'Calculando divergências...', loteAtual: 0, totalLotes: 0 });
       const { itens, resumo }: { itens: ItemApurado[]; resumo: ResumoApuracao } = apurarEntradas(
         leitura.rows,
-        company,
+        cfg.company,
         { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota }
       );
 
@@ -234,14 +233,7 @@ function AnaliseFiscalEntradaInner() {
       const resIniciar = await fetch('/api/analise-fiscal/apurar/iniciar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          periodo: periodo || null,
-          fileName: file.name,
-          resumo,
-          empresaNome: empresaSelecionada?.nome || null,
-          empresaCnpj: empresaSelecionada?.cnpj || null,
-          empresaUf: empresaSelecionada?.uf || null,
-        }),
+        body: JSON.stringify({ periodo: periodo || null, fileName: file.name, resumo }),
       });
       const dataIniciar = await resIniciar.json().catch(() => null);
       if (!resIniciar.ok) {
@@ -285,19 +277,26 @@ function AnaliseFiscalEntradaInner() {
         return;
       }
 
-      setApuracao({
-        id: apuracaoId,
-        periodo: periodo || null,
-        fileName: file.name,
-        status: 'CONCLUIDA',
-        empresaAnalisadaNome: empresaSelecionada?.nome || null,
-        empresaAnalisadaCnpj: empresaSelecionada?.cnpj || null,
-        empresaAnalisadaUf: empresaSelecionada?.uf || null,
-        processedAt: new Date().toISOString(),
-        ...resumo,
-        tesNovasEncontradas: resumo.tesNovasEncontradas.join(', ') || null,
-        itens: itens.filter((i) => i.divergencias.length > 0).map(paraItemView),
-      });
+      // Busca o cabeçalho já persistido (empresaAnalisada* já resolvido no
+      // servidor a partir da filial ativa) em vez de reconstruir esses
+      // campos aqui — evita duplicar a lógica de resolução de empresa no
+      // cliente.
+      const resDetalhe = await fetch(`/api/analise-fiscal/apuracoes/${apuracaoId}`);
+      const dataDetalhe = await resDetalhe.json().catch(() => null);
+      if (resDetalhe.ok && dataDetalhe?.apuracao) {
+        setApuracao(dataDetalhe.apuracao);
+      } else {
+        setApuracao({
+          id: apuracaoId,
+          periodo: periodo || null,
+          fileName: file.name,
+          status: 'CONCLUIDA',
+          processedAt: new Date().toISOString(),
+          ...resumo,
+          tesNovasEncontradas: resumo.tesNovasEncontradas.join(', ') || null,
+          itens: itens.filter((i) => i.divergencias.length > 0).map(paraItemView),
+        });
+      }
       setProcessando(false);
       setProgresso(null);
       router.replace(`/dashboard/analise-fiscal/entrada?apuracaoId=${apuracaoId}`);
@@ -313,7 +312,6 @@ function AnaliseFiscalEntradaInner() {
     setApuracao(null);
     setFile(null);
     setDataBase('');
-    setEmpresaSelecionadaId('');
     setErro(null);
     setFiltroSeveridade('TODOS');
     setFiltroTipo('TODOS');
@@ -322,7 +320,7 @@ function AnaliseFiscalEntradaInner() {
     router.replace('/dashboard/analise-fiscal/entrada');
   }
 
-  const parametrosDefinidos = !!dataBase && (empresasGrupo.length === 0 || !!empresaSelecionadaId);
+  const parametrosDefinidos = !!dataBase && (!temEmpresasGrupo || !!currentEmpresaGrupoId);
 
   const divergenciasFlat: LinhaDivergencia[] = useMemo(() => {
     if (!apuracao) return [];
@@ -421,7 +419,8 @@ function AnaliseFiscalEntradaInner() {
         <div className="card-surface p-5 space-y-3">
           <h2 className="font-display font-semibold text-brand text-sm">Parâmetros da análise</h2>
           <p className="text-xs text-gray-500">
-            Mesma lógica da tela "Pergunte" do Protheus — escolha a Data Base e a empresa antes de enviar o arquivo.
+            Mesma lógica da tela "Pergunte" do Protheus — escolha a Data Base antes de enviar o arquivo.
+            {temEmpresasGrupo && ' A filial é a selecionada no topo da tela.'}
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <div>
@@ -435,26 +434,13 @@ function AnaliseFiscalEntradaInner() {
                 required
               />
             </div>
-            {empresasGrupo.length > 0 && (
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Empresa a ser analisada</label>
-                <select
-                  value={empresaSelecionadaId}
-                  onChange={(e) => setEmpresaSelecionadaId(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56"
-                  disabled={processando}
-                >
-                  <option value="">Selecione...</option>
-                  {empresasGrupo.map((e) => (
-                    <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
           {!parametrosDefinidos && (
             <p className="text-xs text-gray-400">
-              Preencha a Data Base{empresasGrupo.length > 0 ? ' e a Empresa' : ''} pra liberar o envio do arquivo.
+              {!dataBase && 'Preencha a Data Base'}
+              {!dataBase && temEmpresasGrupo && !currentEmpresaGrupoId && ' e selecione a filial no topo da tela'}
+              {dataBase && temEmpresasGrupo && !currentEmpresaGrupoId && 'Selecione a filial no topo da tela'}
+              {' '}pra liberar o envio do arquivo.
             </p>
           )}
         </div>

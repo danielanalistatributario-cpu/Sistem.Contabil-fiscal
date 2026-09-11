@@ -8,8 +8,6 @@ import { canAccess, type Role } from '@/lib/permissions';
 
 type Candidato = { id: string; periodo: string | null; fileName: string | null; processedAt: string; totalLinhas: number };
 
-type EmpresaGrupo = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
-
 // Tela "Pergunte" (Data Base + Empresa) — o <input type="month"> nativo
 // devolve "YYYY-MM"; convertido pra "MM/YYYY" no armazenamento, mesmo
 // formato que já era usado nos exemplos de período em todo o sistema.
@@ -76,8 +74,9 @@ function ApuracaoFiscalInner() {
 
   // form de criação
   const [dataBase, setDataBase] = useState('');
-  const [empresasGrupo, setEmpresasGrupo] = useState<EmpresaGrupo[]>([]);
-  const [empresaSelecionadaId, setEmpresaSelecionadaId] = useState('');
+  // Filial ativa é lida do seletor "Filial" no topo da aplicação (Topbar).
+  const [currentEmpresaGrupoId, setCurrentEmpresaGrupoId] = useState<string | null>(null);
+  const [temEmpresasGrupo, setTemEmpresasGrupo] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [candidatosEntrada, setCandidatosEntrada] = useState<Candidato[] | null>(null);
@@ -100,6 +99,7 @@ function ApuracaoFiscalInner() {
       if (res.ok) {
         const data = await res.json();
         setRole(data.user?.currentRole ?? null);
+        setCurrentEmpresaGrupoId(data.user?.currentEmpresaGrupoId ?? null);
       }
     })();
   }, []);
@@ -109,7 +109,7 @@ function ApuracaoFiscalInner() {
       const res = await fetch('/api/analise-fiscal/config-runtime');
       if (res.ok) {
         const data = await res.json();
-        setEmpresasGrupo(data.empresasGrupo || []);
+        setTemEmpresasGrupo((data.empresasGrupo || []).length > 0);
       }
     })();
   }, []);
@@ -132,12 +132,11 @@ function ApuracaoFiscalInner() {
 
   async function handleBuscarPeriodo() {
     if (!dataBase) return;
-    if (empresasGrupo.length > 0 && !empresaSelecionadaId) {
-      setErro('Selecione a empresa a ser analisada.');
+    if (temEmpresasGrupo && !currentEmpresaGrupoId) {
+      setErro('Selecione a filial no topo da tela antes de continuar.');
       return;
     }
     const periodo = monthInputParaPeriodo(dataBase);
-    const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaSelecionadaId) || null;
     setErro(null);
     setBuscando(true);
     setCandidatosEntrada(null);
@@ -147,7 +146,7 @@ function ApuracaoFiscalInner() {
     const res = await fetch('/api/analise-fiscal/apuracao/candidatos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ periodo, empresaCnpj: empresaSelecionada?.cnpj || null }),
+      body: JSON.stringify({ periodo }),
     });
     const data = await res.json().catch(() => null);
     setBuscando(false);
@@ -185,7 +184,6 @@ function ApuracaoFiscalInner() {
         periodo: monthInputParaPeriodo(dataBase),
         entradaApuracaoId: entradaEscolhida || null,
         saidaApuracaoId: saidaEscolhida || null,
-        empresaGrupoId: empresaSelecionadaId || null,
       }),
     });
     const data = await res.json().catch(() => null);
@@ -200,7 +198,6 @@ function ApuracaoFiscalInner() {
   function handleNovaApuracao() {
     setDetalhe(null);
     setDataBase('');
-    setEmpresaSelecionadaId('');
     setCandidatosEntrada(null);
     setCandidatosSaida(null);
     setEntradaEscolhida('');
@@ -312,7 +309,8 @@ function ApuracaoFiscalInner() {
         <div className="card-surface p-5 space-y-4">
           <h2 className="font-display font-semibold text-brand text-sm">Parâmetros da apuração</h2>
           <p className="text-xs text-gray-500">
-            Mesma lógica da tela "Pergunte" do Protheus — escolha a Data Base e a empresa antes de buscar os dados.
+            Mesma lógica da tela "Pergunte" do Protheus — escolha a Data Base antes de buscar os dados.
+            {temEmpresasGrupo && ' A filial é a selecionada no topo da tela.'}
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <div>
@@ -325,29 +323,17 @@ function ApuracaoFiscalInner() {
                 required
               />
             </div>
-            {empresasGrupo.length > 0 && (
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Empresa a ser analisada</label>
-                <select
-                  value={empresaSelecionadaId}
-                  onChange={(e) => setEmpresaSelecionadaId(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56"
-                >
-                  <option value="">Selecione...</option>
-                  {empresasGrupo.map((e) => (
-                    <option key={e.id} value={e.id}>{e.nome} — {e.uf}</option>
-                  ))}
-                </select>
-              </div>
-            )}
             <button
               onClick={handleBuscarPeriodo}
-              disabled={!dataBase || (empresasGrupo.length > 0 && !empresaSelecionadaId) || buscando}
+              disabled={!dataBase || (temEmpresasGrupo && !currentEmpresaGrupoId) || buscando}
               className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {buscando ? 'Buscando...' : 'Buscar dados do período'}
             </button>
           </div>
+          {temEmpresasGrupo && !currentEmpresaGrupoId && (
+            <p className="text-xs text-gray-400">Selecione a filial no topo da tela pra liberar a busca.</p>
+          )}
 
           {candidatosEntrada !== null && (
             <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">

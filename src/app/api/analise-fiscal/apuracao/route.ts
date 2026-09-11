@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 import { montarResumoCompleto, sugerirSaldoCredorAnterior, LANCAMENTOS_PADRAO } from '@/lib/analise-fiscal-icms-apuracao';
-import { carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
+import { resolverEmpresaGrupoId, carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
 
 export async function GET() {
   const session = await getSession();
@@ -57,7 +57,6 @@ export async function POST(req: NextRequest) {
   const periodo = String(body?.periodo || '').trim();
   const entradaApuracaoId: string | null = body?.entradaApuracaoId || null;
   const saidaApuracaoId: string | null = body?.saidaApuracaoId || null;
-  const empresaGrupoIdInformado: string | null = body?.empresaGrupoId || null;
 
   if (!periodo) {
     return NextResponse.json({ error: 'Informe o período.' }, { status: 400 });
@@ -66,11 +65,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Vincule pelo menos uma análise de Entradas ou de Saídas.' }, { status: 400 });
   }
 
-  const empresasGrupo = await carregarEmpresasGrupo(session.currentCompanyId);
-  const empresaSelecionada = empresasGrupo.find((e) => e.id === empresaGrupoIdInformado) || null;
-  if (empresasGrupo.length > 0 && !empresaSelecionada) {
-    return NextResponse.json({ error: 'Selecione a empresa a ser analisada.' }, { status: 400 });
+  const { empresaGrupoId, erro } = await resolverEmpresaGrupoId(
+    session.currentCompanyId,
+    session.currentEmpresaGrupoId,
+    true,
+    'Selecione a filial no topo da tela.'
+  );
+  if (erro) {
+    return NextResponse.json({ error: erro }, { status: 400 });
   }
+  const empresasGrupo = await carregarEmpresasGrupo(session.currentCompanyId);
+  const empresaSelecionada = empresaGrupoId ? empresasGrupo.find((e) => e.id === empresaGrupoId) || null : null;
 
   if (entradaApuracaoId) {
     const entrada = await prisma.analiseFiscalApuracao.findUnique({ where: { id: entradaApuracaoId }, select: { companyId: true } });

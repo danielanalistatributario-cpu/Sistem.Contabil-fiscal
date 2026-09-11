@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 import type { ResumoApuracaoSaida } from '@/lib/analise-fiscal-saida-compute';
+import { carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
 
 // Etapa 1 do fluxo em lotes: cria o cabeçalho da apuração com o resumo já
 // calculado no navegador (arquivo de Saídas real chega a dezenas de
@@ -21,10 +22,20 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const periodo = body?.periodo ? String(body.periodo).trim() : null;
   const fileName = body?.fileName ? String(body.fileName).trim() : null;
-  const empresaNome = body?.empresaNome ? String(body.empresaNome).trim() : null;
-  const empresaCnpj = body?.empresaCnpj ? String(body.empresaCnpj).trim() : null;
-  const empresaUf = body?.empresaUf ? String(body.empresaUf).trim() : null;
   const resumo = body?.resumo as ResumoApuracaoSaida | undefined;
+
+  let empresaNome: string | null = null;
+  let empresaCnpj: string | null = null;
+  let empresaUf: string | null = null;
+  if (session.currentEmpresaGrupoId) {
+    const empresasGrupo = await carregarEmpresasGrupo(session.currentCompanyId);
+    const empresa = empresasGrupo.find((e) => e.id === session.currentEmpresaGrupoId);
+    if (empresa) {
+      empresaNome = empresa.nome;
+      empresaCnpj = empresa.cnpj;
+      empresaUf = empresa.uf;
+    }
+  }
 
   if (!resumo || typeof resumo.totalLinhas !== 'number') {
     return NextResponse.json({ error: 'Resumo da apuração ausente ou inválido.' }, { status: 400 });

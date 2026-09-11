@@ -7,6 +7,7 @@ import type { Role } from './permissions';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const TOKEN_COOKIE = 'portal_token';
 const COMPANY_COOKIE = 'portal_company_id';
+const EMPRESA_GRUPO_COOKIE = 'portal_empresa_grupo_id';
 
 export async function hashPassword(password: string) {
   return bcrypt.hash(password, 10);
@@ -30,6 +31,7 @@ export function verifyToken(token: string): { userId: string } | null {
 
 export const AUTH_COOKIE_NAME = TOKEN_COOKIE;
 export const COMPANY_COOKIE_NAME = COMPANY_COOKIE;
+export const EMPRESA_GRUPO_COOKIE_NAME = EMPRESA_GRUPO_COOKIE;
 
 export type SessionUser = {
   id: string;
@@ -38,6 +40,11 @@ export type SessionUser = {
   memberships: { companyId: string; companyName: string; role: Role }[];
   currentCompanyId: string | null;
   currentRole: Role | null;
+  // Filial ativa (AnaliseFiscalCnpjGrupo) dentro da empresa/tenant atual,
+  // escolhida no seletor "Filial" do Topbar — hoje só usada pelo módulo
+  // Análise e Apuração Fiscal. null = nenhuma filial selecionada (tenant
+  // sem cadastro de filiais, ou usuário ainda não escolheu).
+  currentEmpresaGrupoId: string | null;
 };
 
 // Resolve o usuario autenticado a partir do cookie de sessao (uso em server components e API routes).
@@ -68,6 +75,20 @@ export async function getSession(): Promise<SessionUser | null> {
 
   const currentRole = memberships.find((m) => m.companyId === currentCompanyId)?.role || null;
 
+  // Só consulta o banco se o cookie de filial existir — usuário/tenant que
+  // nunca usou o seletor "Filial" (Análise Fiscal) não paga esse custo em
+  // toda requisição autenticada do sistema.
+  let currentEmpresaGrupoId: string | null = cookieStore.get(EMPRESA_GRUPO_COOKIE)?.value || null;
+  if (currentEmpresaGrupoId && currentCompanyId) {
+    const valida = await prisma.analiseFiscalCnpjGrupo.findFirst({
+      where: { id: currentEmpresaGrupoId, companyId: currentCompanyId, uf: { not: null } },
+      select: { id: true },
+    });
+    if (!valida) currentEmpresaGrupoId = null;
+  } else {
+    currentEmpresaGrupoId = null;
+  }
+
   return {
     id: user.id,
     name: user.name,
@@ -75,6 +96,7 @@ export async function getSession(): Promise<SessionUser | null> {
     memberships,
     currentCompanyId,
     currentRole,
+    currentEmpresaGrupoId,
   };
 }
 
