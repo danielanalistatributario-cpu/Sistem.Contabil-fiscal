@@ -68,6 +68,29 @@ function mapearColunas(cabecalho: unknown[]): Partial<Record<CampoChave, number>
   return mapa;
 }
 
+// Bug real e recorrente (Excel em locale pt-BR): quando a coluna "Código
+// do Produto" está formatada como número em vez de texto, digitar
+// "100.049" faz o Excel tratar o "." como separador de milhar — o valor
+// armazenado vira o inteiro 100049, perdendo o ponto que separa as duas
+// metades do código (convenção "NNN.NNN" usada em todo o sistema, ver
+// extrairCodigoProduto em analise-fiscal-tes-registry.ts). Sem o ponto,
+// o cruzamento produto×TES nunca encontra o produto no cadastro (silêncio,
+// não erro) — confirmado contra dado real duas vezes (Distribuidora
+// Fortfruit em 09/09/2026, Fort Fruit Matriz em 11/09/2026, 2336/2391
+// produtos afetados, validado contra um relatório real sem nenhum
+// conflito). Normaliza na importação pra não repetir o problema: um
+// código só de dígitos com exatamente 6 dígitos (3+3 da convenção) ganha
+// o ponto de volta antes dos 3 últimos; qualquer outro formato (já tem
+// ponto, tem letras, tamanho diferente — ex: séries antigas de 4 dígitos)
+// passa direto, sem mexer.
+export function normalizarCodigoProdutoImportado(v: string): string {
+  const codigo = v.trim();
+  if (/^\d{6}$/.test(codigo)) {
+    return codigo.slice(0, 3) + '.' + codigo.slice(3);
+  }
+  return codigo;
+}
+
 function interpretarClassificacao(v: unknown): ClassificacaoProdutoImportado | null {
   const texto = normalizar(v);
   if (!texto) return null;
@@ -114,7 +137,7 @@ export function lerProdutosClassificacao(aoa: unknown[][]): ResultadoImportacaoP
     if (!row || row.every((c) => c === null || c === undefined || String(c).trim() === '')) continue;
 
     const numeroLinha = i + 1;
-    const codigoProduto = String(row[colunas.codigo] ?? '').trim();
+    const codigoProduto = normalizarCodigoProdutoImportado(String(row[colunas.codigo] ?? '').trim());
     const descricao = String(row[colunas.descricao] ?? '').trim();
     const classificacao = interpretarClassificacao(row[colunas.classificacao]);
     const observacao = colunas.observacao !== undefined ? String(row[colunas.observacao] ?? '').trim() : '';
