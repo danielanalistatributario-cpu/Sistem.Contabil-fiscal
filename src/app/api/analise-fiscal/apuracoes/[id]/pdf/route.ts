@@ -15,12 +15,22 @@ const SEVERIDADE_ORDEM = ['CRITICO', 'ALTO', 'MEDIO', 'BAIXO', 'INFORMATIVO'];
 
 const MARGEM = 40;
 const COLS = [
-  { key: 'severidade', label: 'Severidade', x: MARGEM, width: 55 },
-  { key: 'nota', label: 'Nota', x: MARGEM + 55, width: 55 },
-  { key: 'tes', label: 'TES', x: MARGEM + 110, width: 35 },
-  { key: 'motivo', label: 'Motivo', x: MARGEM + 145, width: 210 },
-  { key: 'sugestao', label: 'Sugestão', x: MARGEM + 355, width: 155 },
+  { key: 'severidade', label: 'Severidade', x: MARGEM, width: 50 },
+  { key: 'nota', label: 'Nota', x: MARGEM + 50, width: 55 },
+  { key: 'tes', label: 'TES', x: MARGEM + 105, width: 30 },
+  { key: 'produto', label: 'Produto', x: MARGEM + 135, width: 150 },
+  { key: 'motivo', label: 'Motivo', x: MARGEM + 285, width: 190 },
+  { key: 'sugestao', label: 'Sugestão', x: MARGEM + 475, width: 130 },
 ];
+
+// Layout real do Protheus não tem coluna separada de código do produto —
+// o código vem embutido no início da descrição, com bastante espaço em
+// branco de preenchimento (ex: "220.001        -NECTARINA IMPORTADA"),
+// que fica ilegível numa coluna estreita do PDF/Excel. Colapsa os
+// espaços em vez de cortar o código fora.
+function limparProduto(v: string | null | undefined): string {
+  return (v || '').replace(/\s+/g, ' ').trim();
+}
 
 function gerarPdf(apuracao: {
   periodo: string | null;
@@ -36,7 +46,7 @@ function gerarPdf(apuracao: {
   qtdAlto: number;
   qtdMedio: number;
   qtdBaixo: number;
-  itens: { numeroNf: string | null; linha: number; tes: string; divergencias: { severidade: string; motivo: string; sugestaoCorrecao: string | null }[] }[];
+  itens: { numeroNf: string | null; linha: number; tes: string; produtoDescricao: string | null; divergencias: { severidade: string; motivo: string; sugestaoCorrecao: string | null }[] }[];
 }, companyName: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: MARGEM, size: 'A4', layout: 'landscape' });
@@ -63,7 +73,7 @@ function gerarPdf(apuracao: {
     doc.moveDown(1);
 
     const divergencias = apuracao.itens
-      .flatMap((item) => item.divergencias.map((d) => ({ ...d, numeroNf: item.numeroNf, linha: item.linha, tes: item.tes })))
+      .flatMap((item) => item.divergencias.map((d) => ({ ...d, numeroNf: item.numeroNf, linha: item.linha, tes: item.tes, produto: limparProduto(item.produtoDescricao) })))
       .sort((a, b) => SEVERIDADE_ORDEM.indexOf(a.severidade) - SEVERIDADE_ORDEM.indexOf(b.severidade));
 
     function desenharCabecalho() {
@@ -94,6 +104,7 @@ function gerarPdf(apuracao: {
         ['severidade', SEVERIDADE_LABEL[d.severidade] || d.severidade],
         ['nota', d.numeroNf || `Linha ${d.linha}`],
         ['tes', d.tes],
+        ['produto', d.produto || '—'],
         ['motivo', d.motivo],
         ['sugestao', d.sugestaoCorrecao || '—'],
       ];
@@ -133,7 +144,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     include: {
       itens: {
         orderBy: { linha: 'asc' },
-        select: { numeroNf: true, linha: true, tes: true, divergencias: true },
+        select: { numeroNf: true, linha: true, tes: true, produtoDescricao: true, divergencias: true },
       },
       company: true,
     },

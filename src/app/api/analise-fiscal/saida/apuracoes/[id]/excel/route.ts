@@ -51,7 +51,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         'Linha': item.linha,
         'Nota Fiscal': item.numeroNf || '',
         'TES': item.tes,
-        'Produto': item.produtoDescricao || '',
+        'Produto': (item.produtoDescricao || '').replace(/\s+/g, ' ').trim(),
         'Cliente': item.cliente || '',
         'CNPJ/CPF': item.cnpjCpf || '',
         'CFOP': item.cfop || '',
