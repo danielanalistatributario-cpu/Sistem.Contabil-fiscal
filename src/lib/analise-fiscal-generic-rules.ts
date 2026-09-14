@@ -6,6 +6,34 @@
 import type { RuleDef, RuleContext, Divergencia } from './analise-fiscal-tes-registry';
 import { normalizarUf, somenteDigitos, fmtBRL, fmtPct, extrairCodigoProduto } from './analise-fiscal-tes-registry';
 
+// Pedido explícito do usuário: nota fiscal lançada sem TES nenhuma
+// precisa ser apontada — hoje o leitor (analise-fiscal-reader.ts/
+// analise-fiscal-saida-reader.ts) só descarta a linha quando TES *e*
+// CFOP estão os dois em branco (linha em branco/totalizadora); uma
+// linha com CFOP preenchido mas TES vazia é uma nota real que entra
+// na apuração com `tesConhecida: false` e, sem essa regra, passa
+// batido — nenhuma regra genérica nem profunda roda pra ela (a TES é
+// a chave de tudo), e ela nem contava como "TES nova" (só entra nesse
+// contador quando `linha.tes` está preenchido). Roda em Entrada e
+// Saída igualmente, sem escopo de empresa — "essa regra é para todas
+// as empresas".
+const ruleTesAusente: RuleDef = {
+  id: 'generico_tes_ausente',
+  descricao: 'Sinaliza nota fiscal lançada sem TES preenchida — sem a TES, nenhuma outra regra (genérica ou profunda) consegue validar a linha.',
+  check: (ctx) => {
+    const { linha } = ctx;
+    if (linha.tes.trim() !== '') return null;
+    return {
+      severidade: 'CRITICO',
+      tipo: 'TES_AUSENTE',
+      regraEsperada: 'Toda nota fiscal deve ter uma TES (Tipo de Entrada/Saída) preenchida',
+      informacaoEncontrada: `Nota ${linha.numeroNf || '(sem número)'}, produto "${linha.produtoDescricao || '(sem descrição)'}" lançada sem TES`,
+      motivo: 'Nota fiscal sem TES não pode ser validada por nenhuma regra fiscal — falta a informação que define o tratamento tributário esperado',
+      sugestaoCorrecao: 'Verificar no Protheus por que essa nota foi lançada sem TES e corrigir a classificação',
+    };
+  },
+};
+
 const ruleChaveNfPolicy: RuleDef = {
   id: 'generico_chave_nf_politica',
   descricao: 'Confere se a Chave NF está preenchida ou em branco conforme a política de cada TES: obrigatória (deve ter chave), proibida (não deve ter — TES gerencial/serviço) ou livre (sem checagem).',
@@ -346,6 +374,7 @@ function ruleCalculoImposto(campo: 'Icms' | 'Pis' | 'Cofins', label: string): Ru
 }
 
 export const GENERIC_RULES: RuleDef[] = [
+  ruleTesAusente,
   ruleChaveNfPolicy,
   ruleChaveNfFormato,
   ruleProdutoNaoPermitido,
