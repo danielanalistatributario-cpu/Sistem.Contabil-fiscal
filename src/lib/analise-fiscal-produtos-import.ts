@@ -9,6 +9,8 @@ export type ProdutoImportado = {
   codigoProduto: string;
   descricao: string;
   classificacao: ClassificacaoProdutoImportado;
+  classificacaoPisCofins: ClassificacaoProdutoImportado | null;
+  ncm: string | null;
   observacao: string;
 };
 
@@ -28,12 +30,18 @@ function normalizar(v: unknown): string {
     .replace(/\p{Diacritic}/gu, '');
 }
 
-type CampoChave = 'codigo' | 'descricao' | 'classificacao' | 'observacao';
+type CampoChave = 'codigo' | 'descricao' | 'classificacao' | 'classificacaoPisCofins' | 'ncm' | 'observacao';
 
 const KEYWORDS: Record<CampoChave, string[]> = {
   codigo: ['codigo do produto', 'codigo produto', 'cod produto', 'codigo'],
   descricao: ['descricao do produto', 'descricao produto', 'descricao', 'produto'],
-  classificacao: ['classificacao tributaria', 'classificacao', 'isento/tributado', 'tributacao', 'tipo tributario'],
+  // Mais específico que "classificacao" sozinho — precisa ser resolvido
+  // ANTES na ordem de mapearColunas, senão o keyword genérico de ICMS
+  // ("classificacao") bate primeiro num cabeçalho como "Classificação
+  // PIS/COFINS" (que também contém a palavra "classificacao").
+  classificacaoPisCofins: ['classificacao pis/cofins', 'classificacao pis cofins', 'classificacao piscofins', 'pis/cofins', 'pis cofins'],
+  classificacao: ['classificacao tributaria', 'classificacao icms', 'classificacao', 'isento/tributado', 'tributacao', 'tipo tributario'],
+  ncm: ['pos.ipi/ncm', 'pos ipi/ncm', 'pos ipi ncm', 'posicao ipi', 'ipi/ncm', 'ncm'],
   observacao: ['observacao', 'motivo'],
 };
 
@@ -57,7 +65,7 @@ function mapearColunas(cabecalho: unknown[]): Partial<Record<CampoChave, number>
   const linha = cabecalho.map(normalizar);
   const mapa: Partial<Record<CampoChave, number>> = {};
   const usadas = new Set<number>();
-  const ordem: CampoChave[] = ['codigo', 'classificacao', 'observacao', 'descricao'];
+  const ordem: CampoChave[] = ['codigo', 'classificacaoPisCofins', 'ncm', 'classificacao', 'observacao', 'descricao'];
   for (const campo of ordem) {
     const idx = linha.findIndex((c, i) => !usadas.has(i) && KEYWORDS[campo].some((k) => c.includes(k)));
     if (idx >= 0) {
@@ -97,6 +105,19 @@ function interpretarClassificacao(v: unknown): ClassificacaoProdutoImportado | n
   if (texto.includes('isent')) return 'ISENTO';
   if (texto.includes('tribut')) return 'TRIBUTADO';
   return null;
+}
+
+// NCM vem às vezes como placeholder sem informação real (ex: "." ou
+// "0000.00.00" em linhas de serviço) — trata como "sem NCM" (null) em
+// vez de gravar lixo; qualquer outra coisa com pelo menos um dígito
+// passa como está, sem validar formato (o cadastro é só referência,
+// não entra em nenhuma regra de divergência).
+function normalizarNcmImportado(v: unknown): string | null {
+  const texto = String(v ?? '').trim();
+  if (!texto) return null;
+  const digitos = texto.replace(/\D/g, '');
+  if (!digitos || /^0+$/.test(digitos)) return null;
+  return texto;
 }
 
 // Lê um Excel/CSV com colunas Código, Descrição e Classificação (Isento/
@@ -140,6 +161,8 @@ export function lerProdutosClassificacao(aoa: unknown[][]): ResultadoImportacaoP
     const codigoProduto = normalizarCodigoProdutoImportado(String(row[colunas.codigo] ?? '').trim());
     const descricao = String(row[colunas.descricao] ?? '').trim();
     const classificacao = interpretarClassificacao(row[colunas.classificacao]);
+    const classificacaoPisCofins = colunas.classificacaoPisCofins !== undefined ? interpretarClassificacao(row[colunas.classificacaoPisCofins]) : null;
+    const ncm = colunas.ncm !== undefined ? normalizarNcmImportado(row[colunas.ncm]) : null;
     const observacao = colunas.observacao !== undefined ? String(row[colunas.observacao] ?? '').trim() : '';
 
     if (!codigoProduto || !descricao) {
@@ -151,7 +174,7 @@ export function lerProdutosClassificacao(aoa: unknown[][]): ResultadoImportacaoP
       continue;
     }
 
-    produtos.push({ codigoProduto, descricao, classificacao, observacao });
+    produtos.push({ codigoProduto, descricao, classificacao, classificacaoPisCofins, ncm, observacao });
   }
 
   return { produtos, ignoradas, erro: null };

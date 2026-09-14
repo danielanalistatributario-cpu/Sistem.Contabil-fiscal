@@ -681,6 +681,7 @@ export default function AnaliseFiscalConfigPage() {
               <p className="text-[11px] text-gray-400 flex-1 min-w-[220px]">
                 Colunas esperadas: <strong>Código do Produto</strong>, <strong>Descrição</strong> e{' '}
                 <strong>Classificação</strong> (Isento ou Tributado) — nomes parecidos são reconhecidos automaticamente.
+                Colunas opcionais também reconhecidas: <strong>Classificação PIS/COFINS</strong> e <strong>NCM</strong>.
                 Produto já cadastrado (pra essa empresa) é atualizado; produto novo é criado.
               </p>
               {importando && <span className="text-xs text-gray-500">Importando...</span>}

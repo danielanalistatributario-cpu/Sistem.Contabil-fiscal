@@ -41,19 +41,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: erro }, { status: 400 });
   }
 
-  const validos: { codigoProduto: string; descricao: string; classificacao: string; observacao: string | null }[] = [];
+  const validos: {
+    codigoProduto: string;
+    descricao: string;
+    classificacao: string;
+    classificacaoPisCofins: string | null;
+    ncm: string | null;
+    observacao: string | null;
+  }[] = [];
   let invalidos = 0;
 
   for (const l of linhas) {
     const codigoProduto = String(l?.codigoProduto || '').trim();
     const descricao = String(l?.descricao || '').trim();
     const classificacao = String(l?.classificacao || '').trim();
+    const classificacaoPisCofins = l?.classificacaoPisCofins && CLASSIFICACOES_VALIDAS.includes(String(l.classificacaoPisCofins).trim())
+      ? String(l.classificacaoPisCofins).trim()
+      : null;
+    const ncm = l?.ncm ? String(l.ncm).trim() : null;
     const observacao = l?.observacao ? String(l.observacao).trim() : null;
     if (!codigoProduto || !descricao || !CLASSIFICACOES_VALIDAS.includes(classificacao)) {
       invalidos++;
       continue;
     }
-    validos.push({ codigoProduto, descricao, classificacao, observacao });
+    validos.push({ codigoProduto, descricao, classificacao, classificacaoPisCofins, ncm, observacao });
   }
 
   if (validos.length === 0) {
@@ -78,7 +89,13 @@ export async function POST(req: NextRequest) {
       if (existente) {
         await tx.analiseFiscalProdutoClassificacao.update({
           where: { id: existente.id },
-          data: { descricao: p.descricao, classificacao: p.classificacao, observacao: p.observacao },
+          data: {
+            descricao: p.descricao,
+            classificacao: p.classificacao,
+            classificacaoPisCofins: p.classificacaoPisCofins,
+            ncm: p.ncm,
+            observacao: p.observacao,
+          },
         });
         atualizados++;
       } else {
