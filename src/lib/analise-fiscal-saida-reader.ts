@@ -144,14 +144,19 @@ export function lerRelatorioSaidas(aoa: unknown[][]): { rows: LinhaEntradaImport
     if (!row) continue;
     const tes = extrairCodigo(parseTextoCell(row[colunas['tes']]));
     const cfop = extrairCodigo(parseTextoCell(row[colunas['cfop']]));
-    if (!tes && !cfop) continue;
+    const numeroNf = parseTextoCell(row[colunas['numeroNf']]);
+    const produtoDescricao = parseTextoCell(row[colunas['produtoDescricao']]);
+    // Linha realmente em branco/totalizadora: nem nota nem produto
+    // preenchidos — TES/CFOP sozinhos não bastam pra decidir (mesma
+    // correção e mesmo motivo do leitor de Entradas, ver comentário lá).
+    if (!numeroNf && !produtoDescricao) continue;
 
     rows.push({
       linha: r + 1,
       tes,
       chaveNf: parseTextoCell(row[colunas['chaveNf']]),
-      numeroNf: parseTextoCell(row[colunas['numeroNf']]),
-      produtoDescricao: parseTextoCell(row[colunas['produtoDescricao']]),
+      numeroNf,
+      produtoDescricao,
       produtoCodigo: colunas['produtoCodigo'] >= 0 ? parseTextoCell(row[colunas['produtoCodigo']]) : '',
       tipo: colunas['tipo'] >= 0 ? parseTextoCell(row[colunas['tipo']]) : '',
       ncm: colunas['ncm'] >= 0 ? parseTextoCell(row[colunas['ncm']]) : '',

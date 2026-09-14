@@ -201,15 +201,25 @@ export function lerRelatorioEntradas(aoa: unknown[][]): { rows: LinhaEntradaImpo
     if (!row) continue;
     const tes = extrairCodigo(parseTextoCell(row[colunas['tes']]));
     const cfop = extrairCodigo(parseTextoCell(row[colunas['cfop']]));
-    // linha sem TES nem CFOP normalmente é linha em branco/totalizadora
-    if (!tes && !cfop) continue;
+    const numeroNf = parseTextoCell(row[colunas['numeroNf']]);
+    const produtoDescricao = parseTextoCell(row[colunas['produtoDescricao']]);
+    // Linha realmente em branco/totalizadora: nem nota nem produto
+    // preenchidos. TES/CFOP sozinhos NÃO bastam pra decidir — uma nota
+    // real (Número da Nota Fiscal e Produto preenchidos) pode vir sem
+    // TES nem CFOP por erro de lançamento no Protheus, e nesse caso
+    // precisa ENTRAR na apuração pra a regra `generico_tes_ausente`
+    // conseguir apontar (bug real: 31 notas reais da BEM PRA GENTE com
+    // TES e CFOP em branco eram descartadas aqui antes de qualquer
+    // regra rodar — usuário reportou que a regra "nota sem TES" não
+    // disparava, e essa era a causa raiz).
+    if (!numeroNf && !produtoDescricao) continue;
 
     rows.push({
       linha: r + 1,
       tes,
       chaveNf: parseTextoCell(row[colunas['chaveNf']]),
-      numeroNf: parseTextoCell(row[colunas['numeroNf']]),
-      produtoDescricao: parseTextoCell(row[colunas['produtoDescricao']]),
+      numeroNf,
+      produtoDescricao,
       produtoCodigo: colunas['produtoCodigo'] >= 0 ? parseTextoCell(row[colunas['produtoCodigo']]) : '',
       tipo: colunas['tipo'] >= 0 ? parseTextoCell(row[colunas['tipo']]) : '',
       ncm: colunas['ncm'] >= 0 ? parseTextoCell(row[colunas['ncm']]) : '',
