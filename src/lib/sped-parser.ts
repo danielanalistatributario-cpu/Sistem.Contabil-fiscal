@@ -29,7 +29,8 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
   let competencia: string | null = null;
   let nomeEmpresa: string | null = null;
 
-  linhasBrutas.forEach((linha, idx) => {
+  for (let idx = 0; idx < linhasBrutas.length; idx++) {
+    const linha = linhasBrutas[idx];
     const trimmed = linha.trim();
     // remove pipe inicial/final antes de dividir
     const semBordas = trimmed.replace(/^\|/, '').replace(/\|$/, '');
@@ -49,10 +50,20 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
     }
 
     linhas.push({ registro, bloco, campos: campos.slice(1), linhaOriginal: idx + 1 });
-  });
+
+    // 9999 é sempre o registro de encerramento do arquivo digital (último
+    // registro válido, em qualquer leiaute de EFD). Alguns arquivos trazem
+    // um bloco de assinatura digital (binário) colado depois dele — sem
+    // parar aqui, esse lixo binário vira "registros"/"blocos" fantasma no
+    // resumo (achado real testando um EFD Contribuições do usuário).
+    if (registro === '9999') break;
+  }
 
   return {
-    totalLinhas: linhasBrutas.length,
+    // linhas.length e não linhasBrutas.length: se o arquivo tiver algo colado
+    // depois do 9999 (assinatura digital), esse lixo não deve contar como
+    // "linha do SPED" em lugar nenhum do resumo.
+    totalLinhas: linhas.length,
     porBloco,
     porRegistro,
     linhas,

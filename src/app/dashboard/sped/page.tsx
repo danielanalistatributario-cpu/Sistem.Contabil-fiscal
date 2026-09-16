@@ -14,6 +14,7 @@ type UploadResult = {
   totalLinhas: number;
   porBloco: Record<string, number>;
   porRegistro: Record<string, number>;
+  linhasTruncadas: boolean;
   linhas: SpedLine[];
 };
 
@@ -102,18 +103,23 @@ export default function SpedPage() {
     setError(null);
     setResult(null);
 
-    const formData = new FormData();
-    formData.append('file', file);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
 
-    const res = await fetch('/api/sped/upload', { method: 'POST', body: formData });
-    const data = await res.json();
-    setLoading(false);
+      const res = await fetch('/api/sped/upload', { method: 'POST', body: formData });
+      const data = await res.json().catch(() => null);
 
-    if (!res.ok) {
-      setError(data.error || 'Falha ao processar o arquivo.');
-      return;
+      if (!res.ok || !data) {
+        setError((data && data.error) || `Falha ao processar o arquivo (status ${res.status}). Se o arquivo for muito grande, tente novamente ou divida-o.`);
+        return;
+      }
+      setResult(data);
+    } catch {
+      setError('Falha ao processar o arquivo — a conexão foi interrompida (arquivo muito grande ou tempo de processamento excedido).');
+    } finally {
+      setLoading(false);
     }
-    setResult(data);
   }
 
   const linhasFiltradas = useMemo(() => {
@@ -155,10 +161,11 @@ export default function SpedPage() {
     XLSX.writeFile(workbook, `sped-fiscal-${result.fileName.replace(/\.[^.]+$/, '')}.xlsx`);
   }
 
-  const registrosDisponiveis = result
-    ? Array.from(new Set(result.linhas.map((l) => l.registro))).sort()
-    : [];
-  const blocosDisponiveis = result ? Array.from(new Set(result.linhas.map((l) => l.bloco))).sort() : [];
+  // Deriva as opções dos filtros do resumo por bloco/registro (sempre
+  // completo, conta o arquivo inteiro) em vez de escanear result.linhas
+  // (pode vir cortada em arquivos grandes — ver linhasTruncadas).
+  const registrosDisponiveis = result ? Object.keys(result.porRegistro).sort() : [];
+  const blocosDisponiveis = result ? Object.keys(result.porBloco).sort() : [];
 
   return (
     <div className="space-y-6">
@@ -314,6 +321,13 @@ export default function SpedPage() {
           </div>
 
           <div className="card-surface p-5">
+            {result.linhasTruncadas && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                Arquivo grande: a lista linha a linha abaixo (e o botão "Exportar para Excel" deste bloco) mostra
+                só as primeiras {result.linhas.length.toLocaleString('pt-BR')} de {result.totalLinhas.toLocaleString('pt-BR')} linhas.
+                O resumo por bloco acima já conta o arquivo inteiro, sem corte.
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <h2 className="font-semibold text-brand">Registros ({linhasFiltradas.length})</h2>
               <div className="flex gap-2">

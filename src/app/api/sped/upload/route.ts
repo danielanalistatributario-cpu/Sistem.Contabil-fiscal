@@ -5,6 +5,14 @@ import { canAccess } from '@/lib/permissions';
 import { parseSpedFiscal } from '@/lib/sped-parser';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
+
+// Acima disso, devolver toda linha individual (com todos os campos) faz a
+// resposta JSON passar de vários MB — já vimos isso quebrar em produção
+// (Vercel) pra respostas grandes noutras rotas desta mesma ferramenta. O
+// resumo por bloco/registro (porBloco/porRegistro/totalLinhas) sempre reflete
+// o arquivo inteiro, nunca é cortado — só a lista linha-a-linha é limitada.
+const LIMITE_LINHAS_DETALHADAS = 15000;
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -47,6 +55,8 @@ export async function POST(req: NextRequest) {
     session.currentCompanyId
   );
 
+  const linhasTruncadas = resumo.linhas.length > LIMITE_LINHAS_DETALHADAS;
+
   return NextResponse.json({
     spedFileId: registro.id,
     fileName: file.name,
@@ -55,8 +65,11 @@ export async function POST(req: NextRequest) {
     totalLinhas: resumo.totalLinhas,
     porBloco: resumo.porBloco,
     porRegistro: resumo.porRegistro,
-    // Para arquivos muito grandes (produção), este processamento deve migrar
-    // para uma fila assíncrona, conforme recomendado no documento de escopo (seção 5.1).
-    linhas: resumo.linhas,
+    linhasTruncadas,
+    // Lista linha-a-linha limitada pra não estourar o tamanho da resposta em
+    // arquivos grandes (ex: EFD Contribuições, com muito mais registros que
+    // um EFD ICMS/IPI do mesmo período) — porBloco/porRegistro acima sempre
+    // contam o arquivo inteiro, independente desse corte.
+    linhas: linhasTruncadas ? resumo.linhas.slice(0, LIMITE_LINHAS_DETALHADAS) : resumo.linhas,
   });
 }
