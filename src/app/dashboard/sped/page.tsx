@@ -3,9 +3,11 @@
 import { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { ImportHero, ImportTrustNote } from '@/components/ImportHero';
-import { BLOCO_DESCRICOES, type TipoSped } from '@/lib/sped-parser';
-
-type SpedLine = { registro: string; bloco: string; campos: string[]; linhaOriginal: number };
+import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine } from '@/lib/sped-parser';
+import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
+import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
+import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
+import { gerarExcelTributos } from '@/lib/analise-fiscal-excel-tributos';
 
 type UploadResult = {
   spedFileId: string;
@@ -16,7 +18,6 @@ type UploadResult = {
   porBloco: Record<string, number>;
   porRegistro: Record<string, number>;
   tipoSped: TipoSped;
-  linhasTruncadas: boolean;
   linhas: SpedLine[];
 };
 
@@ -40,30 +41,46 @@ export default function SpedPage() {
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  function baixarBlob(buffer: Uint8Array, nomeArquivo: string) {
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeArquivo;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  // Leitura, cálculo e montagem do .xlsx rodam inteiramente aqui no
+  // navegador — um EFD Contribuições real já passou dos ~4,5MB que a
+  // Vercel aceita de corpo de requisição, então o arquivo nunca é
+  // enviado ao servidor (nem o resultado calculado, que fica ainda
+  // maior em JSON). A rota chamada depois só registra a atividade.
   async function handleGerarRelatorioModelo() {
     if (!file) return;
     setGerandoRelatorioModelo(true);
     setErroRelatorioModelo(null);
 
-    const formData = new FormData();
-    formData.append('file', file);
+    try {
+      const texto = await file.text();
+      const rows = buildRelatorioNFeRows(texto);
+      if (rows.length === 0) {
+        setErroRelatorioModelo('Nenhum item de nota fiscal (registros C100/C170) foi encontrado no arquivo.');
+        return;
+      }
+      const buffer = await gerarRelatorioNFeExcel(rows);
+      baixarBlob(buffer, `NFe_Entrada_Saida_${file.name.replace(/\.[^.]+$/, '')}.xlsx`);
 
-    const res = await fetch('/api/sped/relatorio-nfe', { method: 'POST', body: formData });
-    setGerandoRelatorioModelo(false);
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setErroRelatorioModelo(data.error || 'Falha ao gerar o relatório.');
-      return;
+      fetch('/api/sped/relatorio-nfe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, totalLinhas: rows.length }),
+      }).catch(() => {});
+    } catch {
+      setErroRelatorioModelo('Falha ao gerar o relatório.');
+    } finally {
+      setGerandoRelatorioModelo(false);
     }
-
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `NFe_Entrada_Saida_${file.name.replace(/\.[^.]+$/, '')}.xlsx`;
-    a.click();
-    window.URL.revokeObjectURL(url);
   }
 
   async function handleGerarExcelTributos() {
@@ -71,25 +88,27 @@ export default function SpedPage() {
     setGerandoExcelTributos(true);
     setErroExcelTributos(null);
 
-    const formData = new FormData();
-    formData.append('file', file);
+    try {
+      const texto = await file.text();
+      const rows = buildRelatorioNFeRows(texto);
+      if (rows.length === 0) {
+        setErroExcelTributos('Nenhum item de nota fiscal (registros C100/C170) foi encontrado no arquivo.');
+        return;
+      }
+      const itens = mapearSpedParaItensTributo(rows);
+      const buffer = await gerarExcelTributos(itens, 'ICMS-PIS-COFINS');
+      baixarBlob(buffer, `ICMS_PIS_COFINS_SPED_${file.name.replace(/\.[^.]+$/, '')}.xlsx`);
 
-    const res = await fetch('/api/sped/excel-tributos', { method: 'POST', body: formData });
-    setGerandoExcelTributos(false);
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setErroExcelTributos(data.error || 'Falha ao gerar a planilha.');
-      return;
+      fetch('/api/sped/excel-tributos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, totalLinhas: itens.length }),
+      }).catch(() => {});
+    } catch {
+      setErroExcelTributos('Falha ao gerar a planilha.');
+    } finally {
+      setGerandoExcelTributos(false);
     }
-
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ICMS_PIS_COFINS_SPED_${file.name.replace(/\.[^.]+$/, '')}.xlsx`;
-    a.click();
-    window.URL.revokeObjectURL(url);
   }
 
   async function handleUpload(e: React.FormEvent) {
@@ -100,19 +119,45 @@ export default function SpedPage() {
     setResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      const texto = await file.text();
+      if (!texto.trim()) {
+        setError('Arquivo vazio ou ilegível.');
+        return;
+      }
+      const resumo = parseSpedFiscal(texto);
 
-      const res = await fetch('/api/sped/upload', { method: 'POST', body: formData });
+      const res = await fetch('/api/sped/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          competencia: resumo.competencia,
+          nomeEmpresa: resumo.nomeEmpresa,
+          totalLinhas: resumo.totalLinhas,
+          porBloco: resumo.porBloco,
+          porRegistro: resumo.porRegistro,
+          tipoSped: resumo.tipoSped,
+        }),
+      });
       const data = await res.json().catch(() => null);
 
       if (!res.ok || !data) {
-        setError((data && data.error) || `Falha ao processar o arquivo (status ${res.status}). Se o arquivo for muito grande, tente novamente ou divida-o.`);
+        setError((data && data.error) || `Falha ao registrar o arquivo (status ${res.status}).`);
         return;
       }
-      setResult(data);
+      setResult({
+        spedFileId: data.spedFileId,
+        fileName: file.name,
+        competencia: resumo.competencia,
+        nomeEmpresa: resumo.nomeEmpresa,
+        totalLinhas: resumo.totalLinhas,
+        porBloco: resumo.porBloco,
+        porRegistro: resumo.porRegistro,
+        tipoSped: resumo.tipoSped,
+        linhas: resumo.linhas,
+      });
     } catch {
-      setError('Falha ao processar o arquivo — a conexão foi interrompida (arquivo muito grande ou tempo de processamento excedido).');
+      setError('Falha ao processar o arquivo.');
     } finally {
       setLoading(false);
     }
@@ -330,13 +375,6 @@ export default function SpedPage() {
           </div>
 
           <div className="card-surface p-5">
-            {result.linhasTruncadas && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
-                Arquivo grande: a lista linha a linha abaixo (e o botão "Exportar para Excel" deste bloco) mostra
-                só as primeiras {result.linhas.length.toLocaleString('pt-BR')} de {result.totalLinhas.toLocaleString('pt-BR')} linhas.
-                O resumo por bloco acima já conta o arquivo inteiro, sem corte.
-              </p>
-            )}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <h2 className="font-semibold text-brand">Registros ({linhasFiltradas.length})</h2>
               <div className="flex gap-2">

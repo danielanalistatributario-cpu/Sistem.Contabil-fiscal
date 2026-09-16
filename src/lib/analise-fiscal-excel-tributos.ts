@@ -81,7 +81,13 @@ const COLUNAS: { header: string; width: number; numFmt?: string }[] = [
   { header: 'Valor da COFINS', width: 16, numFmt: NUM_VALOR },
 ];
 
-export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string): Promise<Buffer> {
+// Devolve Uint8Array (não Buffer, API só do Node) porque esta função roda
+// tanto em rotas server-side (Análise Fiscal) quanto no navegador (Conversor
+// SPED, que processa o arquivo localmente pra não estourar o limite de
+// upload da Vercel — ver [[analise-apuracao-fiscal-modulo]]). Confirmado no
+// navegador: workbook.xlsx.writeBuffer() já devolve um Uint8Array nesse
+// ambiente. NextResponse e Blob aceitam Uint8Array direto, sem conversão.
+export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string): Promise<Uint8Array> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(tituloAba.slice(0, 31));
 
@@ -149,5 +155,5 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
   sheet.views = [{ state: 'frozen', ySplit: linhaCabecalho }];
 
   const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+  return new Uint8Array(buffer);
 }
