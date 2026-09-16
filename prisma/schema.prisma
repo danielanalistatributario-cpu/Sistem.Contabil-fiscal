@@ -519,14 +519,17 @@ model AnaliseFiscalItem {
   baseIcms         Float?
   valorIcms        Float?
   aliquotaIcms     Float?
+  cstIcms          String?
   isento           Float?
   baseOutros       Float?
   basePis          Float?
   valorPis         Float?
   aliquotaPis      Float?
+  cstPis           String?
   baseCofins       Float?
   valorCofins      Float?
   aliquotaCofins   Float?
+  cstCofins        String?
   apuracao         AnaliseFiscalApuracao      @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
   divergencias     AnaliseFiscalDivergencia[]
 }
@@ -613,14 +616,17 @@ model AnaliseFiscalSaidaItem {
   baseIcms         Float?
   valorIcms        Float?
   aliquotaIcms     Float?
+  cstIcms          String?
   isento           Float?
   baseOutros       Float?
   basePis          Float?
   valorPis         Float?
   aliquotaPis      Float?
+  cstPis           String?
   baseCofins       Float?
   valorCofins      Float?
   aliquotaCofins   Float?
+  cstCofins        String?
   apuracao         AnaliseFiscalSaidaApuracao      @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
   divergencias     AnaliseFiscalSaidaDivergencia[]
 

@@ -60,14 +60,17 @@ export async function POST(req: NextRequest) {
     baseIcms: item.linha.baseIcms,
     valorIcms: item.linha.valorIcms,
     aliquotaIcms: item.linha.aliquotaIcms,
+    cstIcms: item.linha.cstIcms || null,
     isento: item.linha.isento,
     baseOutros: item.linha.baseOutros,
     basePis: item.linha.basePis,
     valorPis: item.linha.valorPis,
     aliquotaPis: item.linha.aliquotaPis,
+    cstPis: item.linha.cstPis || null,
     baseCofins: item.linha.baseCofins,
     valorCofins: item.linha.valorCofins,
     aliquotaCofins: item.linha.aliquotaCofins,
+    cstCofins: item.linha.cstCofins || null,
   }));
 
   await prisma.analiseFiscalItem.createMany({ data: itensData });

@@ -129,14 +129,20 @@ export const CAMPOS_ANALISE_FISCAL: CampoDef[] = [
   { key: 'baseIcms', keywords: ['base de calculo do icms', 'base calculo icms', 'base icms', 'bc icms'], required: false },
   { key: 'valorIcms', keywords: ['valor do icms', 'valor icms', 'vl icms', 'vlr icms'], required: false },
   { key: 'aliquotaIcms', keywords: ['aliquota do icms', 'aliquota icms', 'aliq icms', '% icms'], required: false },
+  // CST (Código de Situação Tributária) — só existe numa variante do
+  // relatório do Protheus (ver [[analise-apuracao-fiscal-modulo]]);
+  // opcional, não bloqueia a leitura quando ausente.
+  { key: 'cstIcms', keywords: ['cst icms'], required: false },
   { key: 'isento', keywords: ['isento'], required: false },
   { key: 'baseOutros', keywords: ['base outros', 'outras bases', 'base outra'], required: false },
   { key: 'basePis', keywords: ['base do pis', 'base pis', 'bc pis'], required: false },
   { key: 'valorPis', keywords: ['valor do pis', 'valor pis', 'vl pis'], required: false },
   { key: 'aliquotaPis', keywords: ['aliquota do pis', 'aliquota pis', 'aliq pis'], required: false },
+  { key: 'cstPis', keywords: ['cst pis'], required: false },
   { key: 'baseCofins', keywords: ['base do cofins', 'base cofins', 'bc cofins'], required: false },
   { key: 'valorCofins', keywords: ['valor do cofins', 'valor cofins', 'vl cofins'], required: false },
   { key: 'aliquotaCofins', keywords: ['aliquota do cofins', 'aliquota cofins', 'aliq cofins'], required: false },
+  { key: 'cstCofins', keywords: ['cst cofins'], required: false },
   { key: 'origem', keywords: ['origem'], required: false },
 ];
 
@@ -162,14 +168,17 @@ export type LinhaEntradaImportada = {
   baseIcms: number | null;
   valorIcms: number | null;
   aliquotaIcms: number | null;
+  cstIcms: string;
   isento: number | null;
   baseOutros: number | null;
   basePis: number | null;
   valorPis: number | null;
   aliquotaPis: number | null;
+  cstPis: string;
   baseCofins: number | null;
   valorCofins: number | null;
   aliquotaCofins: number | null;
+  cstCofins: string;
   origem: string;
 };
 
@@ -236,14 +245,17 @@ export function lerRelatorioEntradas(aoa: unknown[][]): { rows: LinhaEntradaImpo
       baseIcms: colunas['baseIcms'] >= 0 ? parseValorNumerico(row[colunas['baseIcms']]) : null,
       valorIcms: colunas['valorIcms'] >= 0 ? parseValorNumerico(row[colunas['valorIcms']]) : null,
       aliquotaIcms: colunas['aliquotaIcms'] >= 0 ? parseValorNumerico(row[colunas['aliquotaIcms']]) : null,
+      cstIcms: colunas['cstIcms'] >= 0 ? parseTextoCell(row[colunas['cstIcms']]) : '',
       isento: colunas['isento'] >= 0 ? parseValorNumerico(row[colunas['isento']]) : null,
       baseOutros: colunas['baseOutros'] >= 0 ? parseValorNumerico(row[colunas['baseOutros']]) : null,
       basePis: colunas['basePis'] >= 0 ? parseValorNumerico(row[colunas['basePis']]) : null,
       valorPis: colunas['valorPis'] >= 0 ? parseValorNumerico(row[colunas['valorPis']]) : null,
       aliquotaPis: colunas['aliquotaPis'] >= 0 ? parseValorNumerico(row[colunas['aliquotaPis']]) : null,
+      cstPis: colunas['cstPis'] >= 0 ? parseTextoCell(row[colunas['cstPis']]) : '',
       baseCofins: colunas['baseCofins'] >= 0 ? parseValorNumerico(row[colunas['baseCofins']]) : null,
       valorCofins: colunas['valorCofins'] >= 0 ? parseValorNumerico(row[colunas['valorCofins']]) : null,
       aliquotaCofins: colunas['aliquotaCofins'] >= 0 ? parseValorNumerico(row[colunas['aliquotaCofins']]) : null,
+      cstCofins: colunas['cstCofins'] >= 0 ? parseTextoCell(row[colunas['cstCofins']]) : '',
       origem: colunas['origem'] >= 0 ? parseTextoCell(row[colunas['origem']]) : '',
     });
   }

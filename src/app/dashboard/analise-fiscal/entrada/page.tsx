@@ -566,6 +566,13 @@ function AnaliseFiscalEntradaInner() {
                 >
                   Exportar Excel
                 </a>
+                <a
+                  href={`/api/analise-fiscal/apuracoes/${apuracao.id}/excel-tributos`}
+                  className="border border-brand text-brand rounded-lg px-3 py-1.5 text-sm font-medium"
+                  title="Planilha com todas as linhas (não só as com divergência), com CST PIS/COFINS e filtros automáticos"
+                >
+                  Exportar Planilha ICMS/PIS/COFINS
+                </a>
               </div>
             </div>
 
