@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { ImportHero, ImportTrustNote } from '@/components/ImportHero';
+import { BLOCO_DESCRICOES, type TipoSped } from '@/lib/sped-parser';
 
 type SpedLine = { registro: string; bloco: string; campos: string[]; linhaOriginal: number };
 
@@ -14,20 +15,15 @@ type UploadResult = {
   totalLinhas: number;
   porBloco: Record<string, number>;
   porRegistro: Record<string, number>;
+  tipoSped: TipoSped;
   linhasTruncadas: boolean;
   linhas: SpedLine[];
 };
 
-const BLOCO_DESCRICOES: Record<string, string> = {
-  '0': 'Abertura, Identificação e Referências',
-  C: 'Documentos Fiscais I (Mercadorias)',
-  D: 'Documentos Fiscais II (Serviços)',
-  E: 'Apuração do ICMS e do IPI',
-  G: 'Controle do Crédito de ICMS do Ativo Permanente',
-  H: 'Inventário Físico',
-  K: 'Controle da Produção e do Estoque',
-  '1': 'Outras Informações',
-  '9': 'Controle e Encerramento do Arquivo',
+const TIPO_SPED_LABELS: Record<TipoSped, string> = {
+  icms_ipi: 'EFD ICMS/IPI',
+  contribuicoes: 'EFD Contribuições (PIS/COFINS)',
+  desconhecido: 'Não identificado',
 };
 
 export default function SpedPage() {
@@ -171,9 +167,9 @@ export default function SpedPage() {
     <div className="space-y-6">
       {!result && (
         <ImportHero
-          eyebrow="EFD ICMS/IPI — Blocos 0, C e E"
+          eyebrow="EFD ICMS/IPI e EFD Contribuições"
           titleParts={['SPED', '→', { text: 'Relatório de Entrada', accent: true }, 'de NF-e']}
-          description="Envie o arquivo .txt do SPED Fiscal e receba o resumo por blocos/registros, pronto para exportar em Excel — inclusive no layout exato do seu modelo, cabeçalho (C100), itens (C170), participantes (0150) e produtos (0200) já cruzados, linha por item."
+          description="Envie o arquivo .txt do SPED Fiscal (EFD ICMS/IPI) ou do SPED Contribuições (EFD PIS/COFINS) e receba o resumo por blocos/registros, pronto para exportar em Excel — inclusive no layout exato do seu modelo, cabeçalho (C100), itens (C170), participantes (0150) e produtos (0200) já cruzados, linha por item. O tipo de arquivo é identificado automaticamente."
           badges={['Processamento local, sem envio a servidor', 'Layout idêntico ao modelo enviado']}
         />
       )}
@@ -195,8 +191,8 @@ export default function SpedPage() {
                 dragging ? 'border-brand bg-brand/5' : file ? 'border-lime bg-lime/5' : 'border-gray-200'
               }`}
             >
-              <p className="font-display text-lg font-semibold text-gray-800">Arraste o arquivo SPED Fiscal aqui</p>
-              <p className="text-sm text-gray-500 mt-1.5">Arquivo texto (.txt) do EFD ICMS/IPI exportado pelo PVA</p>
+              <p className="font-display text-lg font-semibold text-gray-800">Arraste o arquivo SPED aqui</p>
+              <p className="text-sm text-gray-500 mt-1.5">Arquivo texto (.txt) do EFD ICMS/IPI ou do EFD Contribuições, exportado pelo PVA</p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -244,10 +240,14 @@ export default function SpedPage() {
             </button>
           </div>
 
-          <div className="card-surface p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="card-surface p-5 grid grid-cols-2 sm:grid-cols-5 gap-4">
             <div>
               <p className="text-xs text-gray-400 uppercase">Arquivo</p>
               <p className="text-sm font-medium text-gray-800">{result.fileName}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 uppercase">Tipo de SPED</p>
+              <p className="text-sm font-medium text-gray-800">{TIPO_SPED_LABELS[result.tipoSped]}</p>
             </div>
             <div>
               <p className="text-xs text-gray-400 uppercase">Empresa (Reg. 0000)</p>
@@ -263,6 +263,15 @@ export default function SpedPage() {
               <p className="text-sm font-medium text-gray-800">{result.totalLinhas}</p>
             </div>
           </div>
+
+          {result.tipoSped === 'desconhecido' && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              Não foi possível identificar se este arquivo é um EFD ICMS/IPI ou um EFD Contribuições (nenhum dos
+              registros de abertura de bloco esperados foi encontrado). O resumo por bloco/registro abaixo ainda é
+              confiável, mas os relatórios detalhados (Nota Fiscal, Planilha ICMS/PIS/COFINS) podem trazer campos
+              como Empresa/CNPJ incorretos.
+            </p>
+          )}
 
           <div className="card-surface p-5 border border-accent/30">
             <div className="flex flex-wrap items-center justify-between gap-3">

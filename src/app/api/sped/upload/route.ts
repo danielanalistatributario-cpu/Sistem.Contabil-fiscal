@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
     totalLinhas: resumo.totalLinhas,
     porBloco: resumo.porBloco,
     porRegistro: resumo.porRegistro,
+    tipoSped: resumo.tipoSped,
     linhasTruncadas,
     // Lista linha-a-linha limitada pra não estourar o tamanho da resposta em
     // arquivos grandes (ex: EFD Contribuições, com muito mais registros que

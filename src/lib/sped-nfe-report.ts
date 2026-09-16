@@ -27,6 +27,8 @@
 //   ignorados (são só o resumo analítico dos itens já lançados, senão a
 //   nota seria contada em dobro).
 
+import { detectarTipoSped } from './sped-parser';
+
 const UF_POR_PREFIXO_IBGE: Record<string, string> = {
   '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
   '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL', '28': 'SE', '29': 'BA',
@@ -133,6 +135,9 @@ export type RelatorioNFeRow = {
 
 export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
   const linhas = spedText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  // Só o registro 0000 difere de campo entre os dois leiautes de EFD
+  // suportados — ver detectarTipoSped em sped-parser.ts.
+  const tipoSped = detectarTipoSped(spedText);
 
   let cnpjEstabelecimento = '';
   const participantes: Record<string, { nome: string; cnpj: string; cpf: string; uf: string }> = {};
@@ -220,7 +225,9 @@ export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
 
     switch (c[0]) {
       case '0000': {
-        cnpjEstabelecimento = c[6] || '';
+        // CNPJ está em c[8] no EFD Contribuições (2 campos a mais antes de
+        // DT_INI que o EFD ICMS/IPI não tem) e c[6] no EFD ICMS/IPI.
+        cnpjEstabelecimento = (tipoSped === 'contribuicoes' ? c[8] : c[6]) || '';
         break;
       }
       case '0150': {
