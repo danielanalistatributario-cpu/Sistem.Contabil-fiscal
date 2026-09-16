@@ -101,6 +101,7 @@ export type RelatorioNFeRow = {
   fornecCliente: string;
   ufDaNF: string;
   produto: string;
+  codigoProduto: string;
   tipo: string;
   ncm: string;
   origem: string;
@@ -180,6 +181,7 @@ export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
         fornecCliente: participante ? participante.nome : '',
         ufDaNF: participante ? participante.uf : '',
         produto: '',
+        codigoProduto: '',
         tipo: '',
         ncm: '',
         origem: c190.cst.slice(0, -2) || c190.cst.charAt(0) || '',
@@ -304,6 +306,7 @@ export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
           fornecCliente: participante ? participante.nome : '',
           ufDaNF: participante ? participante.uf : '',
           produto: item ? item.descr : '',
+          codigoProduto: codItem,
           tipo: item ? TIPO_ITEM_LABELS[item.tipoItem] || item.tipoItem : '',
           ncm: item ? item.ncm : '',
           origem: cstIcmsCompleto.slice(0, -2) || cstIcmsCompleto.charAt(0) || '',

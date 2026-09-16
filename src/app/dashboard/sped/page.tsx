@@ -38,6 +38,8 @@ export default function SpedPage() {
   const [filtroBloco, setFiltroBloco] = useState<string>('TODOS');
   const [gerandoRelatorioModelo, setGerandoRelatorioModelo] = useState(false);
   const [erroRelatorioModelo, setErroRelatorioModelo] = useState<string | null>(null);
+  const [gerandoExcelTributos, setGerandoExcelTributos] = useState(false);
+  const [erroExcelTributos, setErroExcelTributos] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +65,32 @@ export default function SpedPage() {
     const a = document.createElement('a');
     a.href = url;
     a.download = `NFe_Entrada_Saida_${file.name.replace(/\.[^.]+$/, '')}.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  async function handleGerarExcelTributos() {
+    if (!file) return;
+    setGerandoExcelTributos(true);
+    setErroExcelTributos(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch('/api/sped/excel-tributos', { method: 'POST', body: formData });
+    setGerandoExcelTributos(false);
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setErroExcelTributos(data.error || 'Falha ao gerar a planilha.');
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ICMS_PIS_COFINS_SPED_${file.name.replace(/\.[^.]+$/, '')}.xlsx`;
     a.click();
     window.URL.revokeObjectURL(url);
   }
@@ -248,6 +276,28 @@ export default function SpedPage() {
               </button>
             </div>
             {erroRelatorioModelo && <p className="text-sm text-red-600 mt-3">{erroRelatorioModelo}</p>}
+          </div>
+
+          <div className="card-surface p-5 border border-accent/30">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-brand">Planilha ICMS/PIS/COFINS por nota e produto</h2>
+                <p className="text-xs text-gray-500 mt-1 max-w-xl">
+                  Mesmo layout da planilha de conferência da Análise e Apuração Fiscal (15 colunas, com filtro
+                  automático), extraído dos registros C100/C170/C190 do SPED. Campo que o SPED não trouxer
+                  (ex: TES — não existe no layout do SPED — ou CST PIS/COFINS quando o arquivo não os declarou)
+                  aparece como "—", sem inventar valor.
+                </p>
+              </div>
+              <button
+                onClick={handleGerarExcelTributos}
+                disabled={gerandoExcelTributos}
+                className="bg-accent text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+              >
+                {gerandoExcelTributos ? 'Gerando...' : 'Exportar Planilha ICMS/PIS/COFINS'}
+              </button>
+            </div>
+            {erroExcelTributos && <p className="text-sm text-red-600 mt-3">{erroExcelTributos}</p>}
           </div>
 
           <div className="card-surface p-5">

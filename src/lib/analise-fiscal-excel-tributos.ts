@@ -16,7 +16,12 @@ import { extrairCodigoProduto } from './analise-fiscal-tes-registry';
 
 export type ItemTributo = {
   numeroNf: string | null;
-  produtoDescricao: string | null;
+  produtoDescricao?: string | null;
+  // Código/descrição já separados na origem (ex: SPED, onde vêm em
+  // campos distintos) — quando presentes, têm prioridade sobre
+  // produtoDescricao (formato "código-descrição" do Protheus).
+  codigoProduto?: string | null;
+  descricaoProduto?: string | null;
   tes: string;
   cstPis: string | null;
   aliquotaPis: number | null;
@@ -45,6 +50,13 @@ function separarProduto(produtoDescricao: string | null): { codigo: string; desc
 function txt(v: string | null | undefined): string {
   const s = (v ?? '').trim();
   return s || AUSENTE;
+}
+
+function resolverProduto(item: ItemTributo): { codigo: string; descricao: string } {
+  if (item.codigoProduto !== undefined || item.descricaoProduto !== undefined) {
+    return { codigo: txt(item.codigoProduto), descricao: txt(item.descricaoProduto) };
+  }
+  return separarProduto(item.produtoDescricao ?? null);
 }
 
 function num(v: number | null | undefined): number | string {
@@ -100,7 +112,7 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
   headerRow.height = 20;
 
   itens.forEach((item, idx) => {
-    const { codigo, descricao } = separarProduto(item.produtoDescricao);
+    const { codigo, descricao } = resolverProduto(item);
     const row = sheet.getRow(linhaCabecalho + 1 + idx);
     const valores = [
       txt(item.numeroNf),
