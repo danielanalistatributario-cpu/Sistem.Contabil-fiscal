@@ -19,6 +19,13 @@ function tabelaF24(sufixoEmpresa: string): string {
   return `F24${sufixoEmpresa}`;
 }
 
+function tabelaSB1(sufixoEmpresa: string): string {
+  if (!SUFIXO_REGEX.test(sufixoEmpresa)) {
+    throw new Error(`Sufixo de empresa Protheus inválido: "${sufixoEmpresa}".`);
+  }
+  return `SB1${sufixoEmpresa}`;
+}
+
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -138,6 +145,24 @@ export async function listarPerfisComProdutos(sufixoEmpresa: string): Promise<Li
       aplicaATodos: r.produtoCodigo === 'TODOS',
     }))
     .sort((a, b) => a.perfilCodigo.localeCompare(b.perfilCodigo) || a.produtoCodigo.localeCompare(b.produtoCodigo));
+}
+
+// Códigos bloqueados no cadastro padrão de produtos (SB1, B1_MSBLQL = '1' =
+// "Bloqueado Totalmente" no Protheus — confirmado contra dado real: 941 de
+// ~4000 produtos da SB1240 estavam bloqueados, e vários com Perfil de
+// Produto ainda atribuído). Consulta a SB1 inteira, não só os que têm
+// vínculo no F24 — um produto pode estar bloqueado com ou sem perfil
+// atribuído. Pedido explícito do usuário: desprezar esses produtos na
+// Validação de Cadastro.
+export async function listarProdutosBloqueados(sufixoEmpresa: string): Promise<string[]> {
+  const tabela = tabelaSB1(sufixoEmpresa);
+  const pool = await getProtheusPool();
+  const result = await pool.request().query<{ codigo: string }>(`
+    SELECT RTRIM(LTRIM(B1_COD)) AS codigo
+    FROM ${tabela} WITH (NOLOCK)
+    WHERE D_E_L_E_T_ = ' ' AND B1_MSBLQL = '1'
+  `);
+  return result.recordset.map((r) => r.codigo);
 }
 
 export async function listarPerfisAtivos(sufixoEmpresa: string): Promise<{ codigo: string; qtdItens: number }[]> {

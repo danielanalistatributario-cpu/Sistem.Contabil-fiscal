@@ -114,3 +114,14 @@ export async function obterSufixoConfigurado(companyId: string, empresaGrupoId: 
   });
   return company?.protheusSufixo ?? null;
 }
+
+// Códigos bloqueados no Protheus (SB1, B1_MSBLQL='1') pra este escopo —
+// pedido explícito do usuário: desprezar esses produtos na Validação de
+// Cadastro, com ou sem Perfil de Produto atribuído.
+export async function listarCodigosBloqueadosSincronizados(companyId: string, empresaGrupoId: string | null): Promise<Set<string>> {
+  const linhas = await prisma.produtoBloqueado.findMany({
+    where: { companyId, empresaGrupoId },
+    select: { codigo: true },
+  });
+  return new Set(linhas.map((l) => l.codigo));
+}

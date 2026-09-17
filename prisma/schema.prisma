@@ -44,6 +44,7 @@ model Company {
   activityLog    ActivityLog[]
   perfisProdutos PerfilProduto[]
   classificacoesProdutoReferencia ClassificacaoProdutoReferencia[]
+  produtosBloqueados ProdutoBloqueado[]
   validacoesCadastro ValidacaoCadastroApuracao[]
   analisesFiscais AnaliseFiscalApuracao[]
   analiseFiscalTesConfig AnaliseFiscalTesConfig[]
@@ -507,6 +508,21 @@ model ClassificacaoProdutoReferencia {
   // "vale mostrar, não esconder" a inconsistência.
 }
 
+// Códigos de produto bloqueados no Protheus (SB1, B1_MSBLQL='1') — pedido
+// explícito do usuário: desprezar esses produtos na Validação de Cadastro,
+// independente de terem ou não Perfil de Produto atribuído. Sincronizado
+// junto com PerfilProduto (scripts/sync-perfis-protheus.ts), mesmo padrão
+// dual-scope (empresaGrupoId null = sufixo geral da Company).
+model ProdutoBloqueado {
+  id             String                  @id @default(cuid())
+  companyId      String
+  empresaGrupoId String?
+  codigo         String
+  createdAt      DateTime                @default(now())
+  company        Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaGrupo   AnaliseFiscalCnpjGrupo? @relation(fields: [empresaGrupoId], references: [id], onDelete: SetNull)
+}
+
 // Análise e Apuração Fiscal — auditoria do Relatório Fiscal de Entradas,
 // cruzando TES x Produto x CFOP x UF x Fornecedor x Chave NF x tributos.
 // status: PROCESSANDO | CONCLUIDA — igual AnaliseFiscalSaidaApuracao:
@@ -816,6 +832,7 @@ model AnaliseFiscalCnpjGrupo {
   tesConfig       AnaliseFiscalTesConfig[]
   perfisProdutos  PerfilProduto[]
   classificacoesProdutoReferencia ClassificacaoProdutoReferencia[]
+  produtosBloqueados ProdutoBloqueado[]
 
   @@unique([companyId, cnpj])
 }

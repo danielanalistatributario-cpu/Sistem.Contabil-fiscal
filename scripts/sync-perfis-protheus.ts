@@ -26,7 +26,7 @@
 
 import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
-import { listarPerfisComProdutos, type LinhaPerfilProduto } from '../src/lib/protheus/perfil-produto';
+import { listarPerfisComProdutos, listarProdutosBloqueados, type LinhaPerfilProduto } from '../src/lib/protheus/perfil-produto';
 import { getProtheusPool } from '../src/lib/protheus/db';
 
 const prisma = new PrismaClient();
@@ -42,6 +42,9 @@ async function sincronizarEscopo(
 
   const linhas = await listarPerfisComProdutos(sufixo);
   console.log(`[${nome}] ${linhas.length} vínculo(s) perfil-produto lido(s) do Protheus em ${Date.now() - t0}ms`);
+
+  const codigosBloqueados = await listarProdutosBloqueados(sufixo);
+  console.log(`[${nome}] ${codigosBloqueados.length} produto(s) bloqueado(s) na SB1`);
 
   const porPerfil = new Map<string, LinhaPerfilProduto[]>();
   for (const linha of linhas) {
@@ -72,12 +75,21 @@ async function sincronizarEscopo(
     aplicaATodos: i.aplicaATodos,
   }));
 
+  const bloqueadosData = codigosBloqueados.map((codigo) => ({
+    id: randomUUID(),
+    companyId,
+    empresaGrupoId,
+    codigo,
+  }));
+
   await prisma.$transaction(
     async (tx) => {
       // Cascade em PerfilProdutoItem já apaga os filhos junto.
       await tx.perfilProduto.deleteMany({ where: { companyId, empresaGrupoId } });
       await tx.perfilProduto.createMany({ data: perfisData });
       await tx.perfilProdutoItem.createMany({ data: itensData });
+      await tx.produtoBloqueado.deleteMany({ where: { companyId, empresaGrupoId } });
+      await tx.produtoBloqueado.createMany({ data: bloqueadosData });
       if (empresaGrupoId) {
         await tx.analiseFiscalCnpjGrupo.update({
           where: { id: empresaGrupoId },
@@ -93,7 +105,7 @@ async function sincronizarEscopo(
     { timeout: 30000 }
   );
 
-  console.log(`[${nome}] sincronizado: ${porPerfil.size} perfil(is), ${linhas.length} vínculo(s) — ${Date.now() - t0}ms total`);
+  console.log(`[${nome}] sincronizado: ${porPerfil.size} perfil(is), ${linhas.length} vínculo(s), ${codigosBloqueados.length} bloqueado(s) — ${Date.now() - t0}ms total`);
 }
 
 async function main() {

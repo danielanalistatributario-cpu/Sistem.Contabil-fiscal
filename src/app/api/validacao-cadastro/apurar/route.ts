@@ -7,6 +7,7 @@ import {
   buscarPerfisPorCodigosSincronizados,
   obterUltimaSincronizacao,
   obterSufixoConfigurado,
+  listarCodigosBloqueadosSincronizados,
 } from '@/lib/validacao-cadastro-perfil-sync';
 
 export async function POST(req: NextRequest) {
@@ -50,8 +51,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Pedido explícito do usuário: desprezar produtos bloqueados no Protheus
+  // (SB1, B1_MSBLQL='1') na análise — nem entram na comparação, nem contam
+  // nos totais, nem aparecem na tabela de resultado.
+  const codigosBloqueados = await listarCodigosBloqueadosSincronizados(session.currentCompanyId, empresaGrupoId);
+  const itensSemBloqueados = itensRaw.filter((i) => !codigosBloqueados.has(i.codigo));
+  const totalBloqueadosDesprezados = itensRaw.length - itensSemBloqueados.length;
+
   const { perfis, perfisComTodos } = await buscarPerfisPorCodigosSincronizados(
-    itensRaw.map((i) => i.codigo),
+    itensSemBloqueados.map((i) => i.codigo),
     session.currentCompanyId,
     empresaGrupoId
   );
@@ -69,7 +77,7 @@ export async function POST(req: NextRequest) {
     referenciaPorCodigo.get(c.codigo)!.push(c);
   }
 
-  const resultado = compararCadastro(itensRaw, perfis).map((item) => {
+  const resultado = compararCadastro(itensSemBloqueados, perfis).map((item) => {
     const refs = referenciaPorCodigo.get(item.codigo) || [];
     const perfisDistintos = Array.from(new Set(refs.map((r) => r.perfilCorreto)));
     // Achado real: um código pode aparecer mais de uma vez na referência com
@@ -156,5 +164,5 @@ export async function POST(req: NextRequest) {
     session.currentCompanyId
   );
 
-  return NextResponse.json({ apuracao, ultimaSincronizacao });
+  return NextResponse.json({ apuracao, ultimaSincronizacao, totalBloqueadosDesprezados });
 }

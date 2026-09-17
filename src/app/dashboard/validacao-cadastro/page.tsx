@@ -72,6 +72,7 @@ function ValidacaoCadastroInner() {
   const [erro, setErro] = useState<string | null>(null);
   const [apuracao, setApuracao] = useState<ApuracaoDB | null>(null);
   const [ultimaSincronizacao, setUltimaSincronizacao] = useState<string | null>(null);
+  const [totalBloqueadosDesprezados, setTotalBloqueadosDesprezados] = useState<number>(0);
   const [filtro, setFiltro] = useState<'TODOS' | StatusItem>('TODOS');
   const [perfilSelecionado, setPerfilSelecionado] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
@@ -123,6 +124,7 @@ function ValidacaoCadastroInner() {
       }
       setApuracao(data.apuracao);
       setUltimaSincronizacao(data.ultimaSincronizacao || null);
+      setTotalBloqueadosDesprezados(data.totalBloqueadosDesprezados || 0);
     } catch (err) {
       setLoading(false);
       setErro('Não foi possível ler o arquivo. Verifique se é um .xlsx válido no layout esperado.');
@@ -133,6 +135,7 @@ function ValidacaoCadastroInner() {
   function handleNovaValidacao() {
     setApuracao(null);
     setUltimaSincronizacao(null);
+    setTotalBloqueadosDesprezados(0);
     setFile(null);
     setPeriodo('');
     setErro(null);
@@ -284,6 +287,7 @@ function ValidacaoCadastroInner() {
           <p className="text-xs text-gray-400">
             {apuracao.periodo ? `${apuracao.periodo} · ` : ''}processado em {new Date(apuracao.processedAt).toLocaleString('pt-BR')}
             {ultimaSincronizacao && ` · Perfis do Protheus sincronizados em ${new Date(ultimaSincronizacao).toLocaleString('pt-BR')}`}
+            {totalBloqueadosDesprezados > 0 && ` · ${totalBloqueadosDesprezados} produto(s) bloqueado(s) no Protheus desprezado(s) da análise`}
           </p>
           {ultimaSincronizacao && Date.now() - new Date(ultimaSincronizacao).getTime() > 24 * 60 * 60 * 1000 && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
