@@ -2,6 +2,8 @@
 // descrição e a classificação/perfil atual usada no ERP. Mesmo padrão tolerante
 // de cabeçalho por palavra-chave usado em conciliacao-reader.ts.
 
+import { normalizarCodigoProdutoImportado } from './analise-fiscal-produtos-import';
+
 function normalizar(v: unknown): string {
   return (v === null || v === undefined ? '' : String(v))
     .normalize('NFD')
@@ -84,7 +86,11 @@ export function lerCadastroProdutos(aoa: unknown[][]): { rows: ItemCadastroImpor
     const codigo = row[colunas['codigo']];
     if (codigo === null || codigo === undefined || String(codigo).trim() === '') continue;
     rows.push({
-      codigo: String(codigo).trim(),
+      // Excel em locale pt-BR guarda um código como "100.001" digitado em
+      // célula numérica sem o ponto (fica 100001) — mesmo bug já visto e
+      // corrigido na importação de produtos da Análise Fiscal (ver
+      // [[analise-apuracao-fiscal-modulo]]), reaproveita a mesma normalização.
+      codigo: normalizarCodigoProdutoImportado(String(codigo).trim()),
       descricao: String(row[colunas['descricao']] ?? '').trim() || null,
       perfilAtual: String(row[colunas['perfilAtual']] ?? '').trim() || null,
     });
