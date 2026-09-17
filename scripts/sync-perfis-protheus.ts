@@ -1,6 +1,12 @@
 // Sincroniza os Perfis de Produto do Protheus (tabela F24, por empresa) pro
 // Postgres do próprio Portal (PerfilProduto/PerfilProdutoItem) — pra cada
-// Company com protheusSufixo preenchido.
+// Company com protheusSufixo preenchido (escopo "geral", empresaGrupoId
+// null) E pra cada AnaliseFiscalCnpjGrupo (filial do grupo, seletor
+// "Filial" no Topbar) com protheusSufixo preenchido (escopo por filial) —
+// mesmo padrão dual-scope já usado em AnaliseFiscalProdutoClassificacao.
+// Uma empresa (Grupo 14 no Protheus = Matriz/Castanhal/Piedade/Passarela,
+// todas com sufixo 240) sincroniza uma cópia própria por filial cadastrada,
+// mesmo repetindo o mesmo dado — mais simples que tentar compartilhar.
 //
 // Por quê: o site publicado (Vercel) não consegue falar direto com o SQL
 // Server do Protheus (10.6.0.196, IP de rede local do escritório) — não tem
@@ -25,7 +31,12 @@ import { getProtheusPool } from '../src/lib/protheus/db';
 
 const prisma = new PrismaClient();
 
-async function sincronizarEmpresa(companyId: string, nome: string, sufixo: string) {
+async function sincronizarEscopo(
+  companyId: string,
+  empresaGrupoId: string | null,
+  nome: string,
+  sufixo: string
+) {
   const t0 = Date.now();
   console.log(`[${nome}] consultando Protheus (sufixo ${sufixo})...`);
 
@@ -46,6 +57,7 @@ async function sincronizarEmpresa(companyId: string, nome: string, sufixo: strin
   const perfisData = Array.from(porPerfil.keys()).map((perfilCodigo) => ({
     id: randomUUID(),
     companyId,
+    empresaGrupoId,
     nome: perfilCodigo,
   }));
   const perfilIdPorCodigo = new Map(perfisData.map((p) => [p.nome, p.id]));
@@ -63,13 +75,20 @@ async function sincronizarEmpresa(companyId: string, nome: string, sufixo: strin
   await prisma.$transaction(
     async (tx) => {
       // Cascade em PerfilProdutoItem já apaga os filhos junto.
-      await tx.perfilProduto.deleteMany({ where: { companyId } });
+      await tx.perfilProduto.deleteMany({ where: { companyId, empresaGrupoId } });
       await tx.perfilProduto.createMany({ data: perfisData });
       await tx.perfilProdutoItem.createMany({ data: itensData });
-      await tx.company.update({
-        where: { id: companyId },
-        data: { protheusPerfisUltimaSincronizacao: new Date() },
-      });
+      if (empresaGrupoId) {
+        await tx.analiseFiscalCnpjGrupo.update({
+          where: { id: empresaGrupoId },
+          data: { protheusPerfisUltimaSincronizacao: new Date() },
+        });
+      } else {
+        await tx.company.update({
+          where: { id: companyId },
+          data: { protheusPerfisUltimaSincronizacao: new Date() },
+        });
+      }
     },
     { timeout: 30000 }
   );
@@ -82,24 +101,36 @@ async function main() {
     where: { protheusSufixo: { not: null } },
     select: { id: true, name: true, protheusSufixo: true },
   });
+  const filiais = await prisma.analiseFiscalCnpjGrupo.findMany({
+    where: { protheusSufixo: { not: null } },
+    select: { id: true, companyId: true, nome: true, protheusSufixo: true },
+  });
 
-  if (empresas.length === 0) {
-    console.log('Nenhuma empresa com sufixo do Protheus configurado — nada a sincronizar.');
+  if (empresas.length === 0 && filiais.length === 0) {
+    console.log('Nenhuma empresa/filial com sufixo do Protheus configurado — nada a sincronizar.');
     return;
   }
 
   let falhas = 0;
   for (const empresa of empresas) {
     try {
-      await sincronizarEmpresa(empresa.id, empresa.name, empresa.protheusSufixo!);
+      await sincronizarEscopo(empresa.id, null, empresa.name, empresa.protheusSufixo!);
     } catch (err) {
       falhas++;
       console.error(`[${empresa.name}] FALHOU:`, err instanceof Error ? err.message : err);
     }
   }
+  for (const filial of filiais) {
+    try {
+      await sincronizarEscopo(filial.companyId, filial.id, filial.nome, filial.protheusSufixo!);
+    } catch (err) {
+      falhas++;
+      console.error(`[${filial.nome}] FALHOU:`, err instanceof Error ? err.message : err);
+    }
+  }
 
   if (falhas > 0) {
-    console.error(`\n${falhas} empresa(s) falharam na sincronização.`);
+    console.error(`\n${falhas} empresa(s)/filial(is) falharam na sincronização.`);
     process.exitCode = 1;
   }
 }

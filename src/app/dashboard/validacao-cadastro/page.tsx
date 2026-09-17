@@ -230,7 +230,8 @@ function ValidacaoCadastroInner() {
         <div className="card-surface p-5 space-y-3">
           <p className="text-xs text-gray-500">
             Envie o cadastro de produtos da empresa (Excel/CSV) contendo, no mínimo, as colunas Código e Descrição.
-            O Perfil de Produto de cada item é comparado com os dados sincronizados periodicamente do Protheus.
+            O Perfil de Produto de cada item é comparado com os dados sincronizados periodicamente do Protheus —
+            usa a Filial selecionada no topo da tela (sem filial selecionada, usa a empresa padrão).
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <input

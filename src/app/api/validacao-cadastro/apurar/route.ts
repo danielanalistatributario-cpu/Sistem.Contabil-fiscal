@@ -3,7 +3,11 @@ import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 import { compararCadastro, type ItemCadastro } from '@/lib/validacao-cadastro-rules';
-import { buscarPerfisPorCodigosSincronizados, obterUltimaSincronizacao } from '@/lib/validacao-cadastro-perfil-sync';
+import {
+  buscarPerfisPorCodigosSincronizados,
+  obterUltimaSincronizacao,
+  obterSufixoConfigurado,
+} from '@/lib/validacao-cadastro-perfil-sync';
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -22,20 +26,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Envie o cadastro de produtos a ser validado.' }, { status: 400 });
   }
 
-  const company = await prisma.company.findUnique({ where: { id: session.currentCompanyId } });
-  if (!company?.protheusSufixo) {
+  const empresaGrupoId = session.currentEmpresaGrupoId;
+  const sufixo = await obterSufixoConfigurado(session.currentCompanyId, empresaGrupoId);
+  if (!sufixo) {
     return NextResponse.json(
-      { error: 'Configure o sufixo do Protheus desta empresa em Configurações antes de validar o cadastro.' },
+      {
+        error: empresaGrupoId
+          ? 'Esta filial não tem o sufixo do Protheus configurado — configure em Análise Fiscal → Configurar TES → Empresas do grupo.'
+          : 'Configure o sufixo do Protheus desta empresa em Configurações antes de validar o cadastro.',
+      },
       { status: 400 }
     );
   }
 
-  const ultimaSincronizacao = await obterUltimaSincronizacao(session.currentCompanyId);
+  const ultimaSincronizacao = await obterUltimaSincronizacao(session.currentCompanyId, empresaGrupoId);
   if (!ultimaSincronizacao) {
     return NextResponse.json(
       {
         error:
-          'Nenhum dado de Perfil de Produto sincronizado ainda para esta empresa. A sincronização com o Protheus roda periodicamente a partir do escritório — aguarde a próxima rodada ou verifique se o script está sendo executado.',
+          'Nenhum dado de Perfil de Produto sincronizado ainda para esta empresa/filial. A sincronização com o Protheus roda periodicamente a partir do escritório — aguarde a próxima rodada ou verifique se o script está sendo executado.',
       },
       { status: 400 }
     );
@@ -43,7 +52,8 @@ export async function POST(req: NextRequest) {
 
   const { perfis, perfisComTodos } = await buscarPerfisPorCodigosSincronizados(
     itensRaw.map((i) => i.codigo),
-    session.currentCompanyId
+    session.currentCompanyId,
+    empresaGrupoId
   );
 
   const resultado = compararCadastro(itensRaw, perfis).map((item) => {

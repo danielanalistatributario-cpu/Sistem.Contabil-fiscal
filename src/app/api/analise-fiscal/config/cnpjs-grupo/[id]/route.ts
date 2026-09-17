@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 
+// Mesma regex de src/lib/protheus/perfil-produto.ts (SUFIXO_REGEX).
+const SUFIXO_REGEX = /^[0-9]{2,4}$/;
+
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.currentCompanyId) {
@@ -24,6 +27,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const aliquotaInterna = body?.aliquotaInterna !== undefined
     ? (body.aliquotaInterna === null || body.aliquotaInterna === '' ? null : Number(body.aliquotaInterna))
     : atual.aliquotaInterna;
+  const protheusSufixo = body?.protheusSufixo !== undefined
+    ? (String(body.protheusSufixo).trim() || null)
+    : atual.protheusSufixo;
 
   if (!nome || cnpj.replace(/\D/g, '').length !== 14) {
     return NextResponse.json({ error: 'Nome e um CNPJ válido (14 dígitos) são obrigatórios.' }, { status: 400 });
@@ -34,10 +40,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (aliquotaInterna !== null && (Number.isNaN(aliquotaInterna) || aliquotaInterna <= 0 || aliquotaInterna >= 1)) {
     return NextResponse.json({ error: 'Alíquota interna inválida — informe um valor entre 0 e 1 (ex: 0.18 para 18%).' }, { status: 400 });
   }
+  if (protheusSufixo !== null && !SUFIXO_REGEX.test(protheusSufixo)) {
+    return NextResponse.json({ error: 'Sufixo do Protheus inválido — use só números (2 a 4 dígitos, ex: 140).' }, { status: 400 });
+  }
 
   const registro = await prisma.analiseFiscalCnpjGrupo.update({
     where: { id: params.id },
-    data: { nome, cnpj, uf, aliquotaInterna },
+    data: { nome, cnpj, uf, aliquotaInterna, protheusSufixo },
   });
 
   await logActivity(session.id, 'EDITOU_CNPJ_GRUPO_ANALISE_FISCAL', `${nome} (${cnpj})`, session.currentCompanyId);

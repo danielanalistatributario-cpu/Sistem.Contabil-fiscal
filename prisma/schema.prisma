@@ -401,15 +401,20 @@ model AuditorRtcItem {
 // "Combustíveis") cadastrada previamente, contendo a lista de códigos de produto
 // que pertencem a ela — usada para auditar o cadastro de produtos da empresa.
 model PerfilProduto {
-  id        String              @id @default(cuid())
-  companyId String
-  nome      String
-  descricao String?
-  createdAt DateTime            @default(now())
-  company   Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  itens     PerfilProdutoItem[]
+  id             String                  @id @default(cuid())
+  companyId      String
+  // Filial do grupo dona deste Perfil de Produto (ver AnaliseFiscalCnpjGrupo.protheusSufixo)
+  // — null significa o sufixo "geral" configurado direto em Company.protheusSufixo,
+  // mesmo padrão dual-scope já usado em AnaliseFiscalProdutoClassificacao.
+  empresaGrupoId String?
+  nome           String
+  descricao      String?
+  createdAt      DateTime                @default(now())
+  company        Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaGrupo   AnaliseFiscalCnpjGrupo? @relation(fields: [empresaGrupoId], references: [id], onDelete: SetNull)
+  itens          PerfilProdutoItem[]
 
-  @@unique([companyId, nome])
+  @@unique([companyId, empresaGrupoId, nome])
 }
 
 model PerfilProdutoItem {
@@ -761,10 +766,13 @@ model AnaliseFiscalCnpjGrupo {
   cnpj            String
   uf              String?
   aliquotaInterna Float?
+  protheusSufixo  String?  // sufixo das tabelas desta filial no Protheus (ex: "140"), mesmo padrão de Company.protheusSufixo — usado pela Validação de Cadastro
+  protheusPerfisUltimaSincronizacao DateTime? // atualizado por scripts/sync-perfis-protheus.ts
   createdAt       DateTime @default(now())
   company         Company                             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   produtos        AnaliseFiscalProdutoClassificacao[]
   tesConfig       AnaliseFiscalTesConfig[]
+  perfisProdutos  PerfilProduto[]
 
   @@unique([companyId, cnpj])
 }

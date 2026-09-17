@@ -5,6 +5,12 @@
 // Protheus (IP de rede local do escritório). Mesmos formatos de retorno que
 // as funções antigas de src/lib/protheus/perfil-produto.ts, pra não exigir
 // mudança nos consumidores além da troca da chamada.
+//
+// empresaGrupoId segue o mesmo padrão dual-scope já usado em
+// carregarProdutosClassificacao (analise-fiscal-config-db.ts): null = sufixo
+// "geral" configurado em Company.protheusSufixo (nenhuma filial selecionada
+// no seletor do Topbar); id real = sufixo daquela filial específica
+// (AnaliseFiscalCnpjGrupo.protheusSufixo).
 
 import { prisma } from './db';
 import type { PerfilRef } from './validacao-cadastro-rules';
@@ -12,9 +18,12 @@ import type { LinhaPerfilProduto, BuscaPerfisResultado } from './protheus/perfil
 
 export type { LinhaPerfilProduto, BuscaPerfisResultado };
 
-export async function listarPerfisComProdutosSincronizados(companyId: string): Promise<LinhaPerfilProduto[]> {
+export async function listarPerfisComProdutosSincronizados(
+  companyId: string,
+  empresaGrupoId: string | null
+): Promise<LinhaPerfilProduto[]> {
   const perfis = await prisma.perfilProduto.findMany({
-    where: { companyId },
+    where: { companyId, empresaGrupoId },
     include: { itens: true },
   });
 
@@ -37,7 +46,8 @@ export async function listarPerfisComProdutosSincronizados(companyId: string): P
 
 export async function buscarPerfisPorCodigosSincronizados(
   codigosBrutos: string[],
-  companyId: string
+  companyId: string,
+  empresaGrupoId: string | null
 ): Promise<BuscaPerfisResultado> {
   const codigos = new Set(codigosBrutos.map((c) => c.trim()).filter(Boolean));
 
@@ -45,7 +55,7 @@ export async function buscarPerfisPorCodigosSincronizados(
   // limite de parâmetros por lote, carrega todos os perfis+itens da empresa
   // de uma vez e filtra/agrupa em JS.
   const perfis = await prisma.perfilProduto.findMany({
-    where: { companyId },
+    where: { companyId, empresaGrupoId },
     include: { itens: true },
   });
 
@@ -72,10 +82,35 @@ export async function buscarPerfisPorCodigosSincronizados(
   return { perfis: perfisRef, perfisComTodos: Array.from(perfisComTodosSet) };
 }
 
-export async function obterUltimaSincronizacao(companyId: string): Promise<Date | null> {
+export async function obterUltimaSincronizacao(companyId: string, empresaGrupoId: string | null): Promise<Date | null> {
+  if (empresaGrupoId) {
+    const filial = await prisma.analiseFiscalCnpjGrupo.findUnique({
+      where: { id: empresaGrupoId },
+      select: { protheusPerfisUltimaSincronizacao: true },
+    });
+    return filial?.protheusPerfisUltimaSincronizacao ?? null;
+  }
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: { protheusPerfisUltimaSincronizacao: true },
   });
   return company?.protheusPerfisUltimaSincronizacao ?? null;
+}
+
+// Sufixo configurado (geral, ou da filial ativa) — usado só pra decidir se
+// a empresa/filial "está pronta" pra Validação de Cadastro (mesma checagem
+// que antes olhava só company.protheusSufixo).
+export async function obterSufixoConfigurado(companyId: string, empresaGrupoId: string | null): Promise<string | null> {
+  if (empresaGrupoId) {
+    const filial = await prisma.analiseFiscalCnpjGrupo.findUnique({
+      where: { id: empresaGrupoId },
+      select: { protheusSufixo: true },
+    });
+    return filial?.protheusSufixo ?? null;
+  }
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { protheusSufixo: true },
+  });
+  return company?.protheusSufixo ?? null;
 }

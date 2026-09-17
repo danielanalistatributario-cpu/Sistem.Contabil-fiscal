@@ -82,8 +82,8 @@ export default function ExportarPerfisPage() {
 
       <div className="card-surface p-5 space-y-3 max-w-lg">
         <p className="text-xs text-gray-500">
-          A exportação usa a empresa selecionada atualmente no topo da tela. Troque de empresa antes de exportar, se
-          necessário.
+          A exportação usa a Filial selecionada no topo da tela (sem filial selecionada, usa a empresa padrão).
+          Troque de filial antes de exportar, se necessário.
         </p>
         <button
           onClick={handleExportar}

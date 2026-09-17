@@ -3,6 +3,10 @@ import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 
+// Mesma regex de src/lib/protheus/perfil-produto.ts (SUFIXO_REGEX) — o
+// sufixo vira nome de tabela na query (F24<sufixo>/SB1<sufixo>).
+const SUFIXO_REGEX = /^[0-9]{2,4}$/;
+
 export async function GET() {
   const session = await getSession();
   if (!session || !session.currentCompanyId) {
@@ -38,6 +42,8 @@ export async function POST(req: NextRequest) {
   const aliquotaInterna = aliquotaInternaRaw === undefined || aliquotaInternaRaw === null || aliquotaInternaRaw === ''
     ? null
     : Number(aliquotaInternaRaw);
+  const protheusSufixoRaw = String(body?.protheusSufixo || '').trim();
+  const protheusSufixo = protheusSufixoRaw === '' ? null : protheusSufixoRaw;
 
   if (!nome || cnpj.replace(/\D/g, '').length !== 14) {
     return NextResponse.json({ error: 'Nome e um CNPJ válido (14 dígitos) são obrigatórios.' }, { status: 400 });
@@ -48,6 +54,9 @@ export async function POST(req: NextRequest) {
   if (aliquotaInterna !== null && (Number.isNaN(aliquotaInterna) || aliquotaInterna <= 0 || aliquotaInterna >= 1)) {
     return NextResponse.json({ error: 'Alíquota interna inválida — informe um valor entre 0 e 1 (ex: 0.18 para 18%).' }, { status: 400 });
   }
+  if (protheusSufixo !== null && !SUFIXO_REGEX.test(protheusSufixo)) {
+    return NextResponse.json({ error: 'Sufixo do Protheus inválido — use só números (2 a 4 dígitos, ex: 140).' }, { status: 400 });
+  }
 
   const existente = await prisma.analiseFiscalCnpjGrupo.findUnique({
     where: { companyId_cnpj: { companyId: session.currentCompanyId, cnpj } },
@@ -57,7 +66,7 @@ export async function POST(req: NextRequest) {
   }
 
   const registro = await prisma.analiseFiscalCnpjGrupo.create({
-    data: { companyId: session.currentCompanyId, nome, cnpj, uf, aliquotaInterna },
+    data: { companyId: session.currentCompanyId, nome, cnpj, uf, aliquotaInterna, protheusSufixo },
   });
 
   await logActivity(session.id, 'ADICIONOU_CNPJ_GRUPO_ANALISE_FISCAL', `${nome} (${cnpj})`, session.currentCompanyId);

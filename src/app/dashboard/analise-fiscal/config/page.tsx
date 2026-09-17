@@ -19,7 +19,7 @@ type TesRow = {
   naturezaOperacaoPisCofins: NaturezaOperacao;
 };
 
-type CnpjRow = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null };
+type CnpjRow = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null; protheusSufixo: string | null };
 
 type ProdutoRow = {
   id: string;
@@ -66,6 +66,7 @@ export default function AnaliseFiscalConfigPage() {
   const [novoCnpj, setNovoCnpj] = useState('');
   const [novaUfCnpj, setNovaUfCnpj] = useState('');
   const [novaAliquotaCnpj, setNovaAliquotaCnpj] = useState('');
+  const [novoSufixoCnpj, setNovoSufixoCnpj] = useState('');
 
   const [produtos, setProdutos] = useState<ProdutoRow[]>([]);
   const [erroProduto, setErroProduto] = useState<string | null>(null);
@@ -207,6 +208,7 @@ export default function AnaliseFiscalConfigPage() {
         cnpj: novoCnpj,
         uf: novaUfCnpj || undefined,
         aliquotaInterna: novaAliquotaCnpj ? parseFloat(novaAliquotaCnpj) / 100 : undefined,
+        protheusSufixo: novoSufixoCnpj || undefined,
       }),
     });
     const data = await res.json();
@@ -218,12 +220,15 @@ export default function AnaliseFiscalConfigPage() {
     setNovoCnpj('');
     setNovaUfCnpj('');
     setNovaAliquotaCnpj('');
+    setNovoSufixoCnpj('');
     carregarCnpjs();
   }
 
-  async function handleEditCnpj(id: string, campo: 'uf' | 'aliquotaInterna', valor: string) {
+  async function handleEditCnpj(id: string, campo: 'uf' | 'aliquotaInterna' | 'protheusSufixo', valor: string) {
     const payload = campo === 'aliquotaInterna'
       ? { aliquotaInterna: valor ? parseFloat(valor) / 100 : null }
+      : campo === 'protheusSufixo'
+      ? { protheusSufixo: valor || null }
       : { uf: valor || null };
     await fetch(`/api/analise-fiscal/config/cnpjs-grupo/${id}`, {
       method: 'PATCH',
@@ -542,9 +547,11 @@ export default function AnaliseFiscalConfigPage() {
       <div className="card-surface p-5 space-y-4">
         <h2 className="font-display font-semibold text-brand">Empresas / CNPJs do grupo</h2>
         <p className="text-xs text-gray-500">
-          Duas funções: (1) valida o fornecedor/remetente da TES 138 (transferência entre filiais) — enquanto a lista
+          Três funções: (1) valida o fornecedor/remetente da TES 138 (transferência entre filiais) — enquanto a lista
           estiver vazia, essa checagem fica desligada; (2) alimenta o seletor &quot;Empresa a ser analisada&quot; nas
-          telas de Análise de Entradas/Saídas — só empresas com UF preenchida aparecem lá. Alíquota interna é
+          telas de Análise de Entradas/Saídas — só empresas com UF preenchida aparecem lá; (3) o &quot;Sufixo
+          Protheus&quot; (ex: 140) diz qual tabela de Perfil de Produto do Protheus pertence a essa filial, usado pela
+          Validação de Cadastro quando essa filial estiver selecionada no topo da tela. Alíquota interna é
           opcional: sem ela, a análise dessa empresa usa a alíquota padrão da empresa (Configurações Fiscais).
         </p>
 
@@ -590,6 +597,15 @@ export default function AnaliseFiscalConfigPage() {
               placeholder="opcional"
             />
           </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Sufixo Protheus</label>
+            <input
+              value={novoSufixoCnpj}
+              onChange={(e) => setNovoSufixoCnpj(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-24"
+              placeholder="ex: 140"
+            />
+          </div>
           <button type="submit" className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
             + Adicionar empresa
           </button>
@@ -603,6 +619,7 @@ export default function AnaliseFiscalConfigPage() {
               <th className="py-2 pr-3">CNPJ</th>
               <th className="py-2 pr-3">UF</th>
               <th className="py-2 pr-3">Alíquota interna</th>
+              <th className="py-2 pr-3">Sufixo Protheus</th>
               <th className="py-2 pr-3"></th>
             </tr>
           </thead>
@@ -634,6 +651,17 @@ export default function AnaliseFiscalConfigPage() {
                     }}
                     className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-20"
                     placeholder="padrão"
+                  />
+                </td>
+                <td className="py-2 pr-3">
+                  <input
+                    defaultValue={c.protheusSufixo || ''}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (v !== (c.protheusSufixo || '')) handleEditCnpj(c.id, 'protheusSufixo', v);
+                    }}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-xs w-20"
+                    placeholder="—"
                   />
                 </td>
                 <td className="py-2 pr-3">
