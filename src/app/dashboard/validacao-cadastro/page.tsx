@@ -65,6 +65,7 @@ function ValidacaoCadastroInner() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [apuracao, setApuracao] = useState<ApuracaoDB | null>(null);
+  const [ultimaSincronizacao, setUltimaSincronizacao] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'TODOS' | StatusItem>('TODOS');
   const [perfilSelecionado, setPerfilSelecionado] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
@@ -115,6 +116,7 @@ function ValidacaoCadastroInner() {
         return;
       }
       setApuracao(data.apuracao);
+      setUltimaSincronizacao(data.ultimaSincronizacao || null);
     } catch (err) {
       setLoading(false);
       setErro('Não foi possível ler o arquivo. Verifique se é um .xlsx válido no layout esperado.');
@@ -124,6 +126,7 @@ function ValidacaoCadastroInner() {
 
   function handleNovaValidacao() {
     setApuracao(null);
+    setUltimaSincronizacao(null);
     setFile(null);
     setPeriodo('');
     setErro(null);
@@ -180,15 +183,16 @@ function ValidacaoCadastroInner() {
         <ImportHero
           eyebrow="Auditoria de cadastro · Perfis de Produtos"
           titleParts={['Validação de', { text: 'Cadastro', accent: true }, 'de Produtos']}
-          description="Importe o cadastro de produtos da empresa e o sistema consulta em tempo real o Perfil de Produto de cada item direto no Protheus, apontando divergências, produtos sem perfil e produtos vinculados a mais de um perfil."
-          badges={['Consulta ao vivo no Protheus', 'Detecta classificação incorreta']}
+          description="Importe o cadastro de produtos da empresa e o sistema compara com o Perfil de Produto de cada item, sincronizado periodicamente do Protheus, apontando divergências, produtos sem perfil e produtos vinculados a mais de um perfil."
+          badges={['Dados sincronizados do Protheus', 'Detecta classificação incorreta']}
         />
       ) : (
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-display font-semibold text-brand">Validação de Cadastro de Produtos</h1>
             <p className="text-gray-500 text-sm mt-1">
-              Auditoria do cadastro de produtos contra os Perfis de Produtos do Protheus (consulta ao vivo).
+              Auditoria do cadastro de produtos contra os Perfis de Produtos do Protheus (dados sincronizados
+              periodicamente).
             </p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
@@ -226,7 +230,7 @@ function ValidacaoCadastroInner() {
         <div className="card-surface p-5 space-y-3">
           <p className="text-xs text-gray-500">
             Envie o cadastro de produtos da empresa (Excel/CSV) contendo, no mínimo, as colunas Código e Descrição.
-            O Perfil de Produto de cada item é consultado automaticamente no Protheus.
+            O Perfil de Produto de cada item é comparado com os dados sincronizados periodicamente do Protheus.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <input
@@ -258,7 +262,14 @@ function ValidacaoCadastroInner() {
         <>
           <p className="text-xs text-gray-400">
             {apuracao.periodo ? `${apuracao.periodo} · ` : ''}processado em {new Date(apuracao.processedAt).toLocaleString('pt-BR')}
+            {ultimaSincronizacao && ` · Perfis do Protheus sincronizados em ${new Date(ultimaSincronizacao).toLocaleString('pt-BR')}`}
           </p>
+          {ultimaSincronizacao && Date.now() - new Date(ultimaSincronizacao).getTime() > 24 * 60 * 60 * 1000 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              A sincronização dos Perfis de Produto com o Protheus está há mais de 24h sem atualizar — verifique se
+              o script está rodando no escritório.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card-surface p-4">

@@ -15,10 +15,16 @@ type LinhaPerfilProduto = {
   aplicaATodos: boolean;
 };
 
+function formatarDataHora(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('pt-BR');
+}
+
 export default function ExportarPerfisPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [totalExportado, setTotalExportado] = useState<number | null>(null);
+  const [ultimaSincronizacao, setUltimaSincronizacao] = useState<string | null>(null);
 
   async function handleExportar() {
     setLoading(true);
@@ -31,6 +37,7 @@ export default function ExportarPerfisPage() {
         setErro(data.error || 'Falha ao exportar.');
         return;
       }
+      setUltimaSincronizacao(data.ultimaSincronizacao || null);
 
       const linhas: LinhaPerfilProduto[] = data.linhas;
       const ws = XLSX.utils.json_to_sheet(
@@ -61,8 +68,8 @@ export default function ExportarPerfisPage() {
       <ImportHero
         eyebrow="Auditoria de cadastro · Perfis de Produtos"
         titleParts={['Exportar', { text: 'Perfis', accent: true }, 'do Protheus']}
-        description="Consulta ao vivo a tabela de Perfis de Produto do Protheus da empresa ativa e gera um Excel com todos os produtos vinculados a cada perfil, pronto para conferências e auditorias."
-        badges={['Consulta ao vivo no Protheus', 'Um arquivo por empresa ativa']}
+        description="Gera um Excel com todos os produtos vinculados a cada Perfil de Produto da empresa ativa, a partir dos dados sincronizados periodicamente do Protheus, pronto para conferências e auditorias."
+        badges={['Dados sincronizados do Protheus', 'Um arquivo por empresa ativa']}
       />
 
       <Link
@@ -83,13 +90,18 @@ export default function ExportarPerfisPage() {
           disabled={loading}
           className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
         >
-          {loading ? 'Consultando Protheus...' : 'Exportar Perfis de Produto (Excel)'}
+          {loading ? 'Gerando...' : 'Exportar Perfis de Produto (Excel)'}
         </button>
         {erro && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{erro}</p>}
         {totalExportado !== null && (
-          <p className="text-sm text-green-700">
-            {totalExportado} linha(s) exportada(s) com sucesso.
-          </p>
+          <>
+            <p className="text-sm text-green-700">
+              {totalExportado} linha(s) exportada(s) com sucesso.
+            </p>
+            <p className="text-xs text-gray-400">
+              Dados sincronizados do Protheus em: {formatarDataHora(ultimaSincronizacao)}
+            </p>
+          </>
         )}
       </div>
     </div>

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 import { compararCadastro, type ItemCadastro } from '@/lib/validacao-cadastro-rules';
-import { buscarPerfisPorCodigos } from '@/lib/protheus/perfil-produto';
+import { buscarPerfisPorCodigosSincronizados, obterUltimaSincronizacao } from '@/lib/validacao-cadastro-perfil-sync';
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -30,19 +30,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let perfis, perfisComTodos;
-  try {
-    ({ perfis, perfisComTodos } = await buscarPerfisPorCodigos(
-      itensRaw.map((i) => i.codigo),
-      company.protheusSufixo
-    ));
-  } catch (err) {
-    console.error('Falha ao consultar Perfis de Produto no Protheus:', err);
+  const ultimaSincronizacao = await obterUltimaSincronizacao(session.currentCompanyId);
+  if (!ultimaSincronizacao) {
     return NextResponse.json(
-      { error: 'Não foi possível consultar os Perfis de Produto no Protheus. Verifique a conexão com o banco.' },
-      { status: 502 }
+      {
+        error:
+          'Nenhum dado de Perfil de Produto sincronizado ainda para esta empresa. A sincronização com o Protheus roda periodicamente a partir do escritório — aguarde a próxima rodada ou verifique se o script está sendo executado.',
+      },
+      { status: 400 }
     );
   }
+
+  const { perfis, perfisComTodos } = await buscarPerfisPorCodigosSincronizados(
+    itensRaw.map((i) => i.codigo),
+    session.currentCompanyId
+  );
 
   const resultado = compararCadastro(itensRaw, perfis).map((item) => {
     if (item.status !== 'SEM_PERFIL' || perfisComTodos.length === 0) return item;
@@ -91,5 +93,5 @@ export async function POST(req: NextRequest) {
     session.currentCompanyId
   );
 
-  return NextResponse.json({ apuracao });
+  return NextResponse.json({ apuracao, ultimaSincronizacao });
 }

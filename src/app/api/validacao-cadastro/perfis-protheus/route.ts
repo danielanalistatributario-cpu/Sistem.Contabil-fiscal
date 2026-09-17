@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
-import { listarPerfisComProdutos } from '@/lib/protheus/perfil-produto';
+import { listarPerfisComProdutosSincronizados, obterUltimaSincronizacao } from '@/lib/validacao-cadastro-perfil-sync';
 
+// Lê os Perfis de Produto já sincronizados no Postgres (ver
+// scripts/sync-perfis-protheus.ts) — o site publicado (Vercel) não
+// consegue mais consultar o Protheus ao vivo (IP de rede local).
 export async function GET() {
   const session = await getSession();
   if (!session || !session.currentCompanyId) {
@@ -21,16 +24,18 @@ export async function GET() {
     );
   }
 
-  let linhas;
-  try {
-    linhas = await listarPerfisComProdutos(company.protheusSufixo);
-  } catch (err) {
-    console.error('Falha ao exportar Perfis de Produto do Protheus:', err);
+  const linhas = await listarPerfisComProdutosSincronizados(session.currentCompanyId);
+  if (linhas.length === 0) {
     return NextResponse.json(
-      { error: 'Não foi possível consultar os Perfis de Produto no Protheus. Verifique a conexão com o banco.' },
-      { status: 502 }
+      {
+        error:
+          'Nenhum dado de Perfil de Produto sincronizado ainda para esta empresa. A sincronização com o Protheus roda periodicamente a partir do escritório — aguarde a próxima rodada ou verifique se o script está sendo executado.',
+      },
+      { status: 400 }
     );
   }
+
+  const ultimaSincronizacao = await obterUltimaSincronizacao(session.currentCompanyId);
 
   await logActivity(
     session.id,
@@ -39,5 +44,5 @@ export async function GET() {
     session.currentCompanyId
   );
 
-  return NextResponse.json({ linhas });
+  return NextResponse.json({ linhas, ultimaSincronizacao });
 }
