@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { History, PackageSearch } from 'lucide-react';
+import { History, PackageSearch, ListChecks } from 'lucide-react';
 import { ImportHero } from '@/components/ImportHero';
 import * as XLSX from 'xlsx';
 import { lerCadastroProdutos } from '@/lib/cadastro-produtos-reader';
@@ -19,6 +19,12 @@ type ItemDB = {
   perfisEncontrados: string | null;
   status: StatusItem;
   observacao: string | null;
+  perfilCorreto: string | null;
+  cstCorreto: string | null;
+  cClassTribCorreto: string | null;
+  reducaoCorreta: string | null;
+  fundamentoLegalCorreto: string | null;
+  confiancaCorreta: string | null;
 };
 
 type ApuracaoDB = {
@@ -147,6 +153,12 @@ function ValidacaoCadastroInner() {
         'Perfil Encontrado': i.perfilEncontrado || i.perfisEncontrados || '',
         'Status': STATUS_LABEL[i.status],
         'Observações': i.observacao || '',
+        'Perfil Correto': i.perfilCorreto || '',
+        'CST Correto': i.cstCorreto || '',
+        'cClassTrib Correto': i.cClassTribCorreto || '',
+        'Redução Correta': i.reducaoCorreta || '',
+        'Fundamento Legal': i.fundamentoLegalCorreto || '',
+        'Confiança': i.confiancaCorreta || '',
       }))
     );
     const wb = XLSX.utils.book_new();
@@ -196,6 +208,10 @@ function ValidacaoCadastroInner() {
             </p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
+            <Link href="/dashboard/validacao-cadastro/classificacao-referencia" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+              <ListChecks size={15} />
+              Classificação Correta
+            </Link>
             <Link href="/dashboard/validacao-cadastro/exportar-perfis" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <PackageSearch size={15} />
               Exportar Perfis
@@ -213,6 +229,10 @@ function ValidacaoCadastroInner() {
 
       {!apuracao && (
         <div className="flex justify-end gap-4">
+          <Link href="/dashboard/validacao-cadastro/classificacao-referencia" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+            <ListChecks size={15} />
+            Importar Classificação Correta
+          </Link>
           <Link href="/dashboard/validacao-cadastro/exportar-perfis" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
             <PackageSearch size={15} />
             Exportar Perfis do Protheus
@@ -340,7 +360,7 @@ function ValidacaoCadastroInner() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[800px]">
+              <table className="w-full text-xs min-w-[1100px]">
                 <thead>
                   <tr className="bg-brand text-white text-left">
                     <th className="px-3 py-2">Código</th>
@@ -349,6 +369,10 @@ function ValidacaoCadastroInner() {
                     <th className="px-3 py-2">Perfil Encontrado</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Observação</th>
+                    <th className="px-3 py-2">Perfil Correto</th>
+                    <th className="px-3 py-2">CST</th>
+                    <th className="px-3 py-2">Redução</th>
+                    <th className="px-3 py-2">Confiança</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -364,6 +388,26 @@ function ValidacaoCadastroInner() {
                         </span>
                       </td>
                       <td className="px-3 py-1.5 max-w-[260px] truncate text-gray-500">{i.observacao}</td>
+                      <td className="px-3 py-1.5 font-medium text-brand">{i.perfilCorreto || '—'}</td>
+                      <td className="px-3 py-1.5 max-w-[220px] truncate" title={i.cstCorreto || ''}>{i.cstCorreto || '—'}</td>
+                      <td className="px-3 py-1.5">{i.reducaoCorreta || '—'}</td>
+                      <td className="px-3 py-1.5">
+                        {i.confiancaCorreta ? (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full ${
+                              i.confiancaCorreta === 'REVISAR'
+                                ? 'bg-amber-100 text-amber-700'
+                                : i.confiancaCorreta === 'ALTA'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-gray-200 text-gray-600'
+                            }`}
+                          >
+                            {i.confiancaCorreta}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -56,10 +56,57 @@ export async function POST(req: NextRequest) {
     empresaGrupoId
   );
 
+  // Classificação de referência (ex: estudo IBS/CBS) — o que DEVERIA estar
+  // cadastrado, sempre por filial. Independente da comparação acima (que só
+  // usa o que ESTÁ sincronizado do Protheus) — não existe pra toda filial,
+  // por isso é um Map à parte, não bloqueia a apuração se estiver vazio.
+  const classificacaoReferencia = empresaGrupoId
+    ? await prisma.classificacaoProdutoReferencia.findMany({ where: { companyId: session.currentCompanyId, empresaGrupoId } })
+    : [];
+  const referenciaPorCodigo = new Map<string, typeof classificacaoReferencia>();
+  for (const c of classificacaoReferencia) {
+    if (!referenciaPorCodigo.has(c.codigo)) referenciaPorCodigo.set(c.codigo, []);
+    referenciaPorCodigo.get(c.codigo)!.push(c);
+  }
+
   const resultado = compararCadastro(itensRaw, perfis).map((item) => {
-    if (item.status !== 'SEM_PERFIL' || perfisComTodos.length === 0) return item;
+    const refs = referenciaPorCodigo.get(item.codigo) || [];
+    const perfisDistintos = Array.from(new Set(refs.map((r) => r.perfilCorreto)));
+    // Achado real: um código pode aparecer mais de uma vez na referência com
+    // classificações DIFERENTES (produto reaproveitado no Protheus) — nesse
+    // caso não escolhe um arbitrariamente, sinaliza a ambiguidade.
+    const comReferencia =
+      refs.length === 0
+        ? {
+            perfilCorreto: null,
+            cstCorreto: null,
+            cClassTribCorreto: null,
+            reducaoCorreta: null,
+            fundamentoLegalCorreto: null,
+            confiancaCorreta: null,
+          }
+        : perfisDistintos.length > 1
+        ? {
+            perfilCorreto: `AMBÍGUO: ${perfisDistintos.join(' / ')} — código repetido na referência com classificações diferentes`,
+            cstCorreto: null,
+            cClassTribCorreto: null,
+            reducaoCorreta: null,
+            fundamentoLegalCorreto: null,
+            confiancaCorreta: null,
+          }
+        : {
+            perfilCorreto: refs[0].perfilCorreto,
+            cstCorreto: refs[0].cst,
+            cClassTribCorreto: refs[0].cClassTrib,
+            reducaoCorreta: refs[0].reducao,
+            fundamentoLegalCorreto: refs[0].fundamentoLegal,
+            confiancaCorreta: refs[0].confianca,
+          };
+
+    if (item.status !== 'SEM_PERFIL' || perfisComTodos.length === 0) return { ...item, ...comReferencia };
     return {
       ...item,
+      ...comReferencia,
       observacao: `${item.observacao ? item.observacao + ' ' : ''}Perfil(is) com regra "TODOS" no Protheus (aplicação genérica, não confirmada): ${perfisComTodos.join(', ')} — verificar manualmente.`,
     };
   });
@@ -90,6 +137,12 @@ export async function POST(req: NextRequest) {
           perfisEncontrados: i.perfisEncontrados,
           status: i.status,
           observacao: i.observacao,
+          perfilCorreto: i.perfilCorreto,
+          cstCorreto: i.cstCorreto,
+          cClassTribCorreto: i.cClassTribCorreto,
+          reducaoCorreta: i.reducaoCorreta,
+          fundamentoLegalCorreto: i.fundamentoLegalCorreto,
+          confiancaCorreta: i.confiancaCorreta,
         })),
       },
     },

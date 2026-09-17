@@ -43,6 +43,7 @@ model Company {
   auditoriasRtc  AuditorRtcApuracao[]
   activityLog    ActivityLog[]
   perfisProdutos PerfilProduto[]
+  classificacoesProdutoReferencia ClassificacaoProdutoReferencia[]
   validacoesCadastro ValidacaoCadastroApuracao[]
   analisesFiscais AnaliseFiscalApuracao[]
   analiseFiscalTesConfig AnaliseFiscalTesConfig[]
@@ -453,16 +454,57 @@ model ValidacaoCadastroApuracao {
 }
 
 model ValidacaoCadastroItem {
-  id                String                    @id @default(cuid())
-  apuracaoId        String
-  codigo            String
-  descricao         String?
-  perfilAtual       String?
-  perfilEncontrado  String?
-  perfisEncontrados String?
-  status            String
-  observacao        String?
-  apuracao          ValidacaoCadastroApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+  id                     String                    @id @default(cuid())
+  apuracaoId             String
+  codigo                 String
+  descricao              String?
+  perfilAtual            String?
+  perfilEncontrado       String?
+  perfisEncontrados      String?
+  status                 String
+  observacao             String?
+  // Classificação de referência (IBS/CBS) — o que DEVERIA estar cadastrado,
+  // independente da comparação com o Protheus acima. Ver ClassificacaoProdutoReferencia.
+  perfilCorreto          String?
+  cstCorreto             String?
+  cClassTribCorreto      String?
+  reducaoCorreta         String?
+  fundamentoLegalCorreto String?
+  confiancaCorreta       String?
+  apuracao               ValidacaoCadastroApuracao @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
+}
+
+// Referência do que DEVERIA estar classificado (estudo de reclassificação
+// tributária, ex: Reforma Tributária IBS/CBS) — diferente de PerfilProduto
+// (o que ESTÁ no Protheus hoje). Sempre por filial (empresaGrupoId
+// obrigatório): pedido explícito do usuário pra manter os cadastros de
+// cada filial independentes.
+model ClassificacaoProdutoReferencia {
+  id              String   @id @default(cuid())
+  companyId       String
+  empresaGrupoId  String
+  codigo          String
+  descricao       String?
+  ncm             String?
+  tipo            String?
+  grupo           String?
+  finalidade      String?
+  cst             String?
+  cClassTrib      String?
+  perfilCorreto   String
+  reducao         String?
+  fundamentoLegal String?
+  confianca       String?
+  homologado      String?
+  createdAt       DateTime               @default(now())
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaGrupo    AnaliseFiscalCnpjGrupo @relation(fields: [empresaGrupoId], references: [id], onDelete: Cascade)
+
+  // Sem chave única de propósito: um código pode legitimamente aparecer mais
+  // de uma vez no arquivo de origem com classificações DIFERENTES (confirmado
+  // num caso real: código reaproveitado no Protheus pra dois produtos
+  // completamente diferentes) — mesmo padrão já adotado em PerfilProdutoItem,
+  // "vale mostrar, não esconder" a inconsistência.
 }
 
 // Análise e Apuração Fiscal — auditoria do Relatório Fiscal de Entradas,
@@ -773,6 +815,7 @@ model AnaliseFiscalCnpjGrupo {
   produtos        AnaliseFiscalProdutoClassificacao[]
   tesConfig       AnaliseFiscalTesConfig[]
   perfisProdutos  PerfilProduto[]
+  classificacoesProdutoReferencia ClassificacaoProdutoReferencia[]
 
   @@unique([companyId, cnpj])
 }
