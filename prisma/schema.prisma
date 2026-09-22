@@ -264,6 +264,13 @@ model ConciliacaoBancariaApuracao {
   totalRazao          Int
   totalExtrato        Int
   totalConciliados    Int
+  // Fechamento do dia por total (grupo grande sem evidência item a item) e
+  // divergência de valor (mesmo lançamento, valor diferente) ficam FORA de
+  // totalConciliados — contadores próprios, pra não misturar pareamento
+  // verificado com "o total do dia bateu" (achado real 22/09/2026: podem
+  // esconder lançamento sem par de verdade — ver nota em conciliacao-bancaria.ts).
+  totalFechamentoTotalDia Int @default(0)
+  totalDivergenciaValor   Int @default(0)
   totalPendentes      Int
   valorPendenteRazao  Float
   valorPendenteExtrato Float
@@ -301,7 +308,8 @@ model ConciliacaoBancariaItem {
   data        DateTime?
   historico   String?
   valor       Float
-  status      String // CONCILIADO | CONCILIADO_GRUPO | DIF_COMPETENCIA | APLICACAO_AUTOMATICA | PENDENTE
+  documento   String? // código de lote/documento do banco, quando a fonte tiver essa coluna
+  status      String // CONCILIADO | CONCILIADO_GRUPO | DIF_COMPETENCIA | APLICACAO_AUTOMATICA | FECHAMENTO_TOTAL_DIA | DIVERGENCIA_VALOR | PENDENTE
   grupoRef    String? // liga lançamentos que foram conciliados em grupo (N:1 ou 1:N)
   duplicadoSuspeito Boolean @default(false)
   observacao  String?

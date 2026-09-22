@@ -8,13 +8,16 @@ import * as XLSX from 'xlsx';
 import { ImportHero } from '@/components/ImportHero';
 import { lerRazaoBancario, lerExtratoBancarioComSaldo } from '@/lib/conciliacao-reader';
 
+type StatusItemDB = 'CONCILIADO' | 'CONCILIADO_GRUPO' | 'DIF_COMPETENCIA' | 'APLICACAO_AUTOMATICA' | 'FECHAMENTO_TOTAL_DIA' | 'DIVERGENCIA_VALOR' | 'PENDENTE';
+
 type ItemDB = {
   id: string;
   origem: 'RAZAO' | 'EXTRATO';
   data: string | null;
   historico: string | null;
   valor: number;
-  status: 'CONCILIADO' | 'CONCILIADO_GRUPO' | 'DIF_COMPETENCIA' | 'APLICACAO_AUTOMATICA' | 'PENDENTE';
+  documento: string | null;
+  status: StatusItemDB;
   grupoRef: string | null;
   duplicadoSuspeito: boolean;
   observacao: string | null;
@@ -42,6 +45,8 @@ type ApuracaoDB = {
   totalRazao: number;
   totalExtrato: number;
   totalConciliados: number;
+  totalFechamentoTotalDia: number;
+  totalDivergenciaValor: number;
   totalPendentes: number;
   valorPendenteRazao: number;
   valorPendenteExtrato: number;
@@ -68,19 +73,34 @@ function fmtDate(v: string | null) {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  CONCILIADO: 'Conciliado',
-  CONCILIADO_GRUPO: 'Conciliado (grupo)',
-  DIF_COMPETENCIA: 'Diferença de competência',
+  CONCILIADO: '✅ Conciliado',
+  CONCILIADO_GRUPO: '✅ Conciliado (grupo)',
+  DIF_COMPETENCIA: '🟡 Divergência de data',
   APLICACAO_AUTOMATICA: 'Aplicação automática',
+  FECHAMENTO_TOTAL_DIA: '🟠 Fechamento por total (revisar)',
+  DIVERGENCIA_VALOR: '🔴 Divergência de valor',
   PENDENTE: 'Pendente',
 };
 const STATUS_COLOR: Record<string, string> = {
   CONCILIADO: 'bg-green-100 text-green-700',
-  CONCILIADO_GRUPO: 'bg-teal/10 text-teal',
+  CONCILIADO_GRUPO: 'bg-green-100 text-green-700',
   DIF_COMPETENCIA: 'bg-amber-100 text-amber-700',
   APLICACAO_AUTOMATICA: 'bg-blue-100 text-blue-700',
+  FECHAMENTO_TOTAL_DIA: 'bg-orange-100 text-orange-700',
+  DIVERGENCIA_VALOR: 'bg-red-100 text-red-700',
   PENDENTE: 'bg-red-100 text-red-700',
 };
+
+// PENDENTE tem crítica diferente conforme a origem: achado no Extrato mas
+// não no Razão (falta contabilizar) é mais grave que achado no Razão mas
+// não no Extrato (pode ser cheque não compensado, outra competência etc) —
+// pedido explícito do usuário pra distinguir essas duas críticas.
+function labelStatus(item: { status: StatusItemDB; origem: 'RAZAO' | 'EXTRATO' }): string {
+  if (item.status === 'PENDENTE') {
+    return item.origem === 'EXTRATO' ? '🔴 Falta contabilizar' : '🟠 Divergência a verificar';
+  }
+  return STATUS_LABEL[item.status] || item.status;
+}
 
 export default function ConciliacaoBancariaPage() {
   return (
@@ -104,7 +124,7 @@ function ConciliacaoBancariaInner() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [apuracao, setApuracao] = useState<ApuracaoDB | null>(null);
-  const [view, setView] = useState<'diagnostico' | 'pendentesExtrato' | 'pendentesRazao' | 'todos'>('diagnostico');
+  const [view, setView] = useState<'diagnostico' | 'pendentesExtrato' | 'pendentesRazao' | 'fechamentoTotalDia' | 'divergenciaValor' | 'todos'>('diagnostico');
   const [filtroData, setFiltroData] = useState<string | null>(null);
   const razaoRef = useRef<HTMLInputElement>(null);
   const extratoRef = useRef<HTMLInputElement>(null);
@@ -207,7 +227,8 @@ function ConciliacaoBancariaInner() {
       Data: fmtDate(i.data),
       Histórico: i.historico,
       Valor: i.valor,
-      Status: STATUS_LABEL[i.status],
+      Documento: i.documento || '',
+      Status: labelStatus(i),
       Grupo: i.grupoRef || '',
       'Possível duplicado': i.duplicadoSuspeito ? 'Sim' : '',
       Observação: i.observacao || '',
@@ -221,6 +242,8 @@ function ConciliacaoBancariaInner() {
       { Indicador: 'Saldo final (Extrato)', Valor: apuracao.saldoFinalExtrato },
       { Indicador: 'Diferença de saldo final', Valor: apuracao.diferencaSaldoFinal },
       { Indicador: 'Total conciliados', Valor: apuracao.totalConciliados },
+      { Indicador: 'Fechamento por total do dia (revisar)', Valor: apuracao.totalFechamentoTotalDia },
+      { Indicador: 'Divergência de valor', Valor: apuracao.totalDivergenciaValor },
       { Indicador: 'Total pendentes', Valor: apuracao.totalPendentes },
       { Indicador: 'Total entradas (Razão)', Valor: apuracao.totalEntradaRazao },
       { Indicador: 'Total saídas (Razão)', Valor: apuracao.totalSaidaRazao },
@@ -232,10 +255,40 @@ function ConciliacaoBancariaInner() {
     XLSX.writeFile(wb, `Conciliacao_Bancaria_${apuracao.periodo.replace('/', '-')}.xlsx`);
   }
 
+  // Relatório de Pendências — só o que ainda precisa de revisão (Pendente,
+  // Divergência de valor, Fechamento por total do dia), com a crítica de
+  // cada um — pedido explícito do usuário, separado da exportação completa.
+  function exportarRelatorioPendencias() {
+    if (!apuracao) return;
+    const naoConciliados = apuracao.itens.filter((i) => i.status !== 'CONCILIADO' && i.status !== 'CONCILIADO_GRUPO' && i.status !== 'DIF_COMPETENCIA' && i.status !== 'APLICACAO_AUTOMATICA');
+    const rows = naoConciliados.map((i) => ({
+      Origem: i.origem === 'RAZAO' ? 'Razão' : 'Extrato',
+      Data: fmtDate(i.data),
+      Valor: i.valor,
+      Histórico: i.historico || '',
+      Documento: i.documento || '',
+      Crítica: labelStatus(i),
+      Observação: i.observacao || '',
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, 'Pendências');
+    XLSX.writeFile(wb, `Relatorio_Pendencias_Conciliacao_${apuracao.periodo.replace('/', '-')}.xlsx`);
+  }
+
   const pendentesExtrato = apuracao ? apuracao.itens.filter((i) => i.origem === 'EXTRATO' && i.status === 'PENDENTE') : [];
   const pendentesRazao = apuracao ? apuracao.itens.filter((i) => i.origem === 'RAZAO' && i.status === 'PENDENTE') : [];
+  const fechamentoTotalDia = apuracao ? apuracao.itens.filter((i) => i.status === 'FECHAMENTO_TOTAL_DIA') : [];
+  const divergenciaValor = apuracao ? apuracao.itens.filter((i) => i.status === 'DIVERGENCIA_VALOR') : [];
   const chaveData = (v: string | null) => (v ? v.slice(0, 10) : null);
-  const listaAtual = (view === 'pendentesExtrato' ? pendentesExtrato : view === 'pendentesRazao' ? pendentesRazao : apuracao?.itens ?? []).filter(
+  const listaPorView: Record<string, ItemDB[]> = {
+    pendentesExtrato,
+    pendentesRazao,
+    fechamentoTotalDia,
+    divergenciaValor,
+    todos: apuracao?.itens ?? [],
+  };
+  const listaAtual = (listaPorView[view] ?? []).filter(
     (i) => !filtroData || chaveData(i.data) === filtroData
   );
 
@@ -326,7 +379,7 @@ function ConciliacaoBancariaInner() {
 
       {apuracao && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
             <div className={`card-surface p-5 ${Math.abs(apuracao.diferencaSaldoFinal) > 0.01 ? 'border border-ruby/40' : ''}`}>
               <div className="flex items-center gap-2 mb-1">
                 <Landmark size={16} className="text-brand" />
@@ -340,12 +393,21 @@ function ConciliacaoBancariaInner() {
               </p>
             </div>
             <div className="card-surface p-5">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">Lançamentos conciliados</p>
+              <p className="text-[11px] uppercase tracking-wide text-gray-400">✅ Conciliados</p>
               <p className="text-2xl font-mono font-semibold text-green-600 mt-1">{apuracao.totalConciliados}</p>
               <p className="text-xs text-gray-400 mt-1">de {apuracao.totalRazao + apuracao.totalExtrato} lançamento(s) no total</p>
             </div>
+            <div className={`card-surface p-5 ${apuracao.totalFechamentoTotalDia + apuracao.totalDivergenciaValor > 0 ? 'border border-orange-300' : ''}`}>
+              <p className="text-[11px] uppercase tracking-wide text-gray-400">🟠 A revisar</p>
+              <p className={`text-2xl font-mono font-semibold mt-1 ${apuracao.totalFechamentoTotalDia + apuracao.totalDivergenciaValor > 0 ? 'text-orange-600' : 'text-gray-800'}`}>
+                {apuracao.totalFechamentoTotalDia + apuracao.totalDivergenciaValor}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {apuracao.totalFechamentoTotalDia} fechamento por total · {apuracao.totalDivergenciaValor} divergência de valor
+              </p>
+            </div>
             <div className={`card-surface p-5 ${apuracao.totalPendentes > 0 ? 'border border-ruby/40' : ''}`}>
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">Pendentes</p>
+              <p className="text-[11px] uppercase tracking-wide text-gray-400">🔴 Pendentes</p>
               <p className={`text-2xl font-mono font-semibold mt-1 ${apuracao.totalPendentes > 0 ? 'text-ruby' : 'text-gray-800'}`}>{apuracao.totalPendentes}</p>
               <p className="text-xs text-gray-400 mt-1">
                 Razão {fmtBRL(apuracao.valorPendenteRazao)} · Extrato {fmtBRL(apuracao.valorPendenteExtrato)}
@@ -366,14 +428,30 @@ function ConciliacaoBancariaInner() {
             </div>
           </div>
 
-          <div className="flex gap-2 border-b border-gray-200">
-            {(['diagnostico', 'pendentesExtrato', 'pendentesRazao', 'todos'] as const).map((v) => (
+          <div className="flex justify-end">
+            <button onClick={exportarRelatorioPendencias} className="bg-ruby text-white rounded-lg px-3 py-1.5 text-sm font-medium">
+              Exportar Relatório de Pendências
+            </button>
+          </div>
+
+          <div className="flex gap-2 border-b border-gray-200 flex-wrap">
+            {(['diagnostico', 'pendentesExtrato', 'pendentesRazao', 'fechamentoTotalDia', 'divergenciaValor', 'todos'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
                 className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${view === v ? 'border-brand text-brand' : 'border-transparent text-gray-500'}`}
               >
-                {v === 'diagnostico' ? 'Movimentação diária' : v === 'pendentesExtrato' ? `Não contabilizado (${pendentesExtrato.length})` : v === 'pendentesRazao' ? `Não localizado no banco (${pendentesRazao.length})` : 'Todos os lançamentos'}
+                {v === 'diagnostico'
+                  ? 'Movimentação diária'
+                  : v === 'pendentesExtrato'
+                  ? `🔴 Falta contabilizar (${pendentesExtrato.length})`
+                  : v === 'pendentesRazao'
+                  ? `🟠 Divergência a verificar (${pendentesRazao.length})`
+                  : v === 'fechamentoTotalDia'
+                  ? `🟠 Fechamento por total (${fechamentoTotalDia.length})`
+                  : v === 'divergenciaValor'
+                  ? `🔴 Divergência de valor (${divergenciaValor.length})`
+                  : 'Todos os lançamentos'}
               </button>
             ))}
           </div>
@@ -430,12 +508,20 @@ function ConciliacaoBancariaInner() {
             </div>
           )}
 
-          {(view === 'pendentesExtrato' || view === 'pendentesRazao' || view === 'todos') && (
+          {view !== 'diagnostico' && (
             <div className="card-surface p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <h2 className="font-display font-semibold text-brand">
-                    {view === 'pendentesExtrato' ? 'Movimentações bancárias ainda não contabilizadas' : view === 'pendentesRazao' ? 'Contabilizado, mas não localizado no banco' : 'Todos os lançamentos'}
+                    {view === 'pendentesExtrato'
+                      ? 'Está no Extrato, mas falta contabilizar no Razão'
+                      : view === 'pendentesRazao'
+                      ? 'Está no Razão, mas não foi encontrado no Extrato'
+                      : view === 'fechamentoTotalDia'
+                      ? 'Fechamento por total do dia — não verificado item a item'
+                      : view === 'divergenciaValor'
+                      ? 'Mesmo lançamento, valor diferente entre Razão e Extrato'
+                      : 'Todos os lançamentos'}
                   </h2>
                   {filtroData && (
                     <button
@@ -460,7 +546,8 @@ function ConciliacaoBancariaInner() {
                       <th className="px-3 py-2">Data</th>
                       <th className="px-3 py-2">Histórico</th>
                       <th className="px-3 py-2">Valor</th>
-                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Documento</th>
+                      <th className="px-3 py-2">Crítica</th>
                       <th className="px-3 py-2">Observação</th>
                     </tr>
                   </thead>
@@ -471,8 +558,9 @@ function ConciliacaoBancariaInner() {
                         <td className="px-3 py-1.5">{fmtDate(i.data)}</td>
                         <td className="px-3 py-1.5 max-w-[240px] truncate">{i.historico || <em className="text-gray-400">(vazio)</em>}</td>
                         <td className="px-3 py-1.5 font-mono text-right">{fmtBRL(i.valor)}</td>
+                        <td className="px-3 py-1.5 font-mono">{i.documento || '—'}</td>
                         <td className="px-3 py-1.5">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${STATUS_COLOR[i.status]}`}>{STATUS_LABEL[i.status]}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${STATUS_COLOR[i.status]}`}>{labelStatus(i)}</span>
                           {i.duplicadoSuspeito && <span className="ml-1 text-[10px] px-2 py-0.5 rounded-full bg-pink/10 text-pink">Possível duplicado</span>}
                         </td>
                         <td className="px-3 py-1.5 max-w-[320px] text-gray-500">{i.observacao}</td>

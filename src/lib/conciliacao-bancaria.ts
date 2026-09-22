@@ -18,17 +18,36 @@
 //    lançamentos não pareados do dia (mesma direção: só entrada ou só saída)
 //    bate exato dos dois lados, agrupa tudo de uma vez, sem limite de itens
 //    (ex: dezenas de PIX recebidos batendo com dezenas de baixas de título,
-//    sem nenhuma outra pista em comum além do total do dia fechar); (d) por
-//    competência (mesmo valor, data próxima) — roda só depois dos
-//    agrupamentos fortes porque, sozinho, "mesmo valor" pode achar o par
-//    errado em outro dia quando há muitos lançamentos de valor parecido
-//    (ex: vários PIX de clientes diferentes), o que já "roubou" um item de
-//    um fechamento de dia em um caso real; (e) busca por soma de subconjunto
-//    (meet-in-the-middle, com teto de segurança) para o que sobrar, dentro
-//    de uma janela de dias.
+//    sem nenhuma outra pista em comum além do total do dia fechar) — status
+//    PRÓPRIO (`FECHAMENTO_TOTAL_DIA`), NÃO conta como conciliado de verdade
+//    (ver nota abaixo); (d) por competência (mesmo valor, data próxima) —
+//    roda só depois dos agrupamentos fortes porque, sozinho, "mesmo valor"
+//    pode achar o par errado em outro dia quando há muitos lançamentos de
+//    valor parecido (ex: vários PIX de clientes diferentes), o que já
+//    "roubou" um item de um fechamento de dia em um caso real; (e) busca por
+//    soma de subconjunto (meet-in-the-middle, com teto de segurança) para o
+//    que sobrar, dentro de uma janela de dias; (f) divergência de valor —
+//    quando sobra exatamente 1 lançamento de cada lado na mesma data, com
+//    valores diferentes, é bem mais provável que seja o mesmo lançamento com
+//    erro de valor de um dos dois lados do que dois lançamentos
+//    independentes sem nenhuma relação.
 // 3. Lançamentos que sobraram sem par são classificados e, no caso do
 //    extrato, têm a natureza provável sugerida por palavra-chave no
 //    histórico (tarifa, PIX, TED, IOF, juros, etc.).
+//
+// Sobre `FECHAMENTO_TOTAL_DIA` (achado real, 22/09/2026): testado contra um
+// mês real do Safra, 92% de tudo que o motor chamava de "conciliado" vinha
+// do fechamento (c) — grupos de dezenas a mais de cem itens de cada lado,
+// sem nenhuma evidência além do total do dia bater. Isso significa que o
+// total pode fechar por coincidência (duas divergências pequenas se
+// cancelando) escondendo lançamentos sem par de verdade — caso real
+// confirmado: um "ORDEM DE CREDITO" de R$ 54,00 sem contrapartida no Razão
+// ficou "escondido" dentro de um grupo de 138 lançamentos do Razão x 92 do
+// Extrato que fechava no total. Por isso esse tipo de fechamento tem status
+// PRÓPRIO, separado de `CONCILIADO`/`CONCILIADO_GRUPO` (que continuam só
+// pra pareamento com evidência de verdade: valor exato, Documento em comum,
+// ou soma de subconjunto dentro da janela) — não entra em
+// `totais.totalConciliados`, fica num contador à parte pra revisão manual.
 
 import { normalize } from './icms-rules';
 
@@ -44,13 +63,21 @@ export type LancamentoConta = {
   documento?: string | null; // código de lote/documento do banco, quando a fonte tiver essa coluna (ex: Santander)
 };
 
-export type StatusItem = 'CONCILIADO' | 'CONCILIADO_GRUPO' | 'DIF_COMPETENCIA' | 'APLICACAO_AUTOMATICA' | 'PENDENTE';
+export type StatusItem =
+  | 'CONCILIADO'
+  | 'CONCILIADO_GRUPO'
+  | 'DIF_COMPETENCIA'
+  | 'APLICACAO_AUTOMATICA'
+  | 'FECHAMENTO_TOTAL_DIA'
+  | 'DIVERGENCIA_VALOR'
+  | 'PENDENTE';
 
 export type ItemConciliado = {
   origem: 'RAZAO' | 'EXTRATO';
   data: Date | null;
   historico: string;
   valor: number;
+  documento: string | null;
   status: StatusItem;
   grupoRef: string | null;
   duplicadoSuspeito: boolean;
@@ -78,6 +105,8 @@ export type ResultadoConciliacaoBancaria = {
     totalRazao: number;
     totalExtrato: number;
     totalConciliados: number;
+    totalFechamentoTotalDia: number;
+    totalDivergenciaValor: number;
     totalPendentes: number;
     valorPendenteRazao: number;
     valorPendenteExtrato: number;
@@ -473,6 +502,7 @@ export function processarConciliacaoBancaria(
       data: item.data,
       historico: item.historico,
       valor: item.valor,
+      documento: item.documento,
       status,
       grupoRef,
       duplicadoSuspeito,
@@ -530,7 +560,12 @@ export function processarConciliacaoBancaria(
 
   // C2: fechamento do dia inteiro por direção (entrada ou saída) — quando o
   // total de tudo que sobrou no dia bate exato dos dois lados, mesmo sem
-  // nenhuma outra pista em comum e sem limite de quantidade de itens.
+  // nenhuma outra pista em comum e sem limite de quantidade de itens. Status
+  // PRÓPRIO (FECHAMENTO_TOTAL_DIA, não CONCILIADO_GRUPO) — testado contra
+  // dado real e confirmado que o total pode bater por coincidência (duas
+  // divergências pequenas se cancelando) escondendo lançamento sem par de
+  // verdade; ver nota completa no topo do arquivo. Fica separado da
+  // contagem de conciliados de verdade, pra revisão manual.
   for (const { grupoRazao, grupoExtrato } of agruparPorDiaEDirecao(razaoPool, extratoPool)) {
     if (grupoRazao.some((g) => g.matched) || grupoExtrato.some((g) => g.matched)) continue;
     grupoContador++;
@@ -538,9 +573,9 @@ export function processarConciliacaoBancaria(
     grupoRazao.forEach((g) => (g.matched = true));
     grupoExtrato.forEach((g) => (g.matched = true));
     const dataStr = grupoRazao[0].data ? fmtDataCurta(grupoRazao[0].data) : '';
-    const obs = `Fechamento do dia ${dataStr}: total de ${grupoRazao.length} lançamento(s) do Razão bate exato com o total de ${grupoExtrato.length} lançamento(s) do Extrato.`;
-    grupoRazao.forEach((g) => definirItem('RAZAO', g, 'CONCILIADO_GRUPO', ref, obs));
-    grupoExtrato.forEach((g) => definirItem('EXTRATO', g, 'CONCILIADO_GRUPO', ref, obs));
+    const obs = `Fechamento do dia ${dataStr}: total de ${grupoRazao.length} lançamento(s) do Razão bate exato com o total de ${grupoExtrato.length} lançamento(s) do Extrato — não verificado item a item, revisar.`;
+    grupoRazao.forEach((g) => definirItem('RAZAO', g, 'FECHAMENTO_TOTAL_DIA', ref, obs));
+    grupoExtrato.forEach((g) => definirItem('EXTRATO', g, 'FECHAMENTO_TOTAL_DIA', ref, obs));
   }
 
   // Passo B — mesma valor, data próxima (diferença de competência). Roda só
@@ -625,6 +660,46 @@ export function processarConciliacaoBancaria(
     }
   }
 
+  // Passo E — divergência de valor: quando sobra exatamente 1 lançamento de
+  // cada lado na mesma data e mesma direção (os dois entrada, ou os dois
+  // saída), mas com valores diferentes, é bem mais provável que seja o
+  // mesmo lançamento registrado com um valor errado de um dos dois lados do
+  // que dois lançamentos completamente independentes sem nenhuma relação —
+  // só roda quando não sobra ambiguidade (exatamente 1 de cada lado no dia),
+  // senão prefere deixar como pendente separado a arriscar casar o par
+  // errado.
+  {
+    const porDiaValor = new Map<string, { razao: PoolItem[]; extrato: PoolItem[] }>();
+    for (const r of razaoPool) {
+      if (r.matched || !r.data) continue;
+      const chave = r.data.toISOString().slice(0, 10);
+      const b = porDiaValor.get(chave) ?? { razao: [], extrato: [] };
+      b.razao.push(r);
+      porDiaValor.set(chave, b);
+    }
+    for (const e of extratoPool) {
+      if (e.matched || !e.data) continue;
+      const chave = e.data.toISOString().slice(0, 10);
+      const b = porDiaValor.get(chave) ?? { razao: [], extrato: [] };
+      b.extrato.push(e);
+      porDiaValor.set(chave, b);
+    }
+    for (const b of porDiaValor.values()) {
+      if (b.razao.length !== 1 || b.extrato.length !== 1) continue;
+      const r = b.razao[0];
+      const e = b.extrato[0];
+      if (Math.abs(e.valor - r.valor) < TOLERANCIA_VALOR) continue; // valor igual seria Passo A, não deveria chegar aqui
+      if ((r.valor > 0) !== (e.valor > 0)) continue; // direções diferentes não é "mesmo lançamento, valor errado"
+      grupoContador++;
+      const ref = `G${grupoContador}`;
+      r.matched = true;
+      e.matched = true;
+      const obs = `Mesma data (${fmtDataCurta(r.data!)}), valor diferente entre Razão (${r.valor.toFixed(2)}) e Extrato (${e.valor.toFixed(2)}) — provável divergência de valor no mesmo lançamento.`;
+      definirItem('RAZAO', r, 'DIVERGENCIA_VALOR', ref, obs);
+      definirItem('EXTRATO', e, 'DIVERGENCIA_VALOR', ref, obs);
+    }
+  }
+
   // Passo D — sobras: pendentes
   for (const r of razaoPool) {
     if (!r.matched) {
@@ -654,6 +729,8 @@ export function processarConciliacaoBancaria(
   const totalConciliados = itens.filter(
     (i) => i.status === 'CONCILIADO' || i.status === 'CONCILIADO_GRUPO' || i.status === 'DIF_COMPETENCIA' || i.status === 'APLICACAO_AUTOMATICA'
   ).length;
+  const totalFechamentoTotalDia = itens.filter((i) => i.status === 'FECHAMENTO_TOTAL_DIA').length;
+  const totalDivergenciaValor = itens.filter((i) => i.status === 'DIVERGENCIA_VALOR').length;
   const pendentes = itens.filter((i) => i.status === 'PENDENTE');
   const valorPendenteRazao = pendentes.filter((i) => i.origem === 'RAZAO').reduce((s, i) => s + i.valor, 0);
   const valorPendenteExtrato = pendentes.filter((i) => i.origem === 'EXTRATO').reduce((s, i) => s + i.valor, 0);
@@ -674,6 +751,8 @@ export function processarConciliacaoBancaria(
       totalRazao: razao.length,
       totalExtrato: extrato.length,
       totalConciliados,
+      totalFechamentoTotalDia,
+      totalDivergenciaValor,
       totalPendentes: pendentes.length,
       valorPendenteRazao,
       valorPendenteExtrato,
