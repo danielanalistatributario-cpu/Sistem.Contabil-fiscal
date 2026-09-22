@@ -32,6 +32,8 @@ export default function HistoricoAnaliseFiscalEntradaPage() {
   const [consultando, setConsultando] = useState(false);
   const [limpando, setLimpando] = useState(false);
   const [erroLimpeza, setErroLimpeza] = useState<string | null>(null);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [excluindoSelecionadas, setExcluindoSelecionadas] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -51,6 +53,36 @@ export default function HistoricoAnaliseFiscalEntradaPage() {
     if (!confirm('Excluir esta análise fiscal? Esta ação não pode ser desfeita.')) return;
     await fetch(`/api/analise-fiscal/apuracoes/${id}`, { method: 'DELETE' });
     carregar();
+  }
+
+  function toggleSelecionada(id: string) {
+    setSelecionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelecionarTodas() {
+    setSelecionadas((prev) => (prev.size === apuracoes.length ? new Set() : new Set(apuracoes.map((a) => a.id))));
+  }
+
+  async function handleExcluirSelecionadas() {
+    if (selecionadas.size === 0) return;
+    if (!confirm(`Excluir ${selecionadas.size} apuração(ões) selecionada(s)? Esta ação não pode ser desfeita.`)) return;
+    setExcluindoSelecionadas(true);
+    try {
+      await fetch('/api/analise-fiscal/apuracoes/excluir-selecionadas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selecionadas) }),
+      });
+      setSelecionadas(new Set());
+      carregar();
+    } finally {
+      setExcluindoSelecionadas(false);
+    }
   }
 
   async function handleConsultarAntigas() {
@@ -157,9 +189,36 @@ export default function HistoricoAnaliseFiscalEntradaPage() {
             </p>
           </div>
         )}
+        {apuracoes.length > 0 && (
+          <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
+            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selecionadas.size === apuracoes.length}
+                onChange={toggleSelecionarTodas}
+              />
+              Selecionar todas
+            </label>
+            {selecionadas.size > 0 && (
+              <button
+                onClick={handleExcluirSelecionadas}
+                disabled={excluindoSelecionadas}
+                className="text-xs bg-red-600 text-white rounded-lg px-3 py-1.5 disabled:opacity-50"
+              >
+                {excluindoSelecionadas ? 'Excluindo...' : `Excluir ${selecionadas.size} selecionada(s)`}
+              </button>
+            )}
+          </div>
+        )}
         <div className="space-y-3">
           {apuracoes.map((a) => (
             <div key={a.id} className="flex items-center justify-between border border-gray-100 rounded-lg px-4 py-3">
+              <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={selecionadas.has(a.id)}
+                onChange={() => toggleSelecionada(a.id)}
+              />
               <div>
                 <h4 className="font-medium text-sm text-gray-800">
                   {a.periodo || a.fileName || 'Sem período informado'}
@@ -189,6 +248,7 @@ export default function HistoricoAnaliseFiscalEntradaPage() {
                   {a.totalNotas.toLocaleString('pt-BR')} nota(s) · {a.totalDivergencias} divergência(s) ({a.qtdCritico} crít. ·{' '}
                   {a.qtdAlto} alta · {a.qtdMedio} média · {a.qtdBaixo} baixa)
                 </p>
+              </div>
               </div>
               <div className="flex gap-2">
                 <Link
