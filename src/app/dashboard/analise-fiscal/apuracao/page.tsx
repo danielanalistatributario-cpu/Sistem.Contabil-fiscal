@@ -292,6 +292,12 @@ function ApuracaoFiscalInner() {
                 </Link>
               </>
             )}
+            {!canAccess(role, 'analiseFiscalConfig') && canAccess(role, 'analiseFiscalProdutos') && (
+              <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
+                <Settings size={15} />
+                Produtos com classificação tributária
+              </Link>
+            )}
             <Link href="/dashboard/analise-fiscal/apuracao/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <History size={15} />
               Histórico

@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!session || !session.currentCompanyId) {
     return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
   }
-  if (!canAccess(session.currentRole, 'analiseFiscalConfig')) {
+  if (!canAccess(session.currentRole, 'analiseFiscalProdutos')) {
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 

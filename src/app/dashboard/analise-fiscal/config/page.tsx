@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { lerProdutosClassificacao } from '@/lib/analise-fiscal-produtos-import';
+import { canAccess, type Role } from '@/lib/permissions';
 
 type NaturezaOperacao = 'LIVRE' | 'ISENTA' | 'TRIBUTADA' | 'TRANSFERENCIA';
 
@@ -83,6 +84,11 @@ export default function AnaliseFiscalConfigPage() {
   // Filial ativa é lida do seletor "Filial" no topo da aplicação (Topbar)
   // — esta tela não tem mais seletores próprios pra TES nem Produtos.
   const [currentEmpresaGrupoId, setCurrentEmpresaGrupoId] = useState<string | null>(null);
+  // TES e CNPJs do grupo continuam só pra ADMINISTRADOR (canAccess
+  // 'analiseFiscalConfig'); Produtos com classificação tributária é
+  // liberado pra todo usuário com acesso à Análise Fiscal (canAccess
+  // 'analiseFiscalProdutos') — currentRole decide o que esta tela mostra.
+  const [currentRole, setCurrentRole] = useState<Role | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -90,6 +96,7 @@ export default function AnaliseFiscalConfigPage() {
       if (res.ok) {
         const data = await res.json();
         setCurrentEmpresaGrupoId(data.user?.currentEmpresaGrupoId ?? null);
+        setCurrentRole(data.user?.currentRole ?? null);
       }
     })();
   }, []);
@@ -359,16 +366,27 @@ export default function AnaliseFiscalConfigPage() {
           <ArrowLeft size={15} />
           Voltar
         </Link>
-        <h1 className="text-2xl font-display font-semibold text-brand">Configurar Análise Fiscal</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Listas de referência usadas pelo motor de regras — cadastre uma TES nova para que ela pare de aparecer como
-          &quot;TES nova&quot; e ganhe as checagens de Chave NF e produto. A lógica de regras profundas (cálculo de
-          imposto, alíquota etc.) continua sendo implementada por código, não por aqui — para consultar o que cada
-          regra valida, veja{' '}
-          <Link href="/dashboard/analise-fiscal/regras" className="text-brand underline">Regras da Análise e Apuração Fiscal</Link>.
-        </p>
+        <h1 className="text-2xl font-display font-semibold text-brand">
+          {canAccess(currentRole, 'analiseFiscalConfig') ? 'Configurar Análise Fiscal' : 'Produtos com classificação tributária'}
+        </h1>
+        {canAccess(currentRole, 'analiseFiscalConfig') ? (
+          <p className="text-gray-500 text-sm mt-1">
+            Listas de referência usadas pelo motor de regras — cadastre uma TES nova para que ela pare de aparecer como
+            &quot;TES nova&quot; e ganhe as checagens de Chave NF e produto. A lógica de regras profundas (cálculo de
+            imposto, alíquota etc.) continua sendo implementada por código, não por aqui — para consultar o que cada
+            regra valida, veja{' '}
+            <Link href="/dashboard/analise-fiscal/regras" className="text-brand underline">Regras da Análise e Apuração Fiscal</Link>.
+          </p>
+        ) : (
+          <p className="text-gray-500 text-sm mt-1">
+            Cadastre produtos cuja classificação (isento ou tributado) precisa ser conferida contra a TES lançada nas
+            análises de Entrada e Saída.
+          </p>
+        )}
       </div>
 
+      {canAccess(currentRole, 'analiseFiscalConfig') && (
+      <>
       <div className="card-surface p-5 space-y-4">
         <h2 className="font-display font-semibold text-brand">TES cadastradas</h2>
         {empresasComUf.length > 0 && (
@@ -675,6 +693,8 @@ export default function AnaliseFiscalConfigPage() {
         </table>
         {cnpjs.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhuma empresa cadastrada ainda.</p>}
       </div>
+      </>
+      )}
 
       <div className="card-surface p-5 space-y-4">
         <h2 className="font-display font-semibold text-brand">Produtos com classificação tributária</h2>

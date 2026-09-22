@@ -73,6 +73,12 @@ export default function AnaliseEApuracaoFiscalHubPage() {
             </Link>
           </div>
         )}
+        {!canAccess(role, 'analiseFiscalConfig') && canAccess(role, 'analiseFiscalProdutos') && (
+          <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors shrink-0">
+            <Settings size={15} />
+            Produtos com classificação tributária
+          </Link>
+        )}
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">

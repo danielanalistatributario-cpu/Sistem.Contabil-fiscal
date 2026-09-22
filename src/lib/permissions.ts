@@ -15,6 +15,11 @@ export const MODULE_PERMISSIONS = {
   validacaoCadastro: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   analiseFiscal: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   analiseFiscalConfig: ['ADMINISTRADOR'],
+  // Cadastro de Produtos com classificação tributária — liberado pra todo
+  // usuário que já usa a Análise Fiscal (mesmo conjunto de 'analiseFiscal'),
+  // diferente do resto de "Configurar Análise Fiscal" (TES, CNPJs do grupo),
+  // que continua só ADMINISTRADOR.
+  analiseFiscalProdutos: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;
