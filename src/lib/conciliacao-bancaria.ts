@@ -92,6 +92,33 @@ export type DiaComparado = {
   saidaExtrato: number;
   diferencaEntrada: number;
   diferencaSaida: number;
+  // Saldo do próprio dia — independente da movimentação (que já não usa
+  // saldo acumulado, de propósito). Pedido explícito do usuário: validar
+  // Saldo Inicial + Entradas - Saídas = Saldo Final em CADA dia, dos dois
+  // lados, e comparar o saldo final do dia entre Razão e Extrato — não só
+  // no fim do período. null quando a fonte não tem saldo disponível pra
+  // aquele dia (ex: extrato sem coluna/linha de saldo).
+  saldoInicialRazao: number | null;
+  saldoFinalRazao: number | null;
+  saldoInicialExtrato: number | null;
+  saldoFinalExtrato: number | null;
+  diferencaSaldoFinalDia: number | null; // saldoFinalRazao - saldoFinalExtrato do dia, quando os dois existem
+  // Confere Saldo Inicial + Entradas + Saídas (saída já negativa) contra o
+  // Saldo Final do próprio dia, de cada lado — detecta lançamento fora da
+  // movimentação contada (ex: filtrado por engano) que o saldo já reflete.
+  // null quando não há saldoInicial/saldoFinal pra conferir (ex: primeiro
+  // dia sem saldo inicial informado).
+  consistenteRazao: boolean | null;
+  consistenteExtrato: boolean | null;
+  // Continuidade entre dias do Extrato: quando a fonte informa um saldo de
+  // ABERTURA explícito por dia (ex: linha "SALDO CONTA CORRENTE" do Safra),
+  // confere se ele bate com o saldo final calculado do dia anterior —
+  // achado real (22/09/2026): pode não bater mesmo com a soma dos
+  // lançamentos do próprio dia batendo perfeitamente (ajuste/rendimento do
+  // banco não detalhado como lançamento). null quando a fonte não informa
+  // abertura explícita por dia (aí o saldo inicial já vem do próprio saldo
+  // final do dia anterior, por construção — nada a comparar).
+  continuidadeExtrato: boolean | null;
 };
 
 export type ResultadoConciliacaoBancaria = {
@@ -455,9 +482,101 @@ export function processarConciliacaoBancaria(
   const movRazao = agruparPorDia(razaoParaMovimento);
   const movExtrato = agruparPorDia(extratoParaMovimento);
   const todasDatas = Array.from(new Set([...movRazao.keys(), ...movExtrato.keys()])).sort();
+
+  // Último saldo conhecido de cada dia (chave AAAA-MM-DD), na ordem
+  // cronológica da fonte — assume `lancamentos` já normalizado pro sentido
+  // certo (asc/desc já resolvido pelo leitor). Não usa `ehLinhaDeSaldo` pra
+  // filtrar: linhas de saldo informativo do Safra já ficam com `saldo=null`
+  // (não fazem parte da movimentação real), então só sobra o saldo real das
+  // linhas de lançamento de qualquer forma.
+  function ultimoSaldoDoDia(lancamentos: LancamentoConta[]): Map<string, number> {
+    const mapa = new Map<string, number>();
+    for (const l of lancamentos) {
+      if (!l.data || l.saldo === null) continue;
+      mapa.set(l.data.toISOString().slice(0, 10), l.saldo);
+    }
+    return mapa;
+  }
+  const saldoFinalDiaRazao = ultimoSaldoDoDia(razao);
+  const saldoFinalDiaExtrato = ultimoSaldoDoDia(extrato);
+
+  // Saldo de ABERTURA explícito de cada dia, quando a fonte informa (ex:
+  // linha "SALDO CONTA CORRENTE" do Safra, que o leitor agora preserva em
+  // `.saldo` — ver conciliacao-reader.ts) — pega o PRIMEIRO saldo não-nulo
+  // do dia, na ordem cronológica. Só funciona como "abertura de verdade"
+  // quando a fonte tem uma linha de saldo dedicada antes dos lançamentos do
+  // dia (Safra); pra fontes sem isso (ex: Razão, saldo contínuo sem marcar
+  // abertura por dia) o primeiro valor seria só o saldo APÓS o primeiro
+  // lançamento, não uma abertura de verdade — por isso só usado pro Extrato.
+  function primeiroSaldoDoDia(lancamentos: LancamentoConta[]): Map<string, number> {
+    const mapa = new Map<string, number>();
+    for (const l of lancamentos) {
+      if (!l.data || l.saldo === null) continue;
+      const chave = l.data.toISOString().slice(0, 10);
+      if (!mapa.has(chave)) mapa.set(chave, l.saldo);
+    }
+    return mapa;
+  }
+  const aberturaDiaExtrato = primeiroSaldoDoDia(extrato);
+
+  // Movimentação SEM excluir aplicação automática — usada só pra conferir
+  // Saldo Inicial + Entradas + Saídas = Saldo Final. O saldo real da fonte
+  // reflete TODOS os lançamentos (inclusive resgate/aplicação automática),
+  // então a conferência precisa da movimentação completa — diferente de
+  // `movRazao`/`movExtrato` acima, que excluem aplicação automática de
+  // propósito só pra comparação de "Dif. Entrada"/"Dif. Saída" (ver nota
+  // acima). Usar a versão filtrada aqui gerava falso "inconsistente" todo
+  // dia que teve CDB automático — confirmado em teste real (quase todos os
+  // dias do mês).
+  const movRazaoCompleto = agruparPorDia(razao);
+  const movExtratoCompleto = agruparPorDia(extrato);
+
+  // Saldo inicial de cada dia = saldo final do dia anterior — carregado dia
+  // a dia (independente pra Razão e Extrato, já que as duas fontes podem
+  // estar em bases absolutas diferentes, ver nota em processarConciliacaoBancaria
+  // sobre saldoInicialInformado). No primeiro dia com saldo disponível, usa
+  // saldoInicialInformado quando o usuário informou; sem isso, deriva do
+  // próprio saldo final do dia (torna a checagem desse primeiro dia
+  // vazia/sempre batendo — não tem como validar sem um saldo externo — mas
+  // os dias seguintes continuam validando de verdade).
+  let saldoAnteriorRazao: number | null = saldoInicialInformado;
+  let saldoAnteriorExtrato: number | null = saldoInicialInformado;
+
   const dias: DiaComparado[] = todasDatas.map((d) => {
     const r = movRazao.get(d) ?? { entrada: 0, saida: 0 };
     const e = movExtrato.get(d) ?? { entrada: 0, saida: 0 };
+
+    const finalRazao = saldoFinalDiaRazao.get(d) ?? null;
+    const finalExtrato = saldoFinalDiaExtrato.get(d) ?? null;
+    const rCompleto = movRazaoCompleto.get(d) ?? { entrada: 0, saida: 0 };
+    const eCompleto = movExtratoCompleto.get(d) ?? { entrada: 0, saida: 0 };
+
+    // Razão: sem abertura explícita por dia na fonte — usa o saldo final do
+    // dia anterior calculado (continuidade natural de um livro contínuo).
+    const iniRazao = saldoAnteriorRazao ?? (finalRazao !== null ? finalRazao - rCompleto.entrada - rCompleto.saida : null);
+    // Extrato: prefere a abertura EXPLÍCITA da própria fonte (Safra) quando
+    // existir — é o valor de referência independente que torna a checagem
+    // de continuidade entre dias significativa (ver `continuidadeExtrato`
+    // abaixo); só cai pro saldo final do dia anterior quando a fonte não
+    // informa abertura por dia.
+    const aberturaExtrato = aberturaDiaExtrato.get(d) ?? null;
+    const iniExtrato = aberturaExtrato ?? saldoAnteriorExtrato ?? (finalExtrato !== null ? finalExtrato - eCompleto.entrada - eCompleto.saida : null);
+
+    const consistenteRazao = iniRazao !== null && finalRazao !== null ? Math.abs(iniRazao + rCompleto.entrada + rCompleto.saida - finalRazao) < TOLERANCIA_VALOR : null;
+    const consistenteExtrato = iniExtrato !== null && finalExtrato !== null ? Math.abs(iniExtrato + eCompleto.entrada + eCompleto.saida - finalExtrato) < TOLERANCIA_VALOR : null;
+
+    // Continuidade: a abertura informada pelo Extrato bate com o saldo final
+    // calculado do dia anterior? Só avalia quando os dois existem (fonte
+    // com abertura por dia E já passou pelo menos 1 dia anterior) — achado
+    // real (22/09/2026): pode não bater mesmo com o dia fechando certinho
+    // sozinho, revelando ajuste/rendimento do banco não detalhado como
+    // lançamento entre um dia e outro.
+    const continuidadeExtrato =
+      aberturaExtrato !== null && saldoAnteriorExtrato !== null ? Math.abs(aberturaExtrato - saldoAnteriorExtrato) < TOLERANCIA_VALOR : null;
+
+    if (finalRazao !== null) saldoAnteriorRazao = finalRazao;
+    if (finalExtrato !== null) saldoAnteriorExtrato = finalExtrato;
+
     return {
       data: new Date(d),
       entradaRazao: r.entrada,
@@ -466,6 +585,14 @@ export function processarConciliacaoBancaria(
       saidaExtrato: e.saida,
       diferencaEntrada: r.entrada - e.entrada,
       diferencaSaida: r.saida - e.saida,
+      continuidadeExtrato,
+      saldoInicialRazao: iniRazao,
+      saldoFinalRazao: finalRazao,
+      saldoInicialExtrato: iniExtrato,
+      saldoFinalExtrato: finalExtrato,
+      diferencaSaldoFinalDia: finalRazao !== null && finalExtrato !== null ? finalRazao - finalExtrato : null,
+      consistenteRazao,
+      consistenteExtrato,
     };
   });
 

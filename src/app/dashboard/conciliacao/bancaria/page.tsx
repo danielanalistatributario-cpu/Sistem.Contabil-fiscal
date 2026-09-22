@@ -32,6 +32,14 @@ type DiaDB = {
   saidaExtrato: number;
   diferencaEntrada: number;
   diferencaSaida: number;
+  saldoInicialRazao: number | null;
+  saldoFinalRazao: number | null;
+  saldoInicialExtrato: number | null;
+  saldoFinalExtrato: number | null;
+  diferencaSaldoFinalDia: number | null;
+  consistenteRazao: boolean | null;
+  consistenteExtrato: boolean | null;
+  continuidadeExtrato: boolean | null;
 };
 
 type ApuracaoDB = {
@@ -100,6 +108,27 @@ function labelStatus(item: { status: StatusItemDB; origem: 'RAZAO' | 'EXTRATO' }
     return item.origem === 'EXTRATO' ? '🔴 Falta contabilizar' : '🟠 Divergência a verificar';
   }
   return STATUS_LABEL[item.status] || item.status;
+}
+
+// Crítica do saldo do dia — pedido explícito do usuário: apontar quando o
+// saldo final do dia diverge entre Razão e Extrato, ou quando Saldo Inicial
+// + Entradas + Saídas não bate com o Saldo Final do próprio dia (lançamento
+// fora da movimentação contada, mas que o saldo já reflete).
+function criticaSaldoDia(d: DiaDB): string {
+  const partes: string[] = [];
+  if (d.diferencaSaldoFinalDia !== null && Math.abs(d.diferencaSaldoFinalDia) > 0.01) {
+    partes.push(`🔴 Divergência de Saldo Final — Extrato: ${fmtBRL(d.saldoFinalExtrato)} · Razão: ${fmtBRL(d.saldoFinalRazao)} · Diferença: ${fmtBRL(d.diferencaSaldoFinalDia)}`);
+  }
+  if (d.consistenteRazao === false) {
+    partes.push(`🟠 Razão: Saldo Inicial (${fmtBRL(d.saldoInicialRazao)}) + Entradas − Saídas não bate com o Saldo Final (${fmtBRL(d.saldoFinalRazao)}) — revisar lançamentos do dia.`);
+  }
+  if (d.consistenteExtrato === false) {
+    partes.push(`🟠 Extrato: Saldo Inicial (${fmtBRL(d.saldoInicialExtrato)}) + Entradas − Saídas não bate com o Saldo Final (${fmtBRL(d.saldoFinalExtrato)}) — revisar lançamentos do dia.`);
+  }
+  if (d.continuidadeExtrato === false) {
+    partes.push(`🟡 Abertura do Extrato (${fmtBRL(d.saldoInicialExtrato)}) diverge do saldo final calculado do dia anterior — possível ajuste/rendimento do banco não detalhado como lançamento.`);
+  }
+  return partes.join(' | ');
 }
 
 export default function ConciliacaoBancariaPage() {
@@ -219,6 +248,12 @@ function ConciliacaoBancariaInner() {
       'Saída Razão': d.saidaRazao,
       'Saída Extrato': d.saidaExtrato,
       'Dif. Saída': d.diferencaSaida,
+      'Saldo Inicial Razão': d.saldoInicialRazao ?? '',
+      'Saldo Final Razão': d.saldoFinalRazao ?? '',
+      'Saldo Inicial Extrato': d.saldoInicialExtrato ?? '',
+      'Saldo Final Extrato': d.saldoFinalExtrato ?? '',
+      'Dif. Saldo Final': d.diferencaSaldoFinalDia ?? '',
+      Crítica: criticaSaldoDia(d),
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(diasRows), 'Movimentação diária');
 
@@ -460,8 +495,9 @@ function ConciliacaoBancariaInner() {
             <div className="card-surface p-5">
               <h2 className="font-display font-semibold text-brand mb-1">Movimentação diária</h2>
               <p className="text-xs text-gray-500 mb-4">
-                Total de entrada e saída de cada dia, Razão × Extrato — não usa saldo acumulado, para não propagar a
-                divergência de um dia pendente para os dias seguintes. Clique num dia para ver só os lançamentos daquela data.
+                Total de entrada e saída de cada dia, Razão × Extrato, e o saldo final do próprio dia dos dois lados —
+                confere Saldo Inicial + Entradas − Saídas = Saldo Final em cada dia e aponta quando o saldo final do
+                dia diverge entre Razão e Extrato. Clique num dia para ver só os lançamentos daquela data.
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -474,11 +510,17 @@ function ConciliacaoBancariaInner() {
                       <th className="py-1.5 pr-3">Saída Razão</th>
                       <th className="py-1.5 pr-3">Saída Extrato</th>
                       <th className="py-1.5 pr-3">Dif. Saída</th>
+                      <th className="py-1.5 pr-3">Saldo Final Razão</th>
+                      <th className="py-1.5 pr-3">Saldo Final Extrato</th>
+                      <th className="py-1.5 pr-3">Dif. Saldo Final</th>
+                      <th className="py-1.5 pr-3">Crítica</th>
                     </tr>
                   </thead>
                   <tbody>
                     {apuracao.dias.map((d) => {
-                      const temDivergencia = Math.abs(d.diferencaEntrada) > 0.01 || Math.abs(d.diferencaSaida) > 0.01;
+                      const temDivergenciaMov = Math.abs(d.diferencaEntrada) > 0.01 || Math.abs(d.diferencaSaida) > 0.01;
+                      const temDivergenciaSaldo = (d.diferencaSaldoFinalDia !== null && Math.abs(d.diferencaSaldoFinalDia) > 0.01) || d.consistenteRazao === false || d.consistenteExtrato === false || d.continuidadeExtrato === false;
+                      const critica = criticaSaldoDia(d);
                       return (
                         <tr
                           key={d.id}
@@ -486,7 +528,7 @@ function ConciliacaoBancariaInner() {
                             setFiltroData(chaveData(d.data));
                             setView('todos');
                           }}
-                          className={`border-b border-gray-50 cursor-pointer hover:bg-brand/5 ${temDivergencia ? 'bg-ruby/5' : ''}`}
+                          className={`border-b border-gray-50 cursor-pointer hover:bg-brand/5 ${temDivergenciaMov || temDivergenciaSaldo ? 'bg-ruby/5' : ''}`}
                         >
                           <td className="py-1.5 pr-3 font-medium">{fmtDate(d.data)}</td>
                           <td className="py-1.5 pr-3 font-mono">{fmtBRL(d.entradaRazao)}</td>
@@ -499,6 +541,12 @@ function ConciliacaoBancariaInner() {
                           <td className={`py-1.5 pr-3 font-mono ${Math.abs(d.diferencaSaida) > 0.01 ? 'text-ruby font-semibold' : 'text-gray-400'}`}>
                             {fmtBRL(d.diferencaSaida)}
                           </td>
+                          <td className="py-1.5 pr-3 font-mono">{d.saldoFinalRazao !== null ? fmtBRL(d.saldoFinalRazao) : '—'}</td>
+                          <td className="py-1.5 pr-3 font-mono">{d.saldoFinalExtrato !== null ? fmtBRL(d.saldoFinalExtrato) : '—'}</td>
+                          <td className={`py-1.5 pr-3 font-mono ${d.diferencaSaldoFinalDia !== null && Math.abs(d.diferencaSaldoFinalDia) > 0.01 ? 'text-ruby font-semibold' : 'text-gray-400'}`}>
+                            {d.diferencaSaldoFinalDia !== null ? fmtBRL(d.diferencaSaldoFinalDia) : '—'}
+                          </td>
+                          <td className="py-1.5 pr-3 max-w-[280px] text-ruby">{critica}</td>
                         </tr>
                       );
                     })}

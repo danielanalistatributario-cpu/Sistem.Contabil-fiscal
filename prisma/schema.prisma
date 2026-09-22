@@ -298,6 +298,18 @@ model ConciliacaoBancariaDia {
   saidaExtrato     Float                        @default(0)
   diferencaEntrada Float                        @default(0)
   diferencaSaida   Float                        @default(0)
+  // Saldo do próprio dia — pedido explícito do usuário: validar Saldo
+  // Inicial + Entradas - Saídas = Saldo Final em cada dia, dos dois lados,
+  // e comparar o saldo final do dia entre Razão e Extrato. null quando a
+  // fonte não tem saldo disponível pra aquele dia.
+  saldoInicialRazao   Float?
+  saldoFinalRazao     Float?
+  saldoInicialExtrato Float?
+  saldoFinalExtrato   Float?
+  diferencaSaldoFinalDia Float?
+  consistenteRazao    Boolean?
+  consistenteExtrato  Boolean?
+  continuidadeExtrato Boolean?
   apuracao         ConciliacaoBancariaApuracao  @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
 }
 

@@ -420,7 +420,17 @@ export function lerExtratoBancarioComSaldo(aoa: unknown[][]): { rows: Lancamento
     for (const item of brutos) {
       const h = normalizar(item.historico);
       if (h.startsWith('saldo')) {
-        if (h.startsWith('saldo conta corrente')) saldoCorrente = item.valor;
+        // A própria linha "SALDO CONTA CORRENTE" guarda seu `.saldo` também
+        // (não só serve de ponto de partida pra somar os lançamentos
+        // seguintes) — é o saldo de ABERTURA do dia informado pelo banco,
+        // valor de referência independente pra conferir Saldo Inicial +
+        // Entradas - Saídas = Saldo Final por dia (ver conciliacao-bancaria.ts).
+        // Continua fora do pool de pareamento (ehLinhaDeSaldo já filtra),
+        // então marcar `.saldo` aqui não afeta o pareamento.
+        if (h.startsWith('saldo conta corrente')) {
+          saldoCorrente = item.valor;
+          item.saldo = item.valor;
+        }
         continue;
       }
       if (saldoCorrente !== null) {
