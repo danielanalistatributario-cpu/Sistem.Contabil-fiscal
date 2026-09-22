@@ -27,6 +27,11 @@ type ApuracaoResumo = {
 export default function HistoricoAnaliseFiscalSaidaPage() {
   const [apuracoes, setApuracoes] = useState<ApuracaoResumo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dias, setDias] = useState('90');
+  const [previa, setPrevia] = useState<{ total: number; totalLinhas: number } | null>(null);
+  const [consultando, setConsultando] = useState(false);
+  const [limpando, setLimpando] = useState(false);
+  const [erroLimpeza, setErroLimpeza] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -48,6 +53,43 @@ export default function HistoricoAnaliseFiscalSaidaPage() {
     carregar();
   }
 
+  async function handleConsultarAntigas() {
+    setConsultando(true);
+    setErroLimpeza(null);
+    setPrevia(null);
+    try {
+      const res = await fetch(`/api/analise-fiscal/saida/apuracoes/limpar-antigas?dias=${dias}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setErroLimpeza(data.error || 'Falha ao consultar.');
+        return;
+      }
+      setPrevia(data);
+    } finally {
+      setConsultando(false);
+    }
+  }
+
+  async function handleLimparAntigas() {
+    if (!previa) return;
+    if (previa.total === 0) return;
+    if (!confirm(`Excluir ${previa.total} apuração(ões) com mais de ${dias} dia(s) (${previa.totalLinhas.toLocaleString('pt-BR')} linha(s) ao todo)? Esta ação não pode ser desfeita.`)) return;
+    setLimpando(true);
+    setErroLimpeza(null);
+    try {
+      const res = await fetch(`/api/analise-fiscal/saida/apuracoes/limpar-antigas?dias=${dias}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) {
+        setErroLimpeza(data.error || 'Falha ao excluir.');
+        return;
+      }
+      setPrevia(null);
+      carregar();
+    } finally {
+      setLimpando(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -57,6 +99,51 @@ export default function HistoricoAnaliseFiscalSaidaPage() {
         </Link>
         <h1 className="text-2xl font-display font-semibold text-brand">Histórico — Análise de Saídas</h1>
         <p className="text-gray-500 text-sm mt-1">Consulte análises do Relatório de Saídas realizadas anteriormente.</p>
+      </div>
+
+      <div className="card-surface p-5 border border-accent/30">
+        <h2 className="font-semibold text-brand text-sm">Limpar apurações antigas</h2>
+        <p className="text-xs text-gray-500 mt-1 max-w-xl">
+          Apurações antigas ocupam espaço no banco de dados. Escolha um número de dias, consulte quantas apurações
+          seriam afetadas e, se quiser, exclua todas de uma vez.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <label className="text-xs text-gray-500">Excluir apurações com mais de</label>
+          <input
+            type="number"
+            min={1}
+            value={dias}
+            onChange={(e) => { setDias(e.target.value); setPrevia(null); }}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-20"
+          />
+          <label className="text-xs text-gray-500">dia(s)</label>
+          <button
+            onClick={handleConsultarAntigas}
+            disabled={consultando}
+            className="text-xs border border-gray-300 rounded-lg px-3 py-1.5 disabled:opacity-50"
+          >
+            {consultando ? 'Consultando...' : 'Consultar'}
+          </button>
+          {previa && (
+            <>
+              <span className="text-xs text-gray-600">
+                {previa.total === 0
+                  ? 'Nenhuma apuração encontrada nesse período.'
+                  : `${previa.total} apuração(ões) · ${previa.totalLinhas.toLocaleString('pt-BR')} linha(s) ao todo`}
+              </span>
+              {previa.total > 0 && (
+                <button
+                  onClick={handleLimparAntigas}
+                  disabled={limpando}
+                  className="text-xs border border-red-200 text-red-600 rounded-lg px-3 py-1.5 disabled:opacity-50"
+                >
+                  {limpando ? 'Excluindo...' : `Excluir ${previa.total} apuração(ões)`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        {erroLimpeza && <p className="text-xs text-red-600 mt-2">{erroLimpeza}</p>}
       </div>
 
       <div className="card-surface p-5">
