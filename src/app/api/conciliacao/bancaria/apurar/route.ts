@@ -68,7 +68,6 @@ export async function POST(req: NextRequest) {
           diferencaSaldoFinalDia: d.diferencaSaldoFinalDia,
           consistenteRazao: d.consistenteRazao,
           consistenteExtrato: d.consistenteExtrato,
-          continuidadeExtrato: d.continuidadeExtrato,
         })),
       },
       itens: {

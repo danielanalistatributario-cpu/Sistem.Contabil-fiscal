@@ -407,37 +407,53 @@ export function lerExtratoBancarioComSaldo(aoa: unknown[][]): { rows: Lancamento
   // lançamentos normais. Sem isso, toda linha ficava com saldo null e o
   // saldo final do extrato saía sempre 0 — fazendo a conferência de saldo
   // final do período parecer sempre divergente mesmo com tudo conciliado.
-  // Reconstrói o saldo corrente usando "SALDO CONTA CORRENTE" (a que
-  // corresponde à conta corrente pura, comparável ao saldo do Razão — as
-  // outras duas incluem a aplicação automática) como ponto de partida e
-  // soma os lançamentos seguintes; linhas de saldo nunca entram como
-  // lançamento real (mesmo critério que ehLinhaDeSaldo em
-  // conciliacao-bancaria.ts). Assume os `brutos` na ordem cronológica do
-  // arquivo, que é como o Safra sempre exporta — roda antes da
-  // detecção de ordem asc/desc abaixo.
+  //
+  // IMPORTANTE (corrigido 22/09/2026, a pedido do usuário): "SALDO CONTA
+  // CORRENTE" é o saldo FINAL do dia (depois de todos os lançamentos
+  // daquele dia), não o saldo de abertura — mesmo aparecendo ANTES dos
+  // lançamentos do dia no arquivo. Confirmado com matemática: tratar como
+  // abertura fazia o fechamento de um dia não bater com a abertura do dia
+  // seguinte (gap de ~R$1.342 num caso real); tratar como fechamento faz o
+  // gap fechar em R$ 0,00 exato. Por isso o saldo de cada linha é
+  // reconstruído "de trás pra frente" dentro do bloco do dia: soma todos os
+  // lançamentos reais do dia pra achar a abertura (checkpoint - soma), e só
+  // então caminha pra frente atribuindo o saldo corrente a cada lançamento
+  // — terminando exatamente no valor do checkpoint pro último lançamento do
+  // dia, por construção. Linhas de saldo nunca entram como lançamento real
+  // (mesmo critério que ehLinhaDeSaldo em conciliacao-bancaria.ts). Assume
+  // os `brutos` na ordem cronológica do arquivo, que é como o Safra sempre
+  // exporta — roda antes da detecção de ordem asc/desc abaixo.
   if (colSaldo < 0) {
-    let saldoCorrente: number | null = null;
-    for (const item of brutos) {
-      const h = normalizar(item.historico);
-      if (h.startsWith('saldo')) {
-        // A própria linha "SALDO CONTA CORRENTE" guarda seu `.saldo` também
-        // (não só serve de ponto de partida pra somar os lançamentos
-        // seguintes) — é o saldo de ABERTURA do dia informado pelo banco,
-        // valor de referência independente pra conferir Saldo Inicial +
-        // Entradas - Saídas = Saldo Final por dia (ver conciliacao-bancaria.ts).
-        // Continua fora do pool de pareamento (ehLinhaDeSaldo já filtra),
-        // então marcar `.saldo` aqui não afeta o pareamento.
-        if (h.startsWith('saldo conta corrente')) {
-          saldoCorrente = item.valor;
-          item.saldo = item.valor;
-        }
-        continue;
+    let blocoAtual: typeof brutos = [];
+    let checkpointAtual: number | null = null;
+
+    function fecharBloco() {
+      if (checkpointAtual === null || blocoAtual.length === 0) {
+        blocoAtual = [];
+        return;
       }
-      if (saldoCorrente !== null) {
+      const somaBloco = blocoAtual.reduce((s, i) => s + i.valor, 0);
+      let saldoCorrente = checkpointAtual - somaBloco;
+      for (const item of blocoAtual) {
         saldoCorrente += item.valor;
         item.saldo = saldoCorrente;
       }
+      blocoAtual = [];
     }
+
+    for (const item of brutos) {
+      const h = normalizar(item.historico);
+      if (h.startsWith('saldo')) {
+        if (h.startsWith('saldo conta corrente')) {
+          fecharBloco(); // fecha o bloco do dia anterior com o checkpoint anterior
+          checkpointAtual = item.valor;
+          item.saldo = item.valor; // o próprio checkpoint já É o saldo final daquele dia
+        }
+        continue;
+      }
+      blocoAtual.push(item);
+    }
+    fecharBloco(); // último bloco do arquivo
   }
 
   const errosAsc = contarInconsistencias(brutos);

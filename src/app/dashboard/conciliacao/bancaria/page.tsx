@@ -39,7 +39,6 @@ type DiaDB = {
   diferencaSaldoFinalDia: number | null;
   consistenteRazao: boolean | null;
   consistenteExtrato: boolean | null;
-  continuidadeExtrato: boolean | null;
 };
 
 type ApuracaoDB = {
@@ -124,9 +123,6 @@ function criticaSaldoDia(d: DiaDB): string {
   }
   if (d.consistenteExtrato === false) {
     partes.push(`🟠 Extrato: Saldo Inicial (${fmtBRL(d.saldoInicialExtrato)}) + Entradas − Saídas não bate com o Saldo Final (${fmtBRL(d.saldoFinalExtrato)}) — revisar lançamentos do dia.`);
-  }
-  if (d.continuidadeExtrato === false) {
-    partes.push(`🟡 Abertura do Extrato (${fmtBRL(d.saldoInicialExtrato)}) diverge do saldo final calculado do dia anterior — possível ajuste/rendimento do banco não detalhado como lançamento.`);
   }
   return partes.join(' | ');
 }
@@ -519,7 +515,7 @@ function ConciliacaoBancariaInner() {
                   <tbody>
                     {apuracao.dias.map((d) => {
                       const temDivergenciaMov = Math.abs(d.diferencaEntrada) > 0.01 || Math.abs(d.diferencaSaida) > 0.01;
-                      const temDivergenciaSaldo = (d.diferencaSaldoFinalDia !== null && Math.abs(d.diferencaSaldoFinalDia) > 0.01) || d.consistenteRazao === false || d.consistenteExtrato === false || d.continuidadeExtrato === false;
+                      const temDivergenciaSaldo = (d.diferencaSaldoFinalDia !== null && Math.abs(d.diferencaSaldoFinalDia) > 0.01) || d.consistenteRazao === false || d.consistenteExtrato === false;
                       const critica = criticaSaldoDia(d);
                       return (
                         <tr
