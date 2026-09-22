@@ -24,7 +24,13 @@ function parseValorNumerico(v: unknown): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-function parseDataCell(v: unknown): Date | null {
+// anoFallback: alguns extratos (confirmado no Safra) trazem a data só como
+// dia/mês, sem ano, porque o ano já está implícito no período declarado no
+// cabeçalho do arquivo (ver extrairAnoDoPeriodo). Sem isso, o fallback
+// genérico (`new Date(s)`) interpretava "01/07" como um bug real —
+// 2001-01-07 — corrompendo ou descartando a maior parte das linhas do
+// extrato silenciosamente.
+function parseDataCell(v: unknown, anoFallback?: number | null): Date | null {
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
   if (!v) return null;
   const s = String(v).trim();
@@ -35,8 +41,33 @@ function parseDataCell(v: unknown): Date | null {
     const d = new Date(Date.UTC(ano, parseInt(m[2]) - 1, parseInt(m[1])));
     return Number.isNaN(d.getTime()) ? null : d;
   }
+  const m2 = s.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (m2) {
+    if (!anoFallback) return null; // sem ano de referência disponível — não arrisca data errada
+    const d = new Date(Date.UTC(anoFallback, parseInt(m2[2]) - 1, parseInt(m2[1])));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// Procura um ano de referência (ex: "Período de 01/07/2026 à 15/07/2026")
+// nas primeiras linhas do arquivo, para resolver datas "dia/mês" sem ano
+// (ver parseDataCell). Pega a última data completa encontrada (normalmente
+// o fim do período) — na prática qualquer uma serve, já que o arquivo
+// inteiro costuma cair no mesmo ano.
+function extrairAnoDoPeriodo(aoa: unknown[][]): number | null {
+  let ano: number | null = null;
+  for (let r = 0; r < Math.min(aoa.length, 15); r++) {
+    const row = aoa[r] || [];
+    for (const cell of row) {
+      const s = String(cell ?? '');
+      for (const match of s.matchAll(/\d{1,2}\/\d{1,2}\/(\d{4})/g)) {
+        ano = parseInt(match[1]);
+      }
+    }
+  }
+  return ano;
 }
 
 type CampoDef = { key: string; keywords: string[]; required: boolean };
@@ -197,9 +228,18 @@ export function lerRazao(aoa: unknown[][]): { rows: RazaoRow[]; erro: string | n
 // (ou Débito/Crédito separados). Extrato em formato OFX ainda não é
 // suportado — fica como sugestão para uma próxima etapa.
 
+// historico prioriza 'lancamento' sobre 'complemento': no extrato real do
+// Safra a descrição do lançamento ("SALDO TOTAL", "APLICACAO CDB
+// AUTOMATICO", "PIX RECEBIDO"...) fica numa coluna "Lançamento", enquanto
+// "Complemento" é um detalhe secundário quase sempre vazio — com a ordem
+// antiga, a correspondência exata batia em "Complemento" primeiro (bate
+// exato) e nunca chegava a "Lançamento", deixando historico vazio pra quase
+// toda linha. Isso quebrava tanto o reconhecimento de linhas de saldo
+// (ehLinhaDeSaldo) quanto a sugestão de categoria — 'complemento' continua
+// na lista como fallback para formatos que só tenham essa coluna.
 const CAMPOS_EXTRATO: CampoDef[] = [
   { key: 'data', keywords: ['data'], required: true },
-  { key: 'historico', keywords: ['historico', 'descricao', 'complemento', 'lancamento'], required: false },
+  { key: 'historico', keywords: ['historico', 'descricao', 'lancamento', 'complemento'], required: false },
   { key: 'valor', keywords: ['valor'], required: false },
   { key: 'debito', keywords: ['debito', 'saida', 'saída'], required: false },
   { key: 'credito', keywords: ['credito', 'entrada'], required: false },
@@ -235,12 +275,13 @@ export function lerExtratoBancario(aoa: unknown[][]): { rows: ExtratoRow[]; erro
     return { rows: [], erro: 'O Extrato Bancário precisa ter uma coluna de Valor, ou de Débito/Crédito separados.' };
   }
   const preAssinado = colunas['valor'] < 0 && temValoresPreAssinados(aoa, headerRowIdx, colunas['debito'], colunas['credito']);
+  const anoFallback = extrairAnoDoPeriodo(aoa);
 
   const rows: ExtratoRow[] = [];
   for (let r = headerRowIdx + 1; r < aoa.length; r++) {
     const row = aoa[r];
     if (!row) continue;
-    const data = colunas['data'] >= 0 ? parseDataCell(row[colunas['data']]) : null;
+    const data = colunas['data'] >= 0 ? parseDataCell(row[colunas['data']], anoFallback) : null;
     let valor = 0;
     if (colunas['valor'] >= 0) {
       valor = parseValorNumerico(row[colunas['valor']]);
@@ -334,12 +375,13 @@ export function lerExtratoBancarioComSaldo(aoa: unknown[][]): { rows: Lancamento
     { key: 'documento', keywords: ['documento', 'nosso numero', 'nosso número', 'num documento', 'n documento'], required: false },
   ])['documento'];
   const preAssinado = colunas['valor'] < 0 && temValoresPreAssinados(aoa, headerRowIdx, colunas['debito'], colunas['credito']);
+  const anoFallback = extrairAnoDoPeriodo(aoa);
 
   const brutos: { data: Date | null; historico: string; valor: number; saldo: number | null; documento: string | null }[] = [];
   for (let r = headerRowIdx + 1; r < aoa.length; r++) {
     const row = aoa[r];
     if (!row) continue;
-    const data = colunas['data'] >= 0 ? parseDataCell(row[colunas['data']]) : null;
+    const data = colunas['data'] >= 0 ? parseDataCell(row[colunas['data']], anoFallback) : null;
     let valor = 0;
     if (colunas['valor'] >= 0) {
       valor = parseValorNumerico(row[colunas['valor']]);
@@ -356,6 +398,36 @@ export function lerExtratoBancarioComSaldo(aoa: unknown[][]): { rows: Lancamento
       saldo: colSaldo >= 0 ? parseValorNumerico(row[colSaldo]) : null,
       documento: colDocumento >= 0 ? String(row[colDocumento] ?? '').trim() || null : null,
     });
+  }
+
+  // Alguns extratos (confirmado no Safra) não têm coluna de saldo corrente
+  // dedicada — o saldo aparece só como linhas informativas periódicas
+  // ("SALDO CONTA CORRENTE", "SALDO TOTAL", "SALDO APLIC AUTOMATICA") com o
+  // valor do momento na própria coluna de Valor, misturado com os
+  // lançamentos normais. Sem isso, toda linha ficava com saldo null e o
+  // saldo final do extrato saía sempre 0 — fazendo a conferência de saldo
+  // final do período parecer sempre divergente mesmo com tudo conciliado.
+  // Reconstrói o saldo corrente usando "SALDO CONTA CORRENTE" (a que
+  // corresponde à conta corrente pura, comparável ao saldo do Razão — as
+  // outras duas incluem a aplicação automática) como ponto de partida e
+  // soma os lançamentos seguintes; linhas de saldo nunca entram como
+  // lançamento real (mesmo critério que ehLinhaDeSaldo em
+  // conciliacao-bancaria.ts). Assume os `brutos` na ordem cronológica do
+  // arquivo, que é como o Safra sempre exporta — roda antes da
+  // detecção de ordem asc/desc abaixo.
+  if (colSaldo < 0) {
+    let saldoCorrente: number | null = null;
+    for (const item of brutos) {
+      const h = normalizar(item.historico);
+      if (h.startsWith('saldo')) {
+        if (h.startsWith('saldo conta corrente')) saldoCorrente = item.valor;
+        continue;
+      }
+      if (saldoCorrente !== null) {
+        saldoCorrente += item.valor;
+        item.saldo = saldoCorrente;
+      }
+    }
   }
 
   const errosAsc = contarInconsistencias(brutos);
