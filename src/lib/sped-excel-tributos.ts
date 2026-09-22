@@ -25,6 +25,7 @@ export function mapearSpedParaItensTributo(rows: RelatorioNFeRow[]): ItemTributo
       numeroNf: r.notaFiscal || null,
       codigoProduto: r.codigoProduto ? extrairCodigoProduto(r.codigoProduto) || r.codigoProduto : null,
       descricaoProduto: r.produto || null,
+      ncm: r.ncm || null,
       tes: '',
       cstPis: r.cstPis || null,
       aliquotaPis: temPis ? r.aliqPis : null,

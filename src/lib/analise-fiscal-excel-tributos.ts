@@ -22,6 +22,10 @@ export type ItemTributo = {
   // produtoDescricao (formato "código-descrição" do Protheus).
   codigoProduto?: string | null;
   descricaoProduto?: string | null;
+  // Só vem preenchido quando a origem traz o dado (ex: SPED, registro 0200)
+  // — Análise Fiscal não captura NCM hoje, então sai "—" nesse fluxo, sem
+  // inventar valor.
+  ncm?: string | null;
   tes: string;
   cstPis: string | null;
   aliquotaPis: number | null;
@@ -67,6 +71,7 @@ const COLUNAS: { header: string; width: number; numFmt?: string }[] = [
   { header: 'Nota Fiscal', width: 16 },
   { header: 'Código do Produto', width: 16 },
   { header: 'Descrição do Produto', width: 42 },
+  { header: 'N.C.M.', width: 14 },
   { header: 'TES', width: 10 },
   { header: 'CST PIS', width: 30 },
   { header: 'Alíquota PIS', width: 13 },
@@ -124,6 +129,7 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
       txt(item.numeroNf),
       codigo,
       descricao,
+      txt(item.ncm),
       txt(item.tes),
       txt(item.cstPis),
       num(item.aliquotaPis),
