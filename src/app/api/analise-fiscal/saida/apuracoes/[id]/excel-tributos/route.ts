@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     where: { apuracaoId: params.id },
     orderBy: [{ numeroNf: 'asc' }, { linha: 'asc' }],
     select: {
-      numeroNf: true, produtoDescricao: true, tes: true,
+      numeroNf: true, produtoDescricao: true, ncm: true, tes: true,
       cstPis: true, aliquotaPis: true, cstCofins: true, aliquotaCofins: true,
       total: true, baseIcms: true, valorIcms: true, basePis: true, baseCofins: true, valorPis: true, valorCofins: true,
     },

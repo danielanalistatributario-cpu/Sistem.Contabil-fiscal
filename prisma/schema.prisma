@@ -577,6 +577,7 @@ model AnaliseFiscalItem {
   tesConhecida     Boolean  @default(false)
   produtoCodigo    String?
   produtoDescricao String?
+  ncm              String?
   cfop             String?
   uf               String?
   fornecedor       String?
@@ -674,6 +675,7 @@ model AnaliseFiscalSaidaItem {
   tesConhecida     Boolean  @default(false)
   produtoCodigo    String?
   produtoDescricao String?
+  ncm              String?
   cfop             String?
   uf               String?
   cliente          String?

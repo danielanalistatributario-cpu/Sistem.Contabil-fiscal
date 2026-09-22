@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
     tesConhecida: item.tesConhecida,
     produtoCodigo: item.linha.produtoCodigo || null,
     produtoDescricao: item.linha.produtoDescricao || null,
+    ncm: item.linha.ncm || null,
     cfop: item.linha.cfop || null,
     uf: item.linha.uf || null,
     cliente: item.linha.fornecedor || null,
