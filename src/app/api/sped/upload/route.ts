@@ -38,27 +38,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Dados do arquivo não recebidos.' }, { status: 400 });
   }
 
-  const registro = await prisma.spedFile.create({
-    data: {
-      companyId: session.currentCompanyId,
-      fileName: resumo.fileName,
-      competencia: resumo.competencia,
-      totalLinhas: resumo.totalLinhas,
-      blocksJson: JSON.stringify({
-        porBloco: resumo.porBloco,
-        porRegistro: resumo.porRegistro,
-        nomeEmpresa: resumo.nomeEmpresa,
-        tipoSped: resumo.tipoSped,
-      }),
-    },
-  });
+  try {
+    const registro = await prisma.spedFile.create({
+      data: {
+        companyId: session.currentCompanyId,
+        fileName: resumo.fileName,
+        competencia: resumo.competencia,
+        totalLinhas: resumo.totalLinhas,
+        blocksJson: JSON.stringify({
+          porBloco: resumo.porBloco,
+          porRegistro: resumo.porRegistro,
+          nomeEmpresa: resumo.nomeEmpresa,
+          tipoSped: resumo.tipoSped,
+        }),
+      },
+    });
 
-  await logActivity(
-    session.id,
-    'IMPORTOU_SPED_FISCAL',
-    `${resumo.fileName} (${resumo.totalLinhas} linhas)`,
-    session.currentCompanyId
-  );
+    await logActivity(
+      session.id,
+      'IMPORTOU_SPED_FISCAL',
+      `${resumo.fileName} (${resumo.totalLinhas} linhas)`,
+      session.currentCompanyId
+    );
 
-  return NextResponse.json({ spedFileId: registro.id });
+    return NextResponse.json({ spedFileId: registro.id });
+  } catch (err) {
+    // Sem isso a tela só mostrava "status 500", sem nenhuma pista da causa.
+    // O limite de tamanho do plano do Neon (512MB) já derrubou gravações
+    // reais aqui — ver [[analise-apuracao-fiscal-modulo]] — e é a causa mais
+    // provável de uma falha que não vem do arquivo em si.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('Falha ao registrar SPED:', err);
+    if (msg.includes('project size limit') || msg.includes('could not extend file')) {
+      return NextResponse.json(
+        { error: 'O banco de dados atingiu o limite de armazenamento do plano — libere espaço (ex: excluir apurações antigas em Análise Fiscal → Histórico) e tente de novo.' },
+        { status: 507 }
+      );
+    }
+    return NextResponse.json({ error: `Falha ao registrar o arquivo no servidor: ${msg.split('\n').filter(Boolean).slice(-1)[0]?.slice(0, 200) || 'erro desconhecido'}` }, { status: 500 });
+  }
 }

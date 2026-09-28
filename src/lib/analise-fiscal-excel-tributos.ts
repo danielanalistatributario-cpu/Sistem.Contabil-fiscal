@@ -26,6 +26,11 @@ export type ItemTributo = {
   // — Análise Fiscal não captura NCM hoje, então sai "—" nesse fluxo, sem
   // inventar valor.
   ncm?: string | null;
+  // Entrada/Saída — só vem do SPED (IND_OPER do C100). A coluna só entra na
+  // planilha quando algum item traz o dado; nas planilhas da Análise Fiscal
+  // (relatório já separado por módulo em Entradas ou Saídas) fica de fora,
+  // em vez de virar uma coluna inteira de "—".
+  operacao?: string | null;
   tes: string;
   cstPis: string | null;
   aliquotaPis: number | null;
@@ -86,6 +91,8 @@ const COLUNAS: { header: string; width: number; numFmt?: string }[] = [
   { header: 'Valor da COFINS', width: 16, numFmt: NUM_VALOR },
 ];
 
+const COLUNA_OPERACAO = { header: 'Operação', width: 12 };
+
 // Devolve Uint8Array (não Buffer, API só do Node) porque esta função roda
 // tanto em rotas server-side (Análise Fiscal) quanto no navegador (Conversor
 // SPED, que processa o arquivo localmente pra não estourar o limite de
@@ -96,13 +103,19 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(tituloAba.slice(0, 31));
 
-  sheet.columns = COLUNAS.map((c) => ({ width: c.width }));
+  // Operação entra logo depois de "Nota Fiscal", só se algum item a trouxer.
+  const temOperacao = itens.some((i) => (i.operacao || '').trim());
+  const colunas: { header: string; width: number; numFmt?: string }[] = temOperacao
+    ? [COLUNAS[0], COLUNA_OPERACAO, ...COLUNAS.slice(1)]
+    : COLUNAS;
+
+  sheet.columns = colunas.map((c) => ({ width: c.width }));
 
   const temAlgumCst = itens.some((i) => (i.cstPis || '').trim() || (i.cstCofins || '').trim());
 
   let linhaCabecalho = 1;
   if (!temAlgumCst && itens.length > 0) {
-    sheet.mergeCells(1, 1, 1, COLUNAS.length);
+    sheet.mergeCells(1, 1, 1, colunas.length);
     const aviso = sheet.getCell(1, 1);
     aviso.value = 'Este relatório de origem não trouxe as colunas CST PIS/CST COFINS — reprocesse com um arquivo que inclua essas colunas do Protheus pra preencher essas informações.';
     aviso.font = { italic: true, color: { argb: 'FF9C6500' } };
@@ -113,7 +126,7 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
   }
 
   const headerRow = sheet.getRow(linhaCabecalho);
-  COLUNAS.forEach((c, i) => {
+  colunas.forEach((c, i) => {
     const cell = headerRow.getCell(i + 1);
     cell.value = c.header;
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -127,6 +140,7 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
     const row = sheet.getRow(linhaCabecalho + 1 + idx);
     const valores = [
       txt(item.numeroNf),
+      ...(temOperacao ? [txt(item.operacao)] : []),
       codigo,
       descricao,
       txt(item.ncm),
@@ -146,7 +160,7 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
     valores.forEach((v, colIdx) => {
       const cell = row.getCell(colIdx + 1);
       cell.value = v as ExcelJS.CellValue;
-      const numFmt = COLUNAS[colIdx].numFmt;
+      const numFmt = colunas[colIdx].numFmt;
       if (numFmt && typeof v === 'number') cell.numFmt = numFmt;
     });
   });
@@ -155,7 +169,7 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
     const ultimaLinha = linhaCabecalho + itens.length;
     sheet.autoFilter = {
       from: { row: linhaCabecalho, column: 1 },
-      to: { row: ultimaLinha, column: COLUNAS.length },
+      to: { row: ultimaLinha, column: colunas.length },
     };
   }
   sheet.views = [{ state: 'frozen', ySplit: linhaCabecalho }];
