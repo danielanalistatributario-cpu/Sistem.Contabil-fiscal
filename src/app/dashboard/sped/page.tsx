@@ -181,8 +181,13 @@ export default function SpedPage() {
     blocos.forEach((bloco) => {
       const linhasBloco = result.linhas.filter((l) => l.bloco === bloco);
       const maxCampos = Math.max(...linhasBloco.map((l) => l.campos.length), 0);
+      // Coluna Operação (Entrada/Saída, lida do IND_OPER do documento) só nas
+      // abas de bloco que têm documentos com essa informação (A, C, D) —
+      // nos demais (0, 1, 9, M...) seria uma coluna vazia.
+      const temOperacao = linhasBloco.some((l) => l.operacao);
       const rows = linhasBloco.map((l) => {
         const row: Record<string, string | number> = { Linha: l.linhaOriginal, Registro: l.registro };
+        if (temOperacao) row['Operação'] = l.operacao;
         for (let i = 0; i < maxCampos; i++) row[`Campo${i + 1}`] = l.campos[i] ?? '';
         return row;
       });
@@ -422,6 +427,7 @@ export default function SpedPage() {
                   <tr>
                     <th className="text-left px-3 py-2 font-medium text-gray-500">Linha</th>
                     <th className="text-left px-3 py-2 font-medium text-gray-500">Registro</th>
+                    <th className="text-left px-3 py-2 font-medium text-gray-500">Operação</th>
                     <th className="text-left px-3 py-2 font-medium text-gray-500">Campos</th>
                   </tr>
                 </thead>
@@ -430,6 +436,7 @@ export default function SpedPage() {
                     <tr key={l.linhaOriginal} className="border-t border-gray-50">
                       <td className="px-3 py-1.5 text-gray-400">{l.linhaOriginal}</td>
                       <td className="px-3 py-1.5 font-medium text-brand">{l.registro}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{l.operacao}</td>
                       <td className="px-3 py-1.5 text-gray-600 truncate max-w-xl">{l.campos.join(' | ')}</td>
                     </tr>
                   ))}

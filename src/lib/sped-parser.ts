@@ -31,6 +31,31 @@ export type SpedLine = {
   bloco: string;
   campos: string[];
   linhaOriginal: number;
+  // Entrada/Saída lida do IND_OPER do documento (ver OPERACAO_POR_CABECALHO);
+  // '' quando o registro não pertence a um documento que informe isso.
+  operacao: 'Entrada' | 'Saída' | '';
+};
+
+// Registros de cabeçalho de documento que trazem IND_OPER como primeiro
+// campo — confirmado contra arquivo real de EFD Contribuições (C100:
+// 0=Entrada, 1=Saída; D100: 0=Aquisição, 1=Prestação; A100: 0=Serviço
+// contratado, 1=Serviço prestado). Só mapeia o que o próprio arquivo
+// informa: registros sem IND_OPER (ex: C400/C490 de ECF, F100 cujo
+// IND_OPER é "geradora de crédito/contribuição", não entrada/saída) ficam
+// em branco, sem inferir.
+const OPERACAO_POR_CABECALHO = new Set(['A100', 'C100', 'D100']);
+
+// Registros filhos herdam a operação do último cabeçalho acima deles — o
+// arquivo não repete IND_OPER neles. Lista explícita (não "qualquer
+// registro do bloco") pra não herdar em outros tipos de documento do mesmo
+// bloco que aparecem depois (ex: C400, C500, D200).
+const FILHOS_DO_CABECALHO: Record<string, Set<string>> = {
+  A100: new Set(['A110', 'A111', 'A120', 'A170']),
+  C100: new Set([
+    'C101', 'C105', 'C110', 'C111', 'C112', 'C113', 'C114', 'C115', 'C116', 'C119', 'C120', 'C130', 'C140', 'C141',
+    'C160', 'C165', 'C170', 'C171', 'C172', 'C173', 'C174', 'C175', 'C176', 'C177', 'C178', 'C179', 'C190', 'C195', 'C197',
+  ]),
+  D100: new Set(['D101', 'D105', 'D110', 'D111', 'D120', 'D130', 'D140', 'D150', 'D160', 'D161', 'D162', 'D170', 'D180', 'D190', 'D195', 'D197']),
 };
 
 export type SpedSummary = {
@@ -50,6 +75,7 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
   const porRegistro: Record<string, number> = {};
   const linhas: SpedLine[] = [];
   let camposRegistro0000: string[] | null = null;
+  let documentoAtual: { cabecalho: string; operacao: SpedLine['operacao'] } | null = null;
 
   for (let idx = 0; idx < linhasBrutas.length; idx++) {
     const linha = linhasBrutas[idx];
@@ -65,7 +91,18 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
 
     if (registro === '0000') camposRegistro0000 = campos;
 
-    linhas.push({ registro, bloco, campos: campos.slice(1), linhaOriginal: idx + 1 });
+    let operacao: SpedLine['operacao'] = '';
+    if (OPERACAO_POR_CABECALHO.has(registro)) {
+      const indOper = campos[1];
+      operacao = indOper === '0' ? 'Entrada' : indOper === '1' ? 'Saída' : '';
+      documentoAtual = { cabecalho: registro, operacao };
+    } else if (documentoAtual && FILHOS_DO_CABECALHO[documentoAtual.cabecalho].has(registro)) {
+      operacao = documentoAtual.operacao;
+    } else {
+      documentoAtual = null;
+    }
+
+    linhas.push({ registro, bloco, campos: campos.slice(1), linhaOriginal: idx + 1, operacao });
 
     // 9999 é sempre o registro de encerramento do arquivo digital (último
     // registro válido, em qualquer leiaute de EFD). Alguns arquivos trazem
