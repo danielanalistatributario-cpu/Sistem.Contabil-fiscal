@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { History, ShieldCheck, Search, X } from 'lucide-react';
+import { History, ShieldCheck, X } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { ImportHero } from '@/components/ImportHero';
 import { parseNFeXml, parseEventoXml, RULE_DEFINITIONS, type ParsedItem, type EventoParsed } from '@/lib/auditor-rtc-parser';
@@ -305,11 +305,7 @@ function AuditorRtcInner() {
             <h1 className="text-2xl font-display font-semibold text-brand">Auditor RTC — IBS/CBS</h1>
             <p className="text-gray-500 text-sm mt-1">Validação dos grupos da Reforma Tributária nos XMLs de NF-e.</p>
           </div>
-          <div className="flex items-center gap-4 shrink-0">
-            <Link href="/dashboard/auditor-rtc/classificacao" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
-              <Search size={15} />
-              Pesquisa de Classificação
-            </Link>
+          <div className="flex items-center gap-3 shrink-0">
             <Link href="/dashboard/auditor-rtc/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <History size={15} />
               Histórico
@@ -322,11 +318,7 @@ function AuditorRtcInner() {
       )}
 
       {!temDados && (
-        <div className="flex justify-end gap-4">
-          <Link href="/dashboard/auditor-rtc/classificacao" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
-            <Search size={15} />
-            Pesquisa de Classificação Tributária do Produto
-          </Link>
+        <div className="flex justify-end">
           <Link href="/dashboard/auditor-rtc/historico" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
             <History size={15} />
             Ver histórico

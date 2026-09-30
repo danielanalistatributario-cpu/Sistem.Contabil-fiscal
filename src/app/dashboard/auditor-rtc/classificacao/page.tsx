@@ -138,9 +138,9 @@ export default function ClassificacaoTributariaPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/dashboard/auditor-rtc" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors mb-2 w-fit">
+        <Link href="/dashboard" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors mb-2 w-fit">
           <ArrowLeft size={15} />
-          Auditor RTC
+          Início
         </Link>
         <h1 className="text-2xl font-display font-semibold text-brand">Pesquisa de Classificação Tributária do Produto</h1>
         <p className="text-gray-500 text-sm mt-1 max-w-3xl">
