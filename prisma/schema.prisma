@@ -419,6 +419,66 @@ model AuditorRtcItem {
   nfe           AuditorRtcNfe @relation(fields: [nfeId], references: [id], onDelete: Cascade)
 }
 
+// --- Pesquisa de Classificação Tributária do Produto (Reforma Tributária) ---
+// Base de referência OFICIAL e PÚBLICA do IBS/CBS (Nota Técnica 2025.002,
+// LC 214/2025 e Anexos, CST-IBS/CBS) — dado igual pra todo mundo, não é
+// específico de cada Company/filial (diferente de PerfilProduto,
+// ClassificacaoProdutoReferencia etc., que são o cadastro de CADA empresa).
+// Todo registro carrega `fonte` (URL/norma) e `atualizadoEm`, porque o
+// usuário pediu explicitamente que a classificação "esteja vinculada à base
+// legal... mantendo a fonte da informação para conferência" — nunca inventar
+// linha sem fonte rastreável.
+
+// Código de Situação Tributária do IBS/CBS (3 dígitos) — os ~17 grupos
+// (000, 010, 200...) que agrupam os códigos cClassTrib.
+model AuditorRtcCst {
+  codigo      String   @id // "000", "200"...
+  descricao   String
+  fonte       String
+  atualizadoEm DateTime @updatedAt
+  cclasstribs AuditorRtcCclasstrib[]
+}
+
+// Código de Classificação Tributária (6 dígitos) — cada linha é um
+// "tratamento" possível (cClassTrib), com o CST correspondente (3 primeiros
+// dígitos), tipo de alíquota e, quando aplicável, percentual de redução.
+model AuditorRtcCclasstrib {
+  codigo            String   @id // "000001", "200003"...
+  cstCodigo         String
+  descricao         String
+  tipoAliquota      String? // "Padrão" | "Reduzida" | "Zero" | "Específica" | "Isenta" | etc — texto livre, como a fonte descreve
+  percentualReducao Float?  // 0.6 = 60% de redução, quando a fonte informar
+  fundamentoLegal   String? // ex: "LC 214/2025, Anexo I, art. 125"
+  fonte             String
+  observacao        String?
+  atualizadoEm      DateTime @updatedAt
+  cst               AuditorRtcCst @relation(fields: [cstCodigo], references: [codigo])
+  ncms              AuditorRtcNcmClassificacao[]
+
+  @@index([cstCodigo])
+}
+
+// Mapeamento NCM → cClassTrib, vindo dos Anexos da LC 214/2025 (Anexo I
+// Cesta Básica, Anexo VII redução 60% alimentos, Anexo XV hortícolas/
+// frutas/ovos etc.) — só tem linha aqui pra NCM que recebe tratamento
+// DIFERENCIADO. Um NCM sem linha aqui segue o padrão (cClassTrib 000001,
+// tributação integral) — a busca explica isso em vez de deixar a lacuna
+// muda (ver rota de pesquisa).
+model AuditorRtcNcmClassificacao {
+  id                String   @id @default(cuid())
+  ncm               String
+  descricaoNcm      String?
+  cclasstribCodigo  String
+  anexo             String? // "Anexo I", "Anexo VII", "Anexo XV"...
+  fundamentoLegal   String?
+  fonte             String
+  observacao        String?
+  atualizadoEm      DateTime @updatedAt
+  cclasstrib        AuditorRtcCclasstrib @relation(fields: [cclasstribCodigo], references: [codigo])
+
+  @@index([ncm])
+}
+
 // Perfil de Produto: classificação tributária de referência (ex: "Produtos Isentos",
 // "Combustíveis") cadastrada previamente, contendo a lista de códigos de produto
 // que pertencem a ela — usada para auditar o cadastro de produtos da empresa.
