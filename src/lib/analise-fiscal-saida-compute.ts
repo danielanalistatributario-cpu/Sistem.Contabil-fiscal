@@ -62,6 +62,10 @@ export function apurarSaidas(
     produtosClassificacao: config.produtosClassificacao || new Map(),
     produtosClassificacaoPisCofins: config.produtosClassificacaoPisCofins || new Map(),
     produtosBeneficioAliquota: config.produtosBeneficioAliquota || new Map(),
+    // Lista de fornecedores ignorados só existe em Entrada (Saída não tem
+    // conceito de "fornecedor") — sempre vazia aqui, então as regras de
+    // cruzamento produto×TES nunca são puladas em Saída por este motivo.
+    fornecedoresIgnorados: new Set<string>(),
     direcao: 'saida' as const,
   };
 

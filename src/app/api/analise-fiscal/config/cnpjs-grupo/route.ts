@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
-import { canAccess } from '@/lib/permissions';
+import { canAccessAnaliseFiscalConfig } from '@/lib/permissions';
 
 // Mesma regex de src/lib/protheus/perfil-produto.ts (SUFIXO_REGEX) — o
 // sufixo vira nome de tabela na query (F24<sufixo>/SB1<sufixo>).
@@ -12,7 +12,7 @@ export async function GET() {
   if (!session || !session.currentCompanyId) {
     return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
   }
-  if (!canAccess(session.currentRole, 'analiseFiscalConfig')) {
+  if (!canAccessAnaliseFiscalConfig(session.currentRole, session.currentAnaliseFiscalConfigExtra)) {
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (!session || !session.currentCompanyId) {
     return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
   }
-  if (!canAccess(session.currentRole, 'analiseFiscalConfig')) {
+  if (!canAccessAnaliseFiscalConfig(session.currentRole, session.currentAnaliseFiscalConfigExtra)) {
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 

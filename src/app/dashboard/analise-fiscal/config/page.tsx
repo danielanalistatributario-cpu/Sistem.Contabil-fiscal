@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { lerProdutosClassificacao } from '@/lib/analise-fiscal-produtos-import';
-import { canAccess, type Role } from '@/lib/permissions';
+import { canAccessAnaliseFiscalConfig, type Role } from '@/lib/permissions';
 
 type NaturezaOperacao = 'LIVRE' | 'ISENTA' | 'TRIBUTADA' | 'TRANSFERENCIA';
 
@@ -21,6 +21,8 @@ type TesRow = {
 };
 
 type CnpjRow = { id: string; nome: string; cnpj: string; uf: string | null; aliquotaInterna: number | null; protheusSufixo: string | null };
+
+type FornecedorIgnoradoRow = { id: string; codigoFornecedor: string; nome: string | null; motivo: string };
 
 type ProdutoRow = {
   id: string;
@@ -69,6 +71,12 @@ export default function AnaliseFiscalConfigPage() {
   const [novaAliquotaCnpj, setNovaAliquotaCnpj] = useState('');
   const [novoSufixoCnpj, setNovoSufixoCnpj] = useState('');
 
+  const [fornecedoresIgnorados, setFornecedoresIgnorados] = useState<FornecedorIgnoradoRow[]>([]);
+  const [erroFornecedor, setErroFornecedor] = useState<string | null>(null);
+  const [novoCodigoFornecedor, setNovoCodigoFornecedor] = useState('');
+  const [novoNomeFornecedor, setNovoNomeFornecedor] = useState('');
+  const [novoMotivoFornecedor, setNovoMotivoFornecedor] = useState('Simples Nacional');
+
   const [produtos, setProdutos] = useState<ProdutoRow[]>([]);
   const [erroProduto, setErroProduto] = useState<string | null>(null);
   const [novoCodigoProduto, setNovoCodigoProduto] = useState('');
@@ -89,6 +97,7 @@ export default function AnaliseFiscalConfigPage() {
   // liberado pra todo usuário com acesso à Análise Fiscal (canAccess
   // 'analiseFiscalProdutos') — currentRole decide o que esta tela mostra.
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
+  const [configExtra, setConfigExtra] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -97,6 +106,7 @@ export default function AnaliseFiscalConfigPage() {
         const data = await res.json();
         setCurrentEmpresaGrupoId(data.user?.currentEmpresaGrupoId ?? null);
         setCurrentRole(data.user?.currentRole ?? null);
+        setConfigExtra(data.user?.currentAnaliseFiscalConfigExtra ?? false);
       }
     })();
   }, []);
@@ -140,6 +150,14 @@ export default function AnaliseFiscalConfigPage() {
     }
   }, []);
 
+  const carregarFornecedoresIgnorados = useCallback(async () => {
+    const res = await fetch('/api/analise-fiscal/config/fornecedores-ignorados');
+    if (res.ok) {
+      const data = await res.json();
+      setFornecedoresIgnorados(data.fornecedores);
+    }
+  }, []);
+
   useEffect(() => {
     carregarCnpjs();
   }, [carregarCnpjs]);
@@ -157,6 +175,10 @@ export default function AnaliseFiscalConfigPage() {
     carregarProdutos();
     setBuscaProduto('');
   }, [carregarProdutos, currentEmpresaGrupoId]);
+
+  useEffect(() => {
+    carregarFornecedoresIgnorados();
+  }, [carregarFornecedoresIgnorados, currentEmpresaGrupoId]);
 
   async function handleAddTes(e: React.FormEvent) {
     e.preventDefault();
@@ -202,6 +224,35 @@ export default function AnaliseFiscalConfigPage() {
     if (!confirm(`Excluir a TES ${codigo}? Ela voltará a aparecer como "TES nova" na próxima apuração.`)) return;
     await fetch(`/api/analise-fiscal/config/tes/${id}`, { method: 'DELETE' });
     carregarTes();
+  }
+
+  async function handleAddFornecedorIgnorado(e: React.FormEvent) {
+    e.preventDefault();
+    setErroFornecedor(null);
+    const res = await fetch('/api/analise-fiscal/config/fornecedores-ignorados', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        codigoFornecedor: novoCodigoFornecedor,
+        nome: novoNomeFornecedor || undefined,
+        motivo: novoMotivoFornecedor || undefined,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setErroFornecedor(data.error || 'Erro ao cadastrar fornecedor.');
+      return;
+    }
+    setNovoCodigoFornecedor('');
+    setNovoNomeFornecedor('');
+    setNovoMotivoFornecedor('Simples Nacional');
+    carregarFornecedoresIgnorados();
+  }
+
+  async function handleRemoveFornecedorIgnorado(id: string, label: string) {
+    if (!confirm(`Remover "${label}" da lista de fornecedores ignorados?`)) return;
+    await fetch(`/api/analise-fiscal/config/fornecedores-ignorados/${id}`, { method: 'DELETE' });
+    carregarFornecedoresIgnorados();
   }
 
   async function handleAddCnpj(e: React.FormEvent) {
@@ -367,9 +418,9 @@ export default function AnaliseFiscalConfigPage() {
           Voltar
         </Link>
         <h1 className="text-2xl font-display font-semibold text-brand">
-          {canAccess(currentRole, 'analiseFiscalConfig') ? 'Configurar Análise Fiscal' : 'Produtos com classificação tributária'}
+          {canAccessAnaliseFiscalConfig(currentRole, configExtra) ? 'Configurar Análise Fiscal' : 'Produtos com classificação tributária'}
         </h1>
-        {canAccess(currentRole, 'analiseFiscalConfig') ? (
+        {canAccessAnaliseFiscalConfig(currentRole, configExtra) ? (
           <p className="text-gray-500 text-sm mt-1">
             Listas de referência usadas pelo motor de regras — cadastre uma TES nova para que ela pare de aparecer como
             &quot;TES nova&quot; e ganhe as checagens de Chave NF e produto. A lógica de regras profundas (cálculo de
@@ -385,7 +436,7 @@ export default function AnaliseFiscalConfigPage() {
         )}
       </div>
 
-      {canAccess(currentRole, 'analiseFiscalConfig') && (
+      {canAccessAnaliseFiscalConfig(currentRole, configExtra) && (
       <>
       <div className="card-surface p-5 space-y-4">
         <h2 className="font-display font-semibold text-brand">TES cadastradas</h2>
@@ -692,6 +743,94 @@ export default function AnaliseFiscalConfigPage() {
           </tbody>
         </table>
         {cnpjs.length === 0 && <p className="text-sm text-gray-400 text-center py-6">Nenhuma empresa cadastrada ainda.</p>}
+      </div>
+
+      <div className="card-surface p-5 space-y-4">
+        <h2 className="font-display font-semibold text-brand">Fornecedores ignorados na tributação por produtos</h2>
+        <p className="text-xs text-gray-500">
+          Fornecedores (ex: do Simples Nacional) cujo tratamento tributário difere do regime normal — cadastre aqui
+          pra que a Análise de Entradas pule só o cruzamento produto×TES (classificação ISENTO/TRIBUTADO do produto
+          contra a natureza da TES, nos eixos ICMS e PIS/COFINS, e a checagem de benefício de alíquota) nas linhas
+          desse fornecedor. As demais checagens (TES ausente, Chave NF, CFOP×UF, Valor Contábil e o cálculo Base×
+          Alíquota de ICMS/PIS/COFINS) continuam rodando normalmente. Informe o código do fornecedor como aparece no
+          Relatório de Entradas (ex: &quot;499082-01&quot;) — pode colar a célula inteira (&quot;499082-01 FABIO...&quot;)
+          que o código é extraído automaticamente.{' '}
+          {empresasComUf.length > 0 && 'O cadastro é segregado por empresa, igual ao de Produtos — vale só pra filial selecionada no topo da tela.'}
+        </p>
+
+        {empresasComUf.length > 0 && !currentEmpresaGrupoId ? (
+          <p className="text-sm text-gray-400 text-center py-6 bg-gray-50 border border-gray-100 rounded-lg">
+            Selecione a filial no topo da tela para ver ou cadastrar os fornecedores ignorados dela.
+          </p>
+        ) : (
+          <>
+            <form onSubmit={handleAddFornecedorIgnorado} className="flex flex-wrap items-end gap-3 border-b border-gray-100 pb-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Código do fornecedor</label>
+                <input
+                  value={novoCodigoFornecedor}
+                  onChange={(e) => setNovoCodigoFornecedor(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-40"
+                  placeholder="ex: 499082-01"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nome (opcional, só referência)</label>
+                <input
+                  value={novoNomeFornecedor}
+                  onChange={(e) => setNovoNomeFornecedor(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-56"
+                  placeholder="ex: Fabio"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Motivo</label>
+                <input
+                  value={novoMotivoFornecedor}
+                  onChange={(e) => setNovoMotivoFornecedor(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-40"
+                  placeholder="ex: Simples Nacional"
+                />
+              </div>
+              <button type="submit" className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
+                + Adicionar fornecedor
+              </button>
+              {erroFornecedor && <p className="text-sm text-red-600 w-full">{erroFornecedor}</p>}
+            </form>
+
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
+                  <th className="py-2 pr-3">Código</th>
+                  <th className="py-2 pr-3">Nome</th>
+                  <th className="py-2 pr-3">Motivo</th>
+                  <th className="py-2 pr-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {fornecedoresIgnorados.map((f) => (
+                  <tr key={f.id} className="border-b border-gray-50">
+                    <td className="py-2 pr-3 font-mono">{f.codigoFornecedor}</td>
+                    <td className="py-2 pr-3">{f.nome || '—'}</td>
+                    <td className="py-2 pr-3">{f.motivo}</td>
+                    <td className="py-2 pr-3">
+                      <button
+                        onClick={() => handleRemoveFornecedorIgnorado(f.id, f.nome || f.codigoFornecedor)}
+                        className="text-xs text-red-500 underline"
+                      >
+                        Remover
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {fornecedoresIgnorados.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-6">Nenhum fornecedor ignorado cadastrado ainda.</p>
+            )}
+          </>
+        )}
       </div>
       </>
       )}

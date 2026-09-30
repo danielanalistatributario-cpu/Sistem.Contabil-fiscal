@@ -192,3 +192,18 @@ export async function carregarProdutosBeneficioAliquota(
     linhas.map((l) => [l.codigoProduto, { interna: l.aliquotaBeneficioInterna, interestadual: l.aliquotaBeneficioInterestadual }])
   );
 }
+
+// Códigos de fornecedor (Simples Nacional etc.) cadastrados pra pular o
+// cruzamento produto×TES na Análise de Entradas — mesma segregação por
+// empresa do grupo que produtos/TES. Ver AnaliseFiscalFornecedorIgnorado
+// no schema e `fornecedorIgnorado()` em analise-fiscal-generic-rules.ts.
+export async function carregarFornecedoresIgnorados(
+  companyId: string,
+  empresaGrupoId?: string | null
+): Promise<Set<string>> {
+  const linhas = await prisma.analiseFiscalFornecedorIgnorado.findMany({
+    where: { companyId, empresaGrupoId: empresaGrupoId ?? null },
+    select: { codigoFornecedor: true },
+  });
+  return new Set(linhas.map((l) => l.codigoFornecedor));
+}

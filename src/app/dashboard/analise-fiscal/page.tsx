@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Settings, BookOpenText } from 'lucide-react';
-import { canAccess, type Role } from '@/lib/permissions';
+import { canAccess, canAccessAnaliseFiscalConfig, type Role } from '@/lib/permissions';
 
 type Secao = {
   href: string;
@@ -41,6 +41,7 @@ const SECOES: Secao[] = [
 
 export default function AnaliseEApuracaoFiscalHubPage() {
   const [role, setRole] = useState<Role | null>(null);
+  const [configExtra, setConfigExtra] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -48,6 +49,7 @@ export default function AnaliseEApuracaoFiscalHubPage() {
       if (res.ok) {
         const data = await res.json();
         setRole(data.user?.currentRole ?? null);
+        setConfigExtra(data.user?.currentAnaliseFiscalConfigExtra ?? false);
       }
     })();
   }, []);
@@ -61,7 +63,7 @@ export default function AnaliseEApuracaoFiscalHubPage() {
             Auditoria fiscal completa: Entradas, Saídas e, em breve, a Apuração Fiscal cruzando os dois lados.
           </p>
         </div>
-        {canAccess(role, 'analiseFiscalConfig') && (
+        {canAccessAnaliseFiscalConfig(role, configExtra) && (
           <div className="flex items-center gap-4 shrink-0">
             <Link href="/dashboard/analise-fiscal/regras" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <BookOpenText size={15} />
@@ -73,7 +75,7 @@ export default function AnaliseEApuracaoFiscalHubPage() {
             </Link>
           </div>
         )}
-        {!canAccess(role, 'analiseFiscalConfig') && canAccess(role, 'analiseFiscalProdutos') && (
+        {!canAccessAnaliseFiscalConfig(role, configExtra) && canAccess(role, 'analiseFiscalProdutos') && (
           <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors shrink-0">
             <Settings size={15} />
             Produtos com classificação tributária

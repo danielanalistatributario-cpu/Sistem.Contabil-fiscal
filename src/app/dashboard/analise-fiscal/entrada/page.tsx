@@ -10,7 +10,7 @@ import { lerRelatorioEntradas } from '@/lib/analise-fiscal-reader';
 import { lerPrimeiraAbaValida } from '@/lib/ler-planilha-multi-aba';
 import { apurarEntradas, type ItemApurado, type ResumoApuracao } from '@/lib/analise-fiscal-compute';
 import type { TesMetadata } from '@/lib/analise-fiscal-tes-registry';
-import { canAccess, type Role } from '@/lib/permissions';
+import { canAccess, canAccessAnaliseFiscalConfig, type Role } from '@/lib/permissions';
 
 type Severidade = 'CRITICO' | 'ALTO' | 'MEDIO' | 'BAIXO' | 'INFORMATIVO';
 
@@ -137,6 +137,7 @@ function AnaliseFiscalEntradaInner() {
   const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
   const [role, setRole] = useState<Role | null>(null);
+  const [configExtra, setConfigExtra] = useState(false);
   // Filial ativa é lida do seletor "Filial" no topo da aplicação (Topbar),
   // global pra todo o módulo Análise e Apuração Fiscal — esta tela não tem
   // mais seletor próprio. temEmpresasGrupo só serve pra saber se o gate
@@ -152,6 +153,7 @@ function AnaliseFiscalEntradaInner() {
       if (res.ok) {
         const data = await res.json();
         setRole(data.user?.currentRole ?? null);
+        setConfigExtra(data.user?.currentAnaliseFiscalConfigExtra ?? false);
         setCurrentEmpresaGrupoId(data.user?.currentEmpresaGrupoId ?? null);
       }
     })();
@@ -219,6 +221,7 @@ function AnaliseFiscalEntradaInner() {
       const produtosClassificacao = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacao);
       const produtosClassificacaoPisCofins = new Map<string, 'ISENTO' | 'TRIBUTADO'>(cfg.produtosClassificacaoPisCofins);
       const produtosBeneficioAliquota = new Map<string, { interna: number | null; interestadual: number | null }>(cfg.produtosBeneficioAliquota);
+      const fornecedoresIgnorados = new Set<string>(cfg.fornecedoresIgnorados || []);
 
       // cfg.company já vem resolvido pro lado servidor (UF/alíquota da
       // filial ativa, se houver — ver config-runtime/route.ts).
@@ -226,7 +229,7 @@ function AnaliseFiscalEntradaInner() {
       const { itens, resumo }: { itens: ItemApurado[]; resumo: ResumoApuracao } = apurarEntradas(
         leitura.rows,
         cfg.company,
-        { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota }
+        { tesMetadataPorCodigo, cnpjsGrupo, produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota, fornecedoresIgnorados }
       );
 
       setProgresso({ fase: 'Criando apuração...', loteAtual: 0, totalLotes: 0 });
@@ -369,7 +372,7 @@ function AnaliseFiscalEntradaInner() {
             <p className="text-gray-500 text-sm mt-1">Auditoria do Relatório Fiscal de Entradas.</p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
-            {canAccess(role, 'analiseFiscalConfig') && (
+            {canAccessAnaliseFiscalConfig(role, configExtra) && (
               <>
                 <Link href="/dashboard/analise-fiscal/regras" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
                   <BookOpenText size={15} />
@@ -381,7 +384,7 @@ function AnaliseFiscalEntradaInner() {
                 </Link>
               </>
             )}
-            {!canAccess(role, 'analiseFiscalConfig') && canAccess(role, 'analiseFiscalProdutos') && (
+            {!canAccessAnaliseFiscalConfig(role, configExtra) && canAccess(role, 'analiseFiscalProdutos') && (
               <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
                 <Settings size={15} />
                 Produtos com classificação tributária
@@ -400,7 +403,7 @@ function AnaliseFiscalEntradaInner() {
 
       {!apuracao && (
         <div className="flex justify-end gap-4">
-          {canAccess(role, 'analiseFiscalConfig') && (
+          {canAccessAnaliseFiscalConfig(role, configExtra) && (
             <>
               <Link href="/dashboard/analise-fiscal/regras" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
                 <BookOpenText size={15} />
@@ -412,7 +415,7 @@ function AnaliseFiscalEntradaInner() {
               </Link>
             </>
           )}
-          {!canAccess(role, 'analiseFiscalConfig') && canAccess(role, 'analiseFiscalProdutos') && (
+          {!canAccessAnaliseFiscalConfig(role, configExtra) && canAccess(role, 'analiseFiscalProdutos') && (
             <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <Settings size={15} />
               Produtos com classificação tributária

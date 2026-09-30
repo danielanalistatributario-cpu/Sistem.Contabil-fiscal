@@ -4,7 +4,17 @@
 // uma TES). Isso cobre as ~23 TES "metadados só" com checagens úteis desde já.
 
 import type { RuleDef, RuleContext, Divergencia } from './analise-fiscal-tes-registry';
-import { normalizarUf, somenteDigitos, fmtBRL, fmtPct, extrairCodigoProduto } from './analise-fiscal-tes-registry';
+import { normalizarUf, somenteDigitos, fmtBRL, fmtPct, extrairCodigoProduto, extrairCodigoFornecedor } from './analise-fiscal-tes-registry';
+
+// Fornecedor cadastrado como "ignorar na análise de tributação por
+// produtos" (ex: Simples Nacional) — ver comentário de
+// `fornecedoresIgnorados` em RuleContext e AnaliseFiscalFornecedorIgnorado
+// no schema.
+function fornecedorIgnorado(ctx: RuleContext): boolean {
+  if (ctx.fornecedoresIgnorados.size === 0) return false;
+  const codigo = extrairCodigoFornecedor(ctx.linha.fornecedor);
+  return !!codigo && ctx.fornecedoresIgnorados.has(codigo);
+}
 
 // Pedido explícito do usuário: nota fiscal lançada sem TES nenhuma
 // precisa ser apontada — hoje o leitor (analise-fiscal-reader.ts/
@@ -179,6 +189,7 @@ const ruleProdutoClassificacaoTes: RuleDef = {
     const meta = ctx.tesMetadataPorCodigo[linha.tes];
     if (!meta || !meta.naturezaOperacao) return null;
     if (meta.naturezaOperacao === 'LIVRE' || meta.naturezaOperacao === 'TRANSFERENCIA') return null;
+    if (fornecedorIgnorado(ctx)) return null;
 
     const codigo = extrairCodigoProduto(linha.produtoDescricao);
     if (!codigo) return null;
@@ -224,6 +235,7 @@ const ruleProdutoClassificacaoPisCofinsTes: RuleDef = {
     const meta = ctx.tesMetadataPorCodigo[linha.tes];
     if (!meta || !meta.naturezaOperacaoPisCofins) return null;
     if (meta.naturezaOperacaoPisCofins === 'LIVRE' || meta.naturezaOperacaoPisCofins === 'TRANSFERENCIA') return null;
+    if (fornecedorIgnorado(ctx)) return null;
 
     const codigo = extrairCodigoProduto(linha.produtoDescricao);
     if (!codigo) return null;
@@ -268,6 +280,7 @@ const ruleProdutoBeneficioIsento: RuleDef = {
   descricao: 'Sinaliza produto cadastrado com benefício de alíquota reduzida (Configurar TES → Produtos) mas classificado como ISENTO — o benefício só faz sentido pra produto tributado; produto isento não deveria ter esse cadastro.',
   check: (ctx) => {
     const { linha } = ctx;
+    if (fornecedorIgnorado(ctx)) return null;
     const codigo = extrairCodigoProduto(linha.produtoDescricao);
     if (!codigo) return null;
     const beneficio = ctx.produtosBeneficioAliquota.get(codigo);

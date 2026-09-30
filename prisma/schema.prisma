@@ -52,6 +52,7 @@ model Company {
   analisesFiscaisSaida AnaliseFiscalSaidaApuracao[]
   apuracoesFiscaisIcms AnaliseFiscalApuracaoIcms[]
   analiseFiscalProdutosClassificacao AnaliseFiscalProdutoClassificacao[]
+  analiseFiscalFornecedoresIgnorados AnaliseFiscalFornecedorIgnorado[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -60,6 +61,14 @@ model Membership {
   userId    String
   companyId String
   role      String
+  // Acesso extra, independente do papel (role) — hoje só cobre Regras da
+  // Análise e Apuração Fiscal + Configurar TES (módulo 'analiseFiscalConfig',
+  // normalmente só ADMINISTRADOR). Permissão é por papel em todo o resto do
+  // sistema (igual pra todo mundo com aquele papel); este campo existe só
+  // pra liberar esse módulo específico pra UM usuário sem mexer no que os
+  // demais ANALISTA/GESTOR/USUARIO podem fazer. Ver canAccess() em
+  // permissions.ts.
+  analiseFiscalConfigExtra Boolean @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -915,8 +924,38 @@ model AnaliseFiscalCnpjGrupo {
   perfisProdutos  PerfilProduto[]
   classificacoesProdutoReferencia ClassificacaoProdutoReferencia[]
   produtosBloqueados ProdutoBloqueado[]
+  fornecedoresIgnorados AnaliseFiscalFornecedorIgnorado[]
 
   @@unique([companyId, cnpj])
+}
+
+// Fornecedores (ex: do Simples Nacional) cujas linhas na Análise de
+// Entradas devem pular o cruzamento produto×TES (ruleProdutoClassificacaoTes,
+// ruleProdutoClassificacaoPisCofinsTes, ruleProdutoBeneficioIsento em
+// analise-fiscal-generic-rules.ts) — pedido explícito do usuário: esses
+// fornecedores têm tratamento tributário diferente do regime normal, e
+// o cruzamento de classificação do produto contra a TES gera divergência
+// falsa pra eles. As demais checagens (TES ausente, Chave NF, CFOP×UF,
+// Valor Contábil, cálculo Base×Alíquota de ICMS/PIS/COFINS) continuam
+// rodando normalmente pra essas linhas. Só usado em Entradas — Saída não
+// tem conceito de "fornecedor". Mesmo padrão de segregação por empresa do
+// grupo que AnaliseFiscalProdutoClassificacao (empresaGrupoId null =
+// cadastro geral, tenant sem empresas do grupo cadastradas).
+model AnaliseFiscalFornecedorIgnorado {
+  id               String   @id @default(cuid())
+  companyId        String
+  empresaGrupoId   String?
+  // código do fornecedor no Protheus, extraído do início do campo
+  // "Fornec./Cliente" do Relatório de Entradas (ex: "499082-01") — ver
+  // extrairCodigoFornecedor() em analise-fiscal-tes-registry.ts.
+  codigoFornecedor String
+  nome             String?
+  motivo           String   @default("Simples Nacional")
+  createdAt        DateTime @default(now())
+  company          Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaGrupo     AnaliseFiscalCnpjGrupo? @relation(fields: [empresaGrupoId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, empresaGrupoId, codigoFornecedor])
 }
 
 // Apuração Fiscal (Livro de Apuração do ICMS) — terceira seção de

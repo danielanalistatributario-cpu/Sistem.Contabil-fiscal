@@ -46,6 +46,7 @@ export function apurarEntradas(
     produtosClassificacao?: Map<string, ClassificacaoProduto>;
     produtosClassificacaoPisCofins?: Map<string, ClassificacaoProduto>;
     produtosBeneficioAliquota?: Map<string, { interna: number | null; interestadual: number | null }>;
+    fornecedoresIgnorados?: Set<string>;
   }
 ): ResultadoApuracao {
   const ctxBase = {
@@ -56,6 +57,7 @@ export function apurarEntradas(
     produtosClassificacao: config.produtosClassificacao || new Map(),
     produtosClassificacaoPisCofins: config.produtosClassificacaoPisCofins || new Map(),
     produtosBeneficioAliquota: config.produtosBeneficioAliquota || new Map(),
+    fornecedoresIgnorados: config.fornecedoresIgnorados || new Set<string>(),
     direcao: 'entrada' as const,
   };
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { canAccess } from '@/lib/permissions';
+import { canAccessAnaliseFiscalConfig } from '@/lib/permissions';
 import { TES_RULES, TES_METADATA } from '@/lib/analise-fiscal-tes-registry';
 import { TES_RULES_SAIDA, TES_METADATA_SAIDA_DEFAULT } from '@/lib/analise-fiscal-saida-tes-registry';
 import { GENERIC_RULES } from '@/lib/analise-fiscal-generic-rules';
@@ -22,7 +22,7 @@ export async function GET() {
   if (!session || !session.currentCompanyId) {
     return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
   }
-  if (!canAccess(session.currentRole, 'analiseFiscalConfig')) {
+  if (!canAccessAnaliseFiscalConfig(session.currentRole, session.currentAnaliseFiscalConfigExtra)) {
     return NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 });
   }
 

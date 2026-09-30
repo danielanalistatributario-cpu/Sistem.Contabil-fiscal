@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
-import { carregarTesMetadataPorCodigo, carregarCnpjsGrupo, carregarProdutosClassificacao, carregarProdutosClassificacaoPisCofins, carregarProdutosBeneficioAliquota, carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
+import { carregarTesMetadataPorCodigo, carregarCnpjsGrupo, carregarProdutosClassificacao, carregarProdutosClassificacaoPisCofins, carregarProdutosBeneficioAliquota, carregarFornecedoresIgnorados, carregarEmpresasGrupo } from '@/lib/analise-fiscal-config-db';
 
 // Metadados de TES + CNPJs do grupo prontos pro motor de regras — usado
 // pelo cálculo que roda no navegador (Saídas, que processa em lotes; ver
@@ -29,7 +29,7 @@ export async function GET() {
 
   const empresaGrupoId = session.currentEmpresaGrupoId;
 
-  const [cnpjsGrupo, empresasGrupo, tenantCompany, tesMetadataPorCodigo, produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota] = await Promise.all([
+  const [cnpjsGrupo, empresasGrupo, tenantCompany, tesMetadataPorCodigo, produtosClassificacao, produtosClassificacaoPisCofins, produtosBeneficioAliquota, fornecedoresIgnorados] = await Promise.all([
     carregarCnpjsGrupo(session.currentCompanyId),
     carregarEmpresasGrupo(session.currentCompanyId),
     prisma.company.findUnique({ where: { id: session.currentCompanyId }, select: { ufDestino: true, aliquotaInterna: true } }),
@@ -37,6 +37,7 @@ export async function GET() {
     carregarProdutosClassificacao(session.currentCompanyId, empresaGrupoId),
     carregarProdutosClassificacaoPisCofins(session.currentCompanyId, empresaGrupoId),
     carregarProdutosBeneficioAliquota(session.currentCompanyId, empresaGrupoId),
+    carregarFornecedoresIgnorados(session.currentCompanyId, empresaGrupoId),
   ]);
 
   const empresaAtiva = empresaGrupoId ? empresasGrupo.find((e) => e.id === empresaGrupoId) : null;
@@ -51,6 +52,7 @@ export async function GET() {
     produtosClassificacao: Array.from(produtosClassificacao.entries()),
     produtosClassificacaoPisCofins: Array.from(produtosClassificacaoPisCofins.entries()),
     produtosBeneficioAliquota: Array.from(produtosBeneficioAliquota.entries()),
+    fornecedoresIgnorados: Array.from(fornecedoresIgnorados),
     empresasGrupo,
     empresaAtivaId: empresaGrupoId,
     company,

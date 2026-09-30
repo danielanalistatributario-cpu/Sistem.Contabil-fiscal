@@ -25,6 +25,7 @@ export async function GET() {
     name: m.user.name,
     email: m.user.email,
     role: m.role,
+    analiseFiscalConfigExtra: m.analiseFiscalConfigExtra,
   }));
 
   return NextResponse.json({ users });

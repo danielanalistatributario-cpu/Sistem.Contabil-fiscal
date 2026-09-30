@@ -58,6 +58,15 @@ export type RuleContext = {
   // ele. Vazio = nenhum produto tem benefício cadastrado, regra usa
   // sempre a tabela padrão (comportamento de antes dessa feature).
   produtosBeneficioAliquota: Map<string, { interna: number | null; interestadual: number | null }>;
+  // Códigos de fornecedor (ex: "499082-01", extraído via
+  // extrairCodigoFornecedor) cadastrados pela empresa como "ignorar na
+  // análise de tributação por produtos" — normalmente fornecedores do
+  // Simples Nacional, cujo tratamento tributário difere do regime normal
+  // e faria o cruzamento produto×TES gerar divergência falsa. Só usado
+  // pelas 3 regras de cruzamento produto×TES (ICMS, PIS/COFINS e
+  // benefício de alíquota); as demais regras continuam rodando
+  // normalmente. Vazio em Saída (conceito só existe em Entrada).
+  fornecedoresIgnorados: Set<string>;
   // Direção da análise — usada por `ruleIcmsTabelaPadrao` pra saber qual
   // UF representa o "Estado de origem" da mercadoria na tabela
   // interestadual (Resolução do Senado 22/1989): em ENTRADA é a UF do
@@ -112,6 +121,16 @@ export type TesMetadata = {
 // cruzar com AnaliseFiscalProdutoClassificacao.codigoProduto.
 export function extrairCodigoProduto(produtoDescricao: string): string {
   const match = (produtoDescricao || '').trim().match(/^([\d.]+)/);
+  return match ? match[1] : '';
+}
+
+// Mesma ideia de extrairCodigoProduto, pro campo "Fornec./Cliente" —
+// código de fornecedor do Protheus vem no formato "NNNNNN-NN" (código +
+// loja, ex: "499082-01") seguido do nome ("499082-01 FABIO..."). Tenta o
+// formato com loja primeiro; cai pra dígitos simples se não bater (layout
+// sem sufixo de loja).
+export function extrairCodigoFornecedor(fornecedor: string): string {
+  const match = (fornecedor || '').trim().match(/^(\d+-\d+|\d+)/);
   return match ? match[1] : '';
 }
 

@@ -10,7 +10,7 @@ import { lerRelatorioSaidas } from '@/lib/analise-fiscal-saida-reader';
 import { lerPrimeiraAbaValida } from '@/lib/ler-planilha-multi-aba';
 import { apurarSaidas, type ItemApuradoSaida, type ResumoApuracaoSaida } from '@/lib/analise-fiscal-saida-compute';
 import type { TesMetadata } from '@/lib/analise-fiscal-tes-registry';
-import { canAccess, type Role } from '@/lib/permissions';
+import { canAccess, canAccessAnaliseFiscalConfig, type Role } from '@/lib/permissions';
 
 type Severidade = 'CRITICO' | 'ALTO' | 'MEDIO' | 'BAIXO' | 'INFORMATIVO';
 
@@ -147,6 +147,7 @@ function AnaliseFiscalSaidaInner() {
   const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
   const [busca, setBusca] = useState('');
   const [role, setRole] = useState<Role | null>(null);
+  const [configExtra, setConfigExtra] = useState(false);
   // Filial ativa é lida do seletor "Filial" no topo da aplicação (Topbar),
   // global pra todo o módulo — esta tela não tem mais seletor próprio.
   const [currentEmpresaGrupoId, setCurrentEmpresaGrupoId] = useState<string | null>(null);
@@ -159,6 +160,7 @@ function AnaliseFiscalSaidaInner() {
       if (res.ok) {
         const data = await res.json();
         setRole(data.user?.currentRole ?? null);
+        setConfigExtra(data.user?.currentAnaliseFiscalConfigExtra ?? false);
         setCurrentEmpresaGrupoId(data.user?.currentEmpresaGrupoId ?? null);
       }
     })();
@@ -370,7 +372,7 @@ function AnaliseFiscalSaidaInner() {
             <p className="text-gray-500 text-sm mt-1">Auditoria do Relatório Fiscal de Saídas (vendas e transferências).</p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
-            {canAccess(role, 'analiseFiscalConfig') && (
+            {canAccessAnaliseFiscalConfig(role, configExtra) && (
               <>
                 <Link href="/dashboard/analise-fiscal/regras" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
                   <BookOpenText size={15} />
@@ -382,7 +384,7 @@ function AnaliseFiscalSaidaInner() {
                 </Link>
               </>
             )}
-            {!canAccess(role, 'analiseFiscalConfig') && canAccess(role, 'analiseFiscalProdutos') && (
+            {!canAccessAnaliseFiscalConfig(role, configExtra) && canAccess(role, 'analiseFiscalProdutos') && (
               <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
                 <Settings size={15} />
                 Produtos com classificação tributária
@@ -401,7 +403,7 @@ function AnaliseFiscalSaidaInner() {
 
       {!apuracao && (
         <div className="flex justify-end gap-4">
-          {canAccess(role, 'analiseFiscalConfig') && (
+          {canAccessAnaliseFiscalConfig(role, configExtra) && (
             <>
               <Link href="/dashboard/analise-fiscal/regras" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
                 <BookOpenText size={15} />
@@ -413,7 +415,7 @@ function AnaliseFiscalSaidaInner() {
               </Link>
             </>
           )}
-          {!canAccess(role, 'analiseFiscalConfig') && canAccess(role, 'analiseFiscalProdutos') && (
+          {!canAccessAnaliseFiscalConfig(role, configExtra) && canAccess(role, 'analiseFiscalProdutos') && (
             <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
               <Settings size={15} />
               Produtos com classificação tributária

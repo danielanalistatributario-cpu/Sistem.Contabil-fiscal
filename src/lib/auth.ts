@@ -45,6 +45,10 @@ export type SessionUser = {
   // Análise e Apuração Fiscal. null = nenhuma filial selecionada (tenant
   // sem cadastro de filiais, ou usuário ainda não escolheu).
   currentEmpresaGrupoId: string | null;
+  // Acesso extra ao módulo 'analiseFiscalConfig', concedido por usuário
+  // (Membership.analiseFiscalConfigExtra) — ver canAccessAnaliseFiscalConfig
+  // em permissions.ts.
+  currentAnaliseFiscalConfigExtra: boolean;
 };
 
 // Resolve o usuario autenticado a partir do cookie de sessao (uso em server components e API routes).
@@ -73,7 +77,9 @@ export async function getSession(): Promise<SessionUser | null> {
     currentCompanyId = memberships[0]?.companyId || null;
   }
 
-  const currentRole = memberships.find((m) => m.companyId === currentCompanyId)?.role || null;
+  const currentMembership = user.memberships.find((m) => m.companyId === currentCompanyId);
+  const currentRole = currentMembership?.role as Role | undefined ?? null;
+  const currentAnaliseFiscalConfigExtra = currentMembership?.analiseFiscalConfigExtra ?? false;
 
   // Só consulta o banco se o cookie de filial existir — usuário/tenant que
   // nunca usou o seletor "Filial" (Análise Fiscal) não paga esse custo em
@@ -97,6 +103,7 @@ export async function getSession(): Promise<SessionUser | null> {
     currentCompanyId,
     currentRole,
     currentEmpresaGrupoId,
+    currentAnaliseFiscalConfigExtra,
   };
 }
 

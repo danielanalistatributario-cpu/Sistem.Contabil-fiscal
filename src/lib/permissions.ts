@@ -31,6 +31,19 @@ export function canAccess(role: Role | null, moduleKey: ModuleKey): boolean {
   return (MODULE_PERMISSIONS[moduleKey] as string[]).includes(role);
 }
 
+// Acesso extra ao módulo 'analiseFiscalConfig' (Regras da Análise e
+// Apuração Fiscal + Configurar TES), concedido por usuário — não por
+// papel — via Membership.analiseFiscalConfigExtra. Existe porque o
+// sistema só tem permissão por papel (mesma coisa pra todo mundo com
+// aquele papel) e o pedido foi liberar esse módulo específico pra UM
+// usuário (ex: Leandro) sem promover o papel dele nem afetar os demais
+// ANALISTA/GESTOR/USUARIO da empresa. Todo lugar que checava
+// `canAccess(role, 'analiseFiscalConfig')` deve usar esta função no
+// lugar, passando o `analiseFiscalConfigExtra` da sessão/membership.
+export function canAccessAnaliseFiscalConfig(role: Role | null, extra: boolean): boolean {
+  return canAccess(role, 'analiseFiscalConfig') || extra;
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
   ADMINISTRADOR: 'Administrador',
   GESTOR: 'Gestor',

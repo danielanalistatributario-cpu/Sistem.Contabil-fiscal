@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, History, Settings, BookOpenText } from 'lucide-react';
-import { canAccess, type Role } from '@/lib/permissions';
+import { canAccess, canAccessAnaliseFiscalConfig, type Role } from '@/lib/permissions';
 
 type Candidato = { id: string; periodo: string | null; fileName: string | null; processedAt: string; totalLinhas: number };
 
@@ -69,6 +69,7 @@ function ApuracaoFiscalInner() {
   const apuracaoIdParam = searchParams.get('apuracaoId');
 
   const [role, setRole] = useState<Role | null>(null);
+  const [configExtra, setConfigExtra] = useState(false);
   const [detalhe, setDetalhe] = useState<Detalhe | null>(null);
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
 
@@ -99,6 +100,7 @@ function ApuracaoFiscalInner() {
       if (res.ok) {
         const data = await res.json();
         setRole(data.user?.currentRole ?? null);
+        setConfigExtra(data.user?.currentAnaliseFiscalConfigExtra ?? false);
         setCurrentEmpresaGrupoId(data.user?.currentEmpresaGrupoId ?? null);
       }
     })();
@@ -280,7 +282,7 @@ function ApuracaoFiscalInner() {
             </p>
           </div>
           <div className="flex items-center gap-4 shrink-0">
-            {canAccess(role, 'analiseFiscalConfig') && (
+            {canAccessAnaliseFiscalConfig(role, configExtra) && (
               <>
                 <Link href="/dashboard/analise-fiscal/regras" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
                   <BookOpenText size={15} />
@@ -292,7 +294,7 @@ function ApuracaoFiscalInner() {
                 </Link>
               </>
             )}
-            {!canAccess(role, 'analiseFiscalConfig') && canAccess(role, 'analiseFiscalProdutos') && (
+            {!canAccessAnaliseFiscalConfig(role, configExtra) && canAccess(role, 'analiseFiscalProdutos') && (
               <Link href="/dashboard/analise-fiscal/config" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand transition-colors">
                 <Settings size={15} />
                 Produtos com classificação tributária

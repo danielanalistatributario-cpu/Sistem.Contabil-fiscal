@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-type UserRow = { membershipId: string; userId: string; name: string; email: string; role: string };
+type UserRow = { membershipId: string; userId: string; name: string; email: string; role: string; analiseFiscalConfigExtra: boolean };
 
 const ROLES = ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO', 'CLIENTE'];
 const ROLE_LABELS: Record<string, string> = {
@@ -63,6 +63,15 @@ export default function UsersPage() {
     carregar();
   }
 
+  async function handleConfigExtraChange(membershipId: string, valor: boolean) {
+    await fetch(`/api/users/${membershipId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analiseFiscalConfigExtra: valor }),
+    });
+    carregar();
+  }
+
   async function handleRemove(membershipId: string) {
     if (!confirm('Remover o acesso deste usuário a esta empresa?')) return;
     await fetch(`/api/users/${membershipId}`, { method: 'DELETE' });
@@ -74,7 +83,10 @@ export default function UsersPage() {
       <div>
         <h1 className="text-2xl font-display font-semibold text-brand">Usuários e Permissões</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Gerencie quem tem acesso à empresa atualmente selecionada, e com qual perfil.
+          Gerencie quem tem acesso à empresa atualmente selecionada, e com qual perfil. A coluna &quot;Acesso
+          extra&quot; libera Regras da Análise e Apuração Fiscal + Configurar TES pra esse usuário específico, sem
+          mudar o perfil dele nem afetar outros usuários com o mesmo perfil (hoje só Administrador tem esse módulo
+          por padrão).
         </p>
       </div>
 
@@ -131,6 +143,7 @@ export default function UsersPage() {
               <th className="py-2 pr-3">Nome</th>
               <th className="py-2 pr-3">E-mail</th>
               <th className="py-2 pr-3">Perfil</th>
+              <th className="py-2 pr-3">Acesso extra: Regras/Configurar TES</th>
               <th className="py-2 pr-3"></th>
             </tr>
           </thead>
@@ -151,6 +164,20 @@ export default function UsersPage() {
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="py-2 pr-3">
+                  {u.role === 'ADMINISTRADOR' ? (
+                    <span className="text-xs text-gray-400">já tem (Administrador)</span>
+                  ) : (
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={u.analiseFiscalConfigExtra}
+                        onChange={(e) => handleConfigExtraChange(u.membershipId, e.target.checked)}
+                      />
+                      Liberado
+                    </label>
+                  )}
                 </td>
                 <td className="py-2 pr-3">
                   <button onClick={() => handleRemove(u.membershipId)} className="text-xs text-red-500 underline">
