@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { ImportHero, ImportTrustNote } from '@/components/ImportHero';
 import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine, type NotaSaida } from '@/lib/sped-parser';
@@ -8,7 +8,8 @@ import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
 import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
 import { gerarExcelTributos } from '@/lib/analise-fiscal-excel-tributos';
-import { analisarNumeracaoSaida } from '@/lib/sped-numeracao';
+import { analisarNumeracaoSaida, extrairFaixasNumeracao } from '@/lib/sped-numeracao';
+import { lerSituacaoNotasSf3, construirMapaSf3, type NotaSf3 } from '@/lib/sf3-situacao-reader';
 
 type UploadResult = {
   spedFileId: string;
@@ -43,6 +44,79 @@ export default function SpedPage() {
   const [erroExcelTributos, setErroExcelTributos] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Segunda fonte opcional pra Análise de Numeração — planilha "SF3" do
+  // Protheus (ou equivalente), usada só pra reclassificar números "Não
+  // localizados" quando o SPED não trouxe a situação real (ver
+  // sped-numeracao.ts). Nada aqui depende do arquivo SPED já ter sido
+  // importado — pode selecionar os dois em qualquer ordem.
+  const [sf3File, setSf3File] = useState<File | null>(null);
+  const [sf3Notas, setSf3Notas] = useState<NotaSf3[]>([]);
+  const [erroSf3, setErroSf3] = useState<string | null>(null);
+  const [lendoSf3, setLendoSf3] = useState(false);
+  const sf3InputRef = useRef<HTMLInputElement>(null);
+
+  // Mesma segunda fonte, só que sincronizada automaticamente do Protheus
+  // (tabela SF3, ver scripts/sync-situacao-notas-protheus.ts) — carregada
+  // sozinha, sem precisar de upload nenhum, assim que o SPED é importado.
+  // Quando o usuário também anexa a planilha manual, as duas se somam (a
+  // manual tem prioridade em caso de conflito — ver mapaSf3 abaixo).
+  const [sf3NotasProtheus, setSf3NotasProtheus] = useState<NotaSf3[]>([]);
+  const [sf3UltimaSincronizacao, setSf3UltimaSincronizacao] = useState<string | null>(null);
+
+  // Só busca depois do SPED importado, e só o intervalo mín-máx de
+  // número que o próprio arquivo definiu (extrairFaixasNumeracao) — a
+  // sincronização guarda até 3 anos de histórico, mas a busca pra uma
+  // análise de um mês não deve trazer os outros anos inteiros (pedido
+  // explícito do usuário).
+  useEffect(() => {
+    if (!result) {
+      setSf3NotasProtheus([]);
+      setSf3UltimaSincronizacao(null);
+      return;
+    }
+    const faixas = extrairFaixasNumeracao(result.notasSaida);
+    if (faixas.length === 0) return;
+    (async () => {
+      const res = await fetch('/api/sped/situacao-notas-protheus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ faixas }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSf3NotasProtheus(data.notas || []);
+        setSf3UltimaSincronizacao(data.ultimaSincronizacao || null);
+      }
+    })();
+  }, [result]);
+
+  async function handleSelecionarSf3(f: File | null) {
+    setSf3File(f);
+    setErroSf3(null);
+    setSf3Notas([]);
+    if (!f) return;
+    setLendoSf3(true);
+    try {
+      const buffer = await f.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' }) as unknown[][];
+      const leitura = lerSituacaoNotasSf3(aoa);
+      if (leitura.erro) {
+        setErroSf3(leitura.erro);
+        return;
+      }
+      if (leitura.notas.length === 0) {
+        setErroSf3('Nenhuma linha válida encontrada na planilha.');
+        return;
+      }
+      setSf3Notas(leitura.notas);
+    } catch {
+      setErroSf3('Não foi possível ler o arquivo. Verifique se é um .xlsx/.csv válido.');
+    } finally {
+      setLendoSf3(false);
+    }
+  }
 
   function baixarBlob(buffer: Uint8Array, nomeArquivo: string) {
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -177,10 +251,19 @@ export default function SpedPage() {
     });
   }, [result, filtroBloco, filtroRegistro]);
 
+  // sf3NotasProtheus (sincronizado) primeiro, sf3Notas (upload manual)
+  // depois — construirMapaSf3 sobrescreve por chave repetida, então o
+  // upload manual vence em caso de conflito (dado mais recente/específico
+  // que o usuário trouxe de propósito).
+  const mapaSf3 = useMemo(() => {
+    const combinado = [...sf3NotasProtheus, ...sf3Notas];
+    return combinado.length > 0 ? construirMapaSf3(combinado) : undefined;
+  }, [sf3NotasProtheus, sf3Notas]);
+
   const gruposNumeracao = useMemo(() => {
     if (!result) return [];
-    return analisarNumeracaoSaida(result.notasSaida);
-  }, [result]);
+    return analisarNumeracaoSaida(result.notasSaida, mapaSf3);
+  }, [result, mapaSf3]);
 
   function handleExportExcel() {
     if (!result) return;
@@ -240,12 +323,20 @@ export default function SpedPage() {
           Inutilizadas: g.qtdInutilizadas,
           Denegadas: g.qtdDenegadas,
           'Não Localizadas': g.qtdNaoLocalizadas,
+          'Resolvidas pela Planilha Protheus': g.qtdResolvidasPorSf3,
         }))
       );
       XLSX.utils.book_append_sheet(workbook, wsNumResumo, 'Numeração Saída - Resumo');
 
       const faltantesLinhas = gruposNumeracao.flatMap((g) =>
-        g.faltantes.map((f) => ({ Modelo: g.modeloLabel, Série: g.serie, Número: f.numero }))
+        g.faltantes.map((f) => ({
+          Modelo: g.modeloLabel,
+          Série: g.serie,
+          Número: f.numero,
+          Situação: f.categoria,
+          Fonte: f.fonte === 'SF3' ? 'Planilha Protheus' : 'SPED (não localizado)',
+          Chave: f.chave || '',
+        }))
       );
       if (faltantesLinhas.length > 0) {
         const wsFaltantes = XLSX.utils.json_to_sheet(faltantesLinhas);
@@ -341,7 +432,7 @@ export default function SpedPage() {
               <p className="text-gray-500 text-sm mt-1">Resumo do arquivo importado — filtre, confira e exporte.</p>
             </div>
             <button
-              onClick={() => { setResult(null); setFile(null); }}
+              onClick={() => { setResult(null); setFile(null); handleSelecionarSf3(null); if (sf3InputRef.current) sf3InputRef.current.value = ''; }}
               className="text-sm text-brand underline whitespace-nowrap"
             >
               + Novo arquivo
@@ -433,13 +524,57 @@ export default function SpedPage() {
             <div className="card-surface p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                 <h2 className="font-semibold text-brand">Análise de Numeração — Saída</h2>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 max-w-xl">
                   Um grupo por modelo + série — compara o intervalo mínimo–máximo de número encontrado contra o que
                   realmente apareceu no arquivo. &quot;Não localizada&quot; é um número que não está em nenhum C100
                   deste SPED — pode existir na Sefaz sem ter sido escriturado aqui, ou nunca ter sido emitido; o
                   arquivo sozinho não distingue os dois casos.
                 </p>
               </div>
+
+              {sf3NotasProtheus.length > 0 ? (
+                <p className="text-xs text-teal bg-teal/5 border border-teal/20 rounded-lg px-3 py-2 mb-3">
+                  Situação de {sf3NotasProtheus.length} nota(s) do Protheus cruzada(s) automaticamente, só no
+                  intervalo de número deste arquivo
+                  {sf3UltimaSincronizacao && ` (sincronização mais recente usada: ${new Date(sf3UltimaSincronizacao).toLocaleString('pt-BR')})`} —
+                  sem precisar de upload.
+                </p>
+              ) : (
+                <p className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mb-3">
+                  Nenhuma sincronização automática do Protheus encontrada pra esta filial — use o upload manual
+                  abaixo, ou peça pra configurar a sincronização (script de sincronização da tabela SF3).
+                </p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3 bg-gray-50 border border-gray-100 rounded-lg px-4 py-3 mb-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    Segunda fonte manual (opcional) — planilha de situação de notas (ex: SF3 do Protheus)
+                  </label>
+                  <input
+                    ref={sf3InputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => handleSelecionarSf3(e.target.files?.[0] || null)}
+                    disabled={lendoSf3}
+                    className="text-sm"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 flex-1 min-w-[220px]">
+                  Algumas notas (ex: inutilizadas) deixaram de ser obrigatórias no SPED a partir de 01/2023 e o
+                  Protheus pode não gerar o C100 delas — se você anexar aqui a planilha com a coluna &quot;Retorno
+                  SEFA&quot; (cStat), o sistema cruza os números &quot;não localizados&quot; com ela antes de
+                  desistir.
+                </p>
+                {lendoSf3 && <span className="text-xs text-gray-500">Lendo...</span>}
+              </div>
+              {erroSf3 && <p className="text-sm text-red-600 mb-4">{erroSf3}</p>}
+              {sf3File && sf3Notas.length > 0 && !erroSf3 && (
+                <p className="text-xs text-teal mb-4">
+                  {sf3Notas.length} nota(s) lida(s) de &quot;{sf3File.name}&quot; — cruzando com os números não
+                  localizados abaixo.
+                </p>
+              )}
 
               <div className="space-y-4">
                 {gruposNumeracao.map((g) => (
@@ -475,6 +610,13 @@ export default function SpedPage() {
                       </div>
                     </div>
 
+                    {g.qtdResolvidasPorSf3 > 0 && (
+                      <p className="text-xs text-teal bg-teal/5 border border-teal/20 rounded-lg px-3 py-2 mt-3">
+                        {g.qtdResolvidasPorSf3} número(s) que o SPED não trazia foram explicados pela planilha
+                        Protheus (contados acima na categoria certa, não mais em &quot;Não localizadas&quot;).
+                      </p>
+                    )}
+
                     {g.intervaloGrandeDemais && (
                       <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
                         Intervalo entre o menor e o maior número ({g.totalEsperado.toLocaleString('pt-BR')} posições) é
@@ -484,17 +626,31 @@ export default function SpedPage() {
                     )}
 
                     {!g.intervaloGrandeDemais && g.faltantes.length > 0 && (
-                      <div className="mt-3 overflow-x-auto max-h-48 overflow-y-auto border border-red-100 rounded-lg">
+                      <div className="mt-3 overflow-x-auto max-h-48 overflow-y-auto border border-gray-100 rounded-lg">
                         <table className="w-full text-xs">
-                          <thead className="bg-red-50 sticky top-0">
+                          <thead className="bg-gray-50 sticky top-0">
                             <tr>
-                              <th className="text-left px-3 py-1.5 font-medium text-red-700">Número não localizado</th>
+                              <th className="text-left px-3 py-1.5 font-medium text-gray-600">Número</th>
+                              <th className="text-left px-3 py-1.5 font-medium text-gray-600">Situação</th>
+                              <th className="text-left px-3 py-1.5 font-medium text-gray-600">Fonte</th>
                             </tr>
                           </thead>
                           <tbody>
                             {g.faltantes.slice(0, 200).map((f) => (
-                              <tr key={f.numero} className="border-t border-red-50">
-                                <td className="px-3 py-1 font-mono text-red-700">{f.numero}</td>
+                              <tr key={f.numero} className="border-t border-gray-50">
+                                <td className="px-3 py-1 font-mono text-gray-700">{f.numero}</td>
+                                <td className="px-3 py-1">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${
+                                    f.categoria === 'Não localizada' ? 'bg-red-100 text-red-700' :
+                                    f.categoria === 'Autorizada' ? 'bg-green-100 text-green-700' :
+                                    f.categoria === 'Cancelada' ? 'bg-gray-200 text-gray-700' :
+                                    f.categoria === 'Inutilizada' ? 'bg-amber-100 text-amber-700' :
+                                    'bg-orange-100 text-orange-700'
+                                  }`}>
+                                    {f.categoria}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-1 text-gray-400">{f.fonte === 'SF3' ? 'Planilha Protheus' : '—'}</td>
                               </tr>
                             ))}
                           </tbody>

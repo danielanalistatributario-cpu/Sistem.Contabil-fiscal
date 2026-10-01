@@ -53,6 +53,7 @@ model Company {
   apuracoesFiscaisIcms AnaliseFiscalApuracaoIcms[]
   analiseFiscalProdutosClassificacao AnaliseFiscalProdutoClassificacao[]
   analiseFiscalFornecedoresIgnorados AnaliseFiscalFornecedorIgnorado[]
+  situacoesNotasProtheus NotaFiscalSituacaoProtheus[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -925,6 +926,7 @@ model AnaliseFiscalCnpjGrupo {
   classificacoesProdutoReferencia ClassificacaoProdutoReferencia[]
   produtosBloqueados ProdutoBloqueado[]
   fornecedoresIgnorados AnaliseFiscalFornecedorIgnorado[]
+  situacoesNotasProtheus NotaFiscalSituacaoProtheus[]
 
   @@unique([companyId, cnpj])
 }
@@ -956,6 +958,38 @@ model AnaliseFiscalFornecedorIgnorado {
   empresaGrupo     AnaliseFiscalCnpjGrupo? @relation(fields: [empresaGrupoId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, empresaGrupoId, codigoFornecedor])
+}
+
+// Situação real de cada nota de Saída (NF-e/NFC-e), sincronizada da
+// tabela SF3 do Protheus (scripts/sync-situacao-notas-protheus.ts) —
+// segunda fonte pra Análise de Numeração do Conversor SPED
+// (sped-numeracao.ts), porque desde 01/2023 denegada/inutilizada
+// deixaram de ser obrigatórias no SPED e o Protheus às vezes nem gera
+// o C100 delas (achado real, 01/10/2026: nota 186424 da Passarela,
+// inutilizada com protocolo Sefaz, nunca apareceu no SPED). O Vercel
+// não alcança o Protheus direto (rede local do escritório) — por isso
+// isto é uma CÓPIA sincronizada, igual a PerfilProduto/PerfilProdutoItem,
+// não uma consulta ao vivo. empresaGrupoId é resolvido automaticamente
+// pelo script, decodificando o CNPJ de dentro da própria chave de
+// acesso (posições 7-20) e cruzando contra o CNPJ já cadastrado de
+// cada filial — não depende de nenhum cadastro novo de "filial
+// Protheus".
+model NotaFiscalSituacaoProtheus {
+  id             String   @id @default(cuid())
+  companyId      String
+  empresaGrupoId String?
+  modelo         String // "55" ou "65", decodificado da chave de acesso
+  serie          String
+  numero         Int
+  cStat          String // F3_CODRSEF — código de retorno da Sefaz (100/101/102/110/301/302/303...)
+  chave          String?
+  dataEmissao    String?
+  dataCancelamento String?
+  atualizadoEm   DateTime @updatedAt
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  empresaGrupo   AnaliseFiscalCnpjGrupo? @relation(fields: [empresaGrupoId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, empresaGrupoId, modelo, serie, numero])
 }
 
 // Apuração Fiscal (Livro de Apuração do ICMS) — terceira seção de
