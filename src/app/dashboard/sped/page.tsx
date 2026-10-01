@@ -45,6 +45,14 @@ const TIPO_SPED_LABELS: Record<TipoSped, string> = {
   desconhecido: 'Não identificado',
 };
 
+// Formata uma data AAAAMMDD (formato de F3_EMISSAO/dataEmissao vindo do
+// Protheus — já convertido a partir do DDMMAAAA do SPED em
+// sped-parser.ts) pra exibição DD/MM/AAAA.
+function fmtDataYyyymmdd(v: string | null): string {
+  if (!v || v.length !== 8) return '—';
+  return `${v.slice(6, 8)}/${v.slice(4, 6)}/${v.slice(0, 4)}`;
+}
+
 export default function SpedPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -424,6 +432,98 @@ export default function SpedPage() {
     XLSX.writeFile(workbook, `sped-fiscal-${result.fileName.replace(/\.[^.]+$/, '')}.xlsx`);
   }
 
+  // Exports dedicados das duas análises (pedido explícito do usuário) —
+  // Excel gerado no navegador, igual ao resto do Conversor SPED; PDF via
+  // rota de servidor com pdfkit (os dados computados aqui são enviados
+  // prontos, a rota só desenha — mesmo padrão de outras exportações em
+  // PDF do sistema).
+  function handleExportNumeracaoExcel() {
+    if (!result) return;
+    const workbook = XLSX.utils.book_new();
+    const wsResumo = XLSX.utils.json_to_sheet(
+      gruposNumeracao.map((g) => ({
+        Modelo: g.modeloLabel,
+        Série: g.serie,
+        'Nº Mínimo': g.numeroMinimo,
+        'Nº Máximo': g.numeroMaximo,
+        'Total Esperado': g.totalEsperado,
+        Autorizadas: g.qtdAutorizadas,
+        Canceladas: g.qtdCanceladas,
+        Inutilizadas: g.qtdInutilizadas,
+        Denegadas: g.qtdDenegadas,
+        'Não Localizadas/Faltantes': g.qtdNaoLocalizadas,
+        'Resolvidas pela Planilha/Protheus': g.qtdResolvidasPorSf3,
+      }))
+    );
+    XLSX.utils.book_append_sheet(workbook, wsResumo, 'Resumo');
+    const faltantesLinhas = gruposNumeracao.flatMap((g) =>
+      g.faltantes.map((f) => ({
+        Modelo: g.modeloLabel,
+        Série: g.serie,
+        Número: f.numero,
+        Situação: f.categoria,
+        Fonte: f.fonte === 'SF3' ? 'Planilha/Protheus' : 'SPED',
+        Chave: f.chave || '',
+      }))
+    );
+    if (faltantesLinhas.length > 0) {
+      const wsFaltantes = XLSX.utils.json_to_sheet(faltantesLinhas);
+      XLSX.utils.book_append_sheet(workbook, wsFaltantes, 'Não Localizadas-Faltantes');
+    }
+    XLSX.writeFile(workbook, `Analise_Numeracao_${result.fileName.replace(/\.[^.]+$/, '')}.xlsx`);
+  }
+
+  async function handleExportNumeracaoPdf() {
+    if (!result) return;
+    const res = await fetch('/api/sped/numeracao/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grupos: gruposNumeracao, fileName: result.fileName, nomeEmpresa: result.nomeEmpresa, competencia: result.competencia }),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }
+
+  function handleExportRetornoDiferenteExcel() {
+    if (!result) return;
+    const ws = XLSX.utils.json_to_sheet(
+      notasRetornoDiferente.map((n) => ({
+        Modelo: n.modeloLabel,
+        Série: n.serie,
+        Número: n.numero,
+        'Retorno SEFA': n.cStat,
+        Descrição: CSTAT_LABELS[n.cStat] || '',
+        'Chave NF-e': n.chave || '',
+        'Data Emissão': n.dataEmissao || '',
+        'Data Cancelamento': n.dataCancelamento || '',
+      }))
+    );
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, ws, 'Retorno SEFA Diferente 100');
+    XLSX.writeFile(workbook, `Retorno_SEFA_Diferente_100_${result.fileName.replace(/\.[^.]+$/, '')}.xlsx`);
+  }
+
+  async function handleExportRetornoDiferentePdf() {
+    if (!result) return;
+    const res = await fetch('/api/sped/notas-retorno-diferente/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notas: notasRetornoDiferente,
+        fileName: result.fileName,
+        nomeEmpresa: result.nomeEmpresa,
+        competenciaInicio: result.competenciaInicio,
+        competenciaFim: result.competenciaFim,
+      }),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }
+
   // Deriva as opções dos filtros do resumo por bloco/registro (sempre
   // completo, conta o arquivo inteiro) em vez de escanear result.linhas
   // (pode vir cortada em arquivos grandes — ver linhasTruncadas).
@@ -592,11 +692,19 @@ export default function SpedPage() {
             <div className="card-surface p-5">
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                 <h2 className="font-semibold text-brand">Análise de Numeração — Saída</h2>
-                <p className="text-xs text-gray-500 max-w-xl">
+                <div className="flex items-center gap-2">
+                  <button onClick={handleExportNumeracaoPdf} className="border border-accent text-accent rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                    Exportar PDF
+                  </button>
+                  <button onClick={handleExportNumeracaoExcel} className="bg-accent text-white rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                    Exportar Excel
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 max-w-xl basis-full">
                   Um grupo por modelo + série — compara o intervalo mínimo–máximo de número encontrado contra o que
-                  realmente apareceu no arquivo. &quot;Não localizada&quot; é um número que não está em nenhum C100
-                  deste SPED — pode existir na Sefaz sem ter sido escriturado aqui, ou nunca ter sido emitido; o
-                  arquivo sozinho não distingue os dois casos.
+                  realmente apareceu no arquivo. &quot;Não localizada/Faltante&quot; é um número que não está em
+                  nenhum C100 deste SPED — pode existir na Sefaz sem ter sido escriturado aqui, ou nunca ter sido
+                  emitido; o arquivo sozinho não distingue os dois casos.
                 </p>
               </div>
 
@@ -709,7 +817,7 @@ export default function SpedPage() {
                                 <td className="px-3 py-1 font-mono text-gray-700">{f.numero}</td>
                                 <td className="px-3 py-1">
                                   <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${
-                                    f.categoria === 'Não localizada' ? 'bg-red-100 text-red-700' :
+                                    f.categoria === 'Não localizada/Faltante' ? 'bg-red-100 text-red-700' :
                                     f.categoria === 'Autorizada' ? 'bg-green-100 text-green-700' :
                                     f.categoria === 'Cancelada' ? 'bg-gray-200 text-gray-700' :
                                     f.categoria === 'Inutilizada' ? 'bg-amber-100 text-amber-700' :
@@ -742,11 +850,19 @@ export default function SpedPage() {
                 <h2 className="font-semibold text-brand">
                   Notas com Retorno SEFA diferente de 100 {notasRetornoDiferente.length > 0 && `(${notasRetornoDiferente.length})`}
                 </h2>
-                <p className="text-xs text-gray-500 max-w-xl">
+                <div className="flex items-center gap-2">
+                  <button onClick={handleExportRetornoDiferentePdf} className="border border-accent text-accent rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                    Exportar PDF
+                  </button>
+                  <button onClick={handleExportRetornoDiferenteExcel} className="bg-accent text-white rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                    Exportar Excel
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 max-w-xl basis-full">
                   Direto da coluna &quot;Retorno SEFA&quot; (cStat) da SF3 do Protheus — toda nota (NF-e ou NFC-e)
                   cujo código de retorno não é 100 (Autorizado), dentro da competência deste arquivo
-                  ({result.competenciaInicio} a {result.competenciaFim}). Não depende do que apareceu no SPED — é a
-                  situação registrada direto na Sefaz.
+                  ({fmtDataYyyymmdd(result.competenciaInicio)} a {fmtDataYyyymmdd(result.competenciaFim)}). Não
+                  depende do que apareceu no SPED — é a situação registrada direto na Sefaz.
                 </p>
               </div>
 
@@ -780,7 +896,7 @@ export default function SpedPage() {
                             </span>
                           </td>
                           <td className="px-3 py-1.5 font-mono text-[11px] break-all">{n.chave || '—'}</td>
-                          <td className="px-3 py-1.5">{n.dataEmissao || '—'}</td>
+                          <td className="px-3 py-1.5">{fmtDataYyyymmdd(n.dataEmissao)}</td>
                         </tr>
                       ))}
                     </tbody>

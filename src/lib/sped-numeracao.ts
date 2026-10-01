@@ -34,7 +34,7 @@ export function normalizarSerie(serie: string): string {
   return semZeros || '0';
 }
 
-export type CategoriaNumeracao = 'Autorizada' | 'Cancelada' | 'Inutilizada' | 'Denegada' | 'Não localizada';
+export type CategoriaNumeracao = 'Autorizada' | 'Cancelada' | 'Inutilizada' | 'Denegada' | 'Não localizada/Faltante';
 
 // COD_SIT 00/01/06/07/08 representam documento válido (regular,
 // complementar ou regime especial) — todos contam como "Autorizada" pra
@@ -235,7 +235,7 @@ export function analisarNumeracaoSaida(
         }
 
         qtdNaoLocalizadas++;
-        faltantes.push({ numero: n, categoria: 'Não localizada', codSit: null, situacaoDetalhe: null, chave: null, dataEmissao: null, valor: null, linhaOriginal: null, fonte: null });
+        faltantes.push({ numero: n, categoria: 'Não localizada/Faltante', codSit: null, situacaoDetalhe: null, chave: null, dataEmissao: null, valor: null, linhaOriginal: null, fonte: null });
       }
     } else {
       // Ainda conta o que está presente (não precisa do loop do
