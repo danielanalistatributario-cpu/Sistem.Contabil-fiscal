@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { ImportHero, ImportTrustNote } from '@/components/ImportHero';
-import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine } from '@/lib/sped-parser';
+import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine, type NotaSaidaCriticada } from '@/lib/sped-parser';
 import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
 import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
@@ -19,6 +19,7 @@ type UploadResult = {
   porRegistro: Record<string, number>;
   tipoSped: TipoSped;
   linhas: SpedLine[];
+  notasSaidaCriticadas: NotaSaidaCriticada[];
 };
 
 const TIPO_SPED_LABELS: Record<TipoSped, string> = {
@@ -155,6 +156,7 @@ export default function SpedPage() {
         porRegistro: resumo.porRegistro,
         tipoSped: resumo.tipoSped,
         linhas: resumo.linhas,
+        notasSaidaCriticadas: resumo.notasSaidaCriticadas,
       });
     } catch {
       setError('Falha ao processar o arquivo.');
@@ -185,15 +187,35 @@ export default function SpedPage() {
       // abas de bloco que têm documentos com essa informação (A, C, D) —
       // nos demais (0, 1, 9, M...) seria uma coluna vazia.
       const temOperacao = linhasBloco.some((l) => l.operacao);
+      const temSituacao = linhasBloco.some((l) => l.situacaoDocumento);
       const rows = linhasBloco.map((l) => {
         const row: Record<string, string | number> = { Linha: l.linhaOriginal, Registro: l.registro };
         if (temOperacao) row['Operação'] = l.operacao;
+        if (temSituacao) row['Situação'] = l.situacaoDocumento;
         for (let i = 0; i < maxCampos; i++) row[`Campo${i + 1}`] = l.campos[i] ?? '';
         return row;
       });
       const ws = XLSX.utils.json_to_sheet(rows);
       XLSX.utils.book_append_sheet(workbook, ws, `Bloco ${bloco}`.slice(0, 31));
     });
+
+    // Aba de notas de Saída canceladas/inutilizadas/denegadas, só quando
+    // o arquivo tiver alguma — evita aba vazia na maioria dos arquivos.
+    if (result.notasSaidaCriticadas.length > 0) {
+      const wsCriticas = XLSX.utils.json_to_sheet(
+        result.notasSaidaCriticadas.map((n) => ({
+          Linha: n.linhaOriginal,
+          Situação: n.situacao,
+          'Cód. Situação': n.codSit,
+          Série: n.serie,
+          Número: n.numero,
+          'Chave NF-e': n.chave,
+          'Data Emissão': n.dataEmissao,
+          Valor: n.valor,
+        }))
+      );
+      XLSX.utils.book_append_sheet(workbook, wsCriticas, 'Saída Cancel-Inutil-Deneg');
+    }
 
     // Aba resumo
     const resumoRows = Object.entries(result.porBloco).map(([bloco, qtd]) => ({
@@ -323,6 +345,54 @@ export default function SpedPage() {
             </p>
           )}
 
+          {result.notasSaidaCriticadas.length > 0 ? (
+            <div className="card-surface p-5 border border-red-300 bg-red-50/40">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h2 className="font-semibold text-red-700">
+                  ⚠ {result.notasSaidaCriticadas.length} nota(s) de Saída cancelada(s)/inutilizada(s)/denegada(s)
+                </h2>
+                <p className="text-xs text-gray-500">
+                  Lido do COD_SIT (registro C100) — exportadas também na aba &quot;Saída Cancel-Inutil-Deneg&quot;
+                  do Excel completo.
+                </p>
+              </div>
+              <div className="overflow-x-auto max-h-72 overflow-y-auto border border-red-100 rounded-lg bg-white">
+                <table className="w-full text-xs">
+                  <thead className="bg-red-100/60 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-red-700">Situação</th>
+                      <th className="text-left px-3 py-2 font-medium text-red-700">Série</th>
+                      <th className="text-left px-3 py-2 font-medium text-red-700">Número</th>
+                      <th className="text-left px-3 py-2 font-medium text-red-700">Chave NF-e</th>
+                      <th className="text-left px-3 py-2 font-medium text-red-700">Emissão</th>
+                      <th className="text-left px-3 py-2 font-medium text-red-700">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.notasSaidaCriticadas.map((n, idx) => (
+                      <tr key={`${n.linhaOriginal}-${idx}`} className="border-t border-red-50">
+                        <td className="px-3 py-1.5">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 whitespace-nowrap">
+                            {n.situacao}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5">{n.serie}</td>
+                        <td className="px-3 py-1.5 font-mono">{n.numero}</td>
+                        <td className="px-3 py-1.5 font-mono text-[11px] break-all">{n.chave || '—'}</td>
+                        <td className="px-3 py-1.5">{n.dataEmissao}</td>
+                        <td className="px-3 py-1.5">{n.valor}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-teal bg-teal/5 border border-teal/20 rounded-lg px-3 py-2">
+              Nenhuma nota de Saída cancelada, inutilizada ou denegada encontrada no arquivo (COD_SIT do C100).
+            </p>
+          )}
+
           <div className="card-surface p-5 border border-accent/30">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -428,6 +498,7 @@ export default function SpedPage() {
                     <th className="text-left px-3 py-2 font-medium text-gray-500">Linha</th>
                     <th className="text-left px-3 py-2 font-medium text-gray-500">Registro</th>
                     <th className="text-left px-3 py-2 font-medium text-gray-500">Operação</th>
+                    <th className="text-left px-3 py-2 font-medium text-gray-500">Situação</th>
                     <th className="text-left px-3 py-2 font-medium text-gray-500">Campos</th>
                   </tr>
                 </thead>
@@ -437,6 +508,7 @@ export default function SpedPage() {
                       <td className="px-3 py-1.5 text-gray-400">{l.linhaOriginal}</td>
                       <td className="px-3 py-1.5 font-medium text-brand">{l.registro}</td>
                       <td className="px-3 py-1.5 text-gray-600">{l.operacao}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{l.situacaoDocumento}</td>
                       <td className="px-3 py-1.5 text-gray-600 truncate max-w-xl">{l.campos.join(' | ')}</td>
                     </tr>
                   ))}

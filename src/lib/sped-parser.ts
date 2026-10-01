@@ -34,6 +34,44 @@ export type SpedLine = {
   // Entrada/Saída lida do IND_OPER do documento (ver OPERACAO_POR_CABECALHO);
   // '' quando o registro não pertence a um documento que informe isso.
   operacao: 'Entrada' | 'Saída' | '';
+  // Situação do documento (COD_SIT), só preenchida no cabeçalho C100 — ver
+  // COD_SIT_LABELS. '' nos demais registros (inclusive A100/D100, que têm
+  // layout próprio de situação, não tratado aqui — não foi pedido).
+  situacaoDocumento: string;
+};
+
+// Tabela "Código da Situação do Documento" (COD_SIT, campo 6 do C100) —
+// idêntica na EFD ICMS/IPI e na EFD Contribuições (confirmado contra a
+// documentação de ambos os leiautes). A partir de 01/2023 (Ajuste SINIEF
+// 34/2021 e 38/2021), os códigos 04 (denegado) e 05 (inutilizado)
+// deixaram de ser obrigatórios na escrituração — continuam suportados
+// aqui pra arquivos de competência anterior ou empresas que ainda
+// escrituram assim.
+export const COD_SIT_LABELS: Record<string, string> = {
+  '00': 'Regular',
+  '01': 'Regular (extemporâneo)',
+  '02': 'Cancelado',
+  '03': 'Cancelado (extemporâneo)',
+  '04': 'Denegado',
+  '05': 'Inutilizado',
+  '06': 'Complementar',
+  '07': 'Complementar (extemporâneo)',
+  '08': 'Regime Especial/Norma Específica',
+};
+
+// Situações que o usuário pediu pra identificar/criticar nas notas de
+// Saída — já não representam mais uma operação válida de mercadoria.
+const COD_SIT_CRITICOS = new Set(['02', '03', '04', '05']);
+
+export type NotaSaidaCriticada = {
+  linhaOriginal: number;
+  codSit: string;
+  situacao: string;
+  serie: string;
+  numero: string;
+  chave: string;
+  dataEmissao: string;
+  valor: string;
 };
 
 // Registros de cabeçalho de documento que trazem IND_OPER como primeiro
@@ -66,6 +104,9 @@ export type SpedSummary = {
   competencia: string | null;
   nomeEmpresa: string | null;
   tipoSped: TipoSped;
+  // Notas fiscais de Saída (C100, IND_OPER=1) com COD_SIT cancelado,
+  // inutilizado ou denegado — pedido explícito do usuário.
+  notasSaidaCriticadas: NotaSaidaCriticada[];
 };
 
 export function parseSpedFiscal(conteudo: string): SpedSummary {
@@ -74,6 +115,7 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
   const porBloco: Record<string, number> = {};
   const porRegistro: Record<string, number> = {};
   const linhas: SpedLine[] = [];
+  const notasSaidaCriticadas: NotaSaidaCriticada[] = [];
   let camposRegistro0000: string[] | null = null;
   let documentoAtual: { cabecalho: string; operacao: SpedLine['operacao'] } | null = null;
 
@@ -92,17 +134,37 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
     if (registro === '0000') camposRegistro0000 = campos;
 
     let operacao: SpedLine['operacao'] = '';
+    let situacaoDocumento = '';
     if (OPERACAO_POR_CABECALHO.has(registro)) {
       const indOper = campos[1];
       operacao = indOper === '0' ? 'Entrada' : indOper === '1' ? 'Saída' : '';
       documentoAtual = { cabecalho: registro, operacao };
+
+      // COD_SIT só existe no layout do C100 (campo 6) — A100/D100 têm
+      // layout próprio de situação, não tratado aqui.
+      if (registro === 'C100') {
+        const codSit = campos[5] || '';
+        situacaoDocumento = COD_SIT_LABELS[codSit] || '';
+        if (operacao === 'Saída' && COD_SIT_CRITICOS.has(codSit)) {
+          notasSaidaCriticadas.push({
+            linhaOriginal: idx + 1,
+            codSit,
+            situacao: situacaoDocumento,
+            serie: campos[6] || '',
+            numero: campos[7] || '',
+            chave: campos[8] || '',
+            dataEmissao: campos[9] || '',
+            valor: campos[11] || '',
+          });
+        }
+      }
     } else if (documentoAtual && FILHOS_DO_CABECALHO[documentoAtual.cabecalho].has(registro)) {
       operacao = documentoAtual.operacao;
     } else {
       documentoAtual = null;
     }
 
-    linhas.push({ registro, bloco, campos: campos.slice(1), linhaOriginal: idx + 1, operacao });
+    linhas.push({ registro, bloco, campos: campos.slice(1), linhaOriginal: idx + 1, operacao, situacaoDocumento });
 
     // 9999 é sempre o registro de encerramento do arquivo digital (último
     // registro válido, em qualquer leiaute de EFD). Alguns arquivos trazem
@@ -134,6 +196,7 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
     competencia,
     nomeEmpresa,
     tipoSped,
+    notasSaidaCriticadas,
   };
 }
 
