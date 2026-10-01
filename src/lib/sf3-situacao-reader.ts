@@ -34,6 +34,20 @@ export const CSTAT_CATEGORIA: Record<string, SituacaoSf3> = {
   '303': 'Denegada',
 };
 
+// Mesmos códigos, rótulo descritivo pra exibição (relatório "Notas com
+// Retorno SEFA diferente de 100") — confirmado por pesquisa, não
+// memória. Código não mapeado aqui mostra só "Código NNN" na tela, sem
+// inventar descrição.
+export const CSTAT_LABELS: Record<string, string> = {
+  '100': 'Autorizado o uso da NF-e',
+  '101': 'Cancelamento de NF-e homologado',
+  '102': 'Inutilização de número homologada',
+  '110': 'Uso Denegado',
+  '301': 'Uso Denegado — irregularidade fiscal do emitente',
+  '302': 'Uso Denegado — irregularidade fiscal do destinatário',
+  '303': 'Uso Denegado — destinatário não habilitado a operar na UF',
+};
+
 export type NotaSf3 = {
   modelo: string | null;
   serie: string;

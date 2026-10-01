@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 import { CSTAT_CATEGORIA, type SituacaoSf3 } from '@/lib/sf3-situacao-reader';
 import { normalizarSerie } from '@/lib/sped-numeracao';
+import { resolverEmpresaGrupoIdPorCnpj } from '@/lib/protheus-empresa-resolver';
 
 // Devolve a situação de notas já sincronizada do Protheus (tabela SF3,
 // ver scripts/sync-situacao-notas-protheus.ts) — segunda fonte
@@ -69,22 +70,7 @@ export async function POST(req: NextRequest) {
   // reconhecível ou ele não bater com nenhuma filial cadastrada neste
   // tenant (mantém o comportamento anterior nesses casos).
   const cnpjEmpresaDigitos = String(body?.cnpjEmpresa ?? '').replace(/\D/g, '');
-  let empresaGrupoId: string | null = session.currentEmpresaGrupoId;
-  if (cnpjEmpresaDigitos.length === 14) {
-    // Comparação por dígitos (não SQL "contains" com string formatada,
-    // frágil) — mesmo padrão já usado em carregarCnpjsGrupo
-    // (analise-fiscal-config-db.ts).
-    const [filiais, tenant] = await Promise.all([
-      prisma.analiseFiscalCnpjGrupo.findMany({ where: { companyId: session.currentCompanyId }, select: { id: true, cnpj: true } }),
-      prisma.company.findUnique({ where: { id: session.currentCompanyId }, select: { cnpj: true } }),
-    ]);
-    const filial = filiais.find((f) => f.cnpj.replace(/\D/g, '') === cnpjEmpresaDigitos);
-    if (filial) {
-      empresaGrupoId = filial.id;
-    } else if (tenant && tenant.cnpj.replace(/\D/g, '') === cnpjEmpresaDigitos) {
-      empresaGrupoId = null; // cadastro geral do tenant
-    }
-  }
+  const empresaGrupoId = await resolverEmpresaGrupoIdPorCnpj(session.currentCompanyId, cnpjEmpresaDigitos, session.currentEmpresaGrupoId);
 
   const linhas = await prisma.notaFiscalSituacaoProtheus.findMany({
     where: {

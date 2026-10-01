@@ -26,6 +26,16 @@ export function detectarTipoSped(texto: string): TipoSped {
   return 'desconhecido';
 }
 
+// DT_INI/DT_FIN do registro 0000 vêm em DDMMAAAA — converte pra
+// AAAAMMDD (mesmo formato de F3_EMISSAO na SF3 do Protheus) pra dar pra
+// comparar como string. Retorna '' se não tiver 8 dígitos (campo vazio
+// ou malformado) — quem usa trata como ausente.
+function ddmmaaaaParaAaaammdd(v: string): string {
+  const digitos = (v || '').replace(/\D/g, '');
+  if (digitos.length !== 8) return '';
+  return digitos.slice(4, 8) + digitos.slice(2, 4) + digitos.slice(0, 2);
+}
+
 export type SpedLine = {
   registro: string;
   bloco: string;
@@ -103,6 +113,13 @@ export type SpedSummary = {
   porRegistro: Record<string, number>;
   linhas: SpedLine[];
   competencia: string | null;
+  // DT_INI/DT_FIN brutos (YYYYMMDD) do registro 0000 — `competencia`
+  // acima é só o texto de exibição ("01092026 a 30092026"); estes dois
+  // campos servem pra filtrar por data de verdade (ver relatório de
+  // notas com Retorno SEFA diferente de 100, scoped ao período do
+  // arquivo).
+  competenciaInicio: string | null;
+  competenciaFim: string | null;
   nomeEmpresa: string | null;
   // CNPJ (só dígitos) do registro 0000 — usado pra resolver a
   // empresa/filial certa na sincronização automática do Protheus
@@ -191,6 +208,8 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
   const tipoSped: TipoSped = porRegistro['M001'] ? 'contribuicoes' : porRegistro['E001'] ? 'icms_ipi' : 'desconhecido';
 
   let competencia: string | null = null;
+  let competenciaInicio: string | null = null;
+  let competenciaFim: string | null = null;
   let nomeEmpresa: string | null = null;
   let cnpjEmpresa: string | null = null;
   if (camposRegistro0000) {
@@ -202,7 +221,22 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
     nomeEmpresa = nome || null;
     const cnpjDigitos = (cnpj || '').replace(/\D/g, '');
     cnpjEmpresa = cnpjDigitos.length === 14 ? cnpjDigitos : null;
-    if (dtIni && dtFin) competencia = `${dtIni} a ${dtFin}`;
+    if (dtIni && dtFin) {
+      // DT_INI/DT_FIN do registro 0000 vêm em DDMMAAAA (confirmado contra
+      // dado real: "01092026" = 01/09/2026, não ano "0109") — `competencia`
+      // (texto de exibição) mantém esse formato original, igual à tela do
+      // Protheus. Mas o campo F3_EMISSAO da SF3 (Protheus) usa AAAAMMDD
+      // (ex: "20260917") — comparar os dois formatos como string direto dá
+      // resultado errado silencioso (bug real encontrado: "20231220"
+      // "batia" dentro do intervalo "01092026"-"30092026" por pura
+      // coincidência de ordenação lexicográfica). `competenciaInicio`/
+      // `competenciaFim` abaixo já saem convertidos pra AAAAMMDD,
+      // especificamente pra comparar contra dataEmissao sincronizada do
+      // Protheus (ver notas-retorno-diferente/route.ts).
+      competencia = `${dtIni} a ${dtFin}`;
+      competenciaInicio = ddmmaaaaParaAaaammdd(dtIni) || null;
+      competenciaFim = ddmmaaaaParaAaaammdd(dtFin) || null;
+    }
   }
 
   return {
@@ -214,6 +248,8 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
     porRegistro,
     linhas,
     competencia,
+    competenciaInicio,
+    competenciaFim,
     cnpjEmpresa,
     nomeEmpresa,
     tipoSped,

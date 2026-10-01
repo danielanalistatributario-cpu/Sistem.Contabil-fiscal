@@ -9,12 +9,25 @@ import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
 import { gerarExcelTributos } from '@/lib/analise-fiscal-excel-tributos';
 import { analisarNumeracaoSaida, extrairFaixasNumeracao } from '@/lib/sped-numeracao';
-import { lerSituacaoNotasSf3, construirMapaSf3, type NotaSf3 } from '@/lib/sf3-situacao-reader';
+import { lerSituacaoNotasSf3, construirMapaSf3, CSTAT_LABELS, type NotaSf3 } from '@/lib/sf3-situacao-reader';
+
+type NotaRetornoDiferente = {
+  modelo: string;
+  modeloLabel: string;
+  serie: string;
+  numero: number;
+  cStat: string;
+  chave: string | null;
+  dataEmissao: string | null;
+  dataCancelamento: string | null;
+};
 
 type UploadResult = {
   spedFileId: string;
   fileName: string;
   competencia: string | null;
+  competenciaInicio: string | null;
+  competenciaFim: string | null;
   nomeEmpresa: string | null;
   cnpjEmpresa: string | null;
   totalLinhas: number;
@@ -93,6 +106,34 @@ export default function SpedPage() {
         const data = await res.json();
         setSf3NotasProtheus(data.notas || []);
         setSf3UltimaSincronizacao(data.ultimaSincronizacao || null);
+      }
+    })();
+  }, [result]);
+
+  // Relatório à parte, pedido explícito do usuário: toda nota (NF-e ou
+  // NFC-e) com "Retorno SEFA" (F3_CODRSEF/cStat) diferente de 100
+  // (Autorizado), direto da SF3, dentro da COMPETÊNCIA do arquivo
+  // (data de emissão, não intervalo de número) — diferente da Análise
+  // de Numeração, que só mostra números "não localizados" no SPED.
+  const [notasRetornoDiferente, setNotasRetornoDiferente] = useState<NotaRetornoDiferente[]>([]);
+  useEffect(() => {
+    if (!result || !result.competenciaInicio || !result.competenciaFim) {
+      setNotasRetornoDiferente([]);
+      return;
+    }
+    (async () => {
+      const res = await fetch('/api/sped/notas-retorno-diferente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          competenciaInicio: result.competenciaInicio,
+          competenciaFim: result.competenciaFim,
+          cnpjEmpresa: result.cnpjEmpresa,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotasRetornoDiferente(data.notas || []);
       }
     })();
   }, [result]);
@@ -232,6 +273,8 @@ export default function SpedPage() {
         spedFileId: data.spedFileId,
         fileName: file.name,
         competencia: resumo.competencia,
+        competenciaInicio: resumo.competenciaInicio,
+        competenciaFim: resumo.competenciaFim,
         nomeEmpresa: resumo.nomeEmpresa,
         cnpjEmpresa: resumo.cnpjEmpresa,
         totalLinhas: resumo.totalLinhas,
@@ -349,6 +392,24 @@ export default function SpedPage() {
         const wsFaltantes = XLSX.utils.json_to_sheet(faltantesLinhas);
         XLSX.utils.book_append_sheet(workbook, wsFaltantes, 'Numeração Saída - Faltantes');
       }
+    }
+
+    // Aba de notas com Retorno SEFA diferente de 100 no período, só
+    // quando houver alguma.
+    if (notasRetornoDiferente.length > 0) {
+      const wsRetorno = XLSX.utils.json_to_sheet(
+        notasRetornoDiferente.map((n) => ({
+          Modelo: n.modeloLabel,
+          Série: n.serie,
+          Número: n.numero,
+          'Retorno SEFA': n.cStat,
+          Descrição: CSTAT_LABELS[n.cStat] || '',
+          'Chave NF-e': n.chave || '',
+          'Data Emissão': n.dataEmissao || '',
+          'Data Cancelamento': n.dataCancelamento || '',
+        }))
+      );
+      XLSX.utils.book_append_sheet(workbook, wsRetorno, 'Retorno SEFA Diferente 100');
     }
 
     // Aba resumo
@@ -672,6 +733,60 @@ export default function SpedPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {result.competenciaInicio && result.competenciaFim && (
+            <div className="card-surface p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h2 className="font-semibold text-brand">
+                  Notas com Retorno SEFA diferente de 100 {notasRetornoDiferente.length > 0 && `(${notasRetornoDiferente.length})`}
+                </h2>
+                <p className="text-xs text-gray-500 max-w-xl">
+                  Direto da coluna &quot;Retorno SEFA&quot; (cStat) da SF3 do Protheus — toda nota (NF-e ou NFC-e)
+                  cujo código de retorno não é 100 (Autorizado), dentro da competência deste arquivo
+                  ({result.competenciaInicio} a {result.competenciaFim}). Não depende do que apareceu no SPED — é a
+                  situação registrada direto na Sefaz.
+                </p>
+              </div>
+
+              {notasRetornoDiferente.length === 0 ? (
+                <p className="text-xs text-teal bg-teal/5 border border-teal/20 rounded-lg px-3 py-2">
+                  Nenhuma nota com Retorno SEFA diferente de 100 encontrada no período (ou a sincronização do
+                  Protheus pra esta empresa ainda não rodou).
+                </p>
+              ) : (
+                <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-100 rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">Modelo</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">Série</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">Número</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">Retorno SEFA</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">Chave NF-e</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">Emissão</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {notasRetornoDiferente.map((n, idx) => (
+                        <tr key={`${n.modelo}-${n.serie}-${n.numero}-${idx}`} className="border-t border-gray-50">
+                          <td className="px-3 py-1.5">{n.modeloLabel}</td>
+                          <td className="px-3 py-1.5">{n.serie}</td>
+                          <td className="px-3 py-1.5 font-mono">{n.numero}</td>
+                          <td className="px-3 py-1.5">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 whitespace-nowrap" title={CSTAT_LABELS[n.cStat] || ''}>
+                              {n.cStat} — {CSTAT_LABELS[n.cStat] || 'Código ' + n.cStat}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 font-mono text-[11px] break-all">{n.chave || '—'}</td>
+                          <td className="px-3 py-1.5">{n.dataEmissao || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
