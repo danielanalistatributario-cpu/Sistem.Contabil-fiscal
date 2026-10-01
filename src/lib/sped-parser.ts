@@ -104,6 +104,14 @@ export type SpedSummary = {
   linhas: SpedLine[];
   competencia: string | null;
   nomeEmpresa: string | null;
+  // CNPJ (só dígitos) do registro 0000 — usado pra resolver a
+  // empresa/filial certa na sincronização automática do Protheus
+  // (ver /api/sped/situacao-notas-protheus), em vez de depender do
+  // seletor "Filial" do Topbar, que esta tela não tem e pode estar
+  // apontando pra uma filial diferente da do arquivo importado (achado
+  // real, 01/10/2026: usuário com Matriz selecionada importou o SPED
+  // da Passarela — o cruzamento buscava na empresa errada).
+  cnpjEmpresa: string | null;
   tipoSped: TipoSped;
   // TODAS as notas de Saída (C100, IND_OPER=1), qualquer COD_SIT — base
   // pra análise de numeração (ver sped-numeracao.ts), que precisa saber
@@ -184,10 +192,16 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
 
   let competencia: string | null = null;
   let nomeEmpresa: string | null = null;
+  let cnpjEmpresa: string | null = null;
   if (camposRegistro0000) {
     const c = camposRegistro0000;
-    const [dtIni, dtFin, nome] = tipoSped === 'contribuicoes' ? [c[5], c[6], c[7]] : [c[3], c[4], c[5]];
+    // Mesmo deslocamento de 2 campos do comentário no topo do arquivo —
+    // layout: ...|DT_INI|DT_FIN|NOME|CNPJ|CPF|UF|... — CNPJ é sempre o
+    // campo logo depois do nome.
+    const [dtIni, dtFin, nome, cnpj] = tipoSped === 'contribuicoes' ? [c[5], c[6], c[7], c[8]] : [c[3], c[4], c[5], c[6]];
     nomeEmpresa = nome || null;
+    const cnpjDigitos = (cnpj || '').replace(/\D/g, '');
+    cnpjEmpresa = cnpjDigitos.length === 14 ? cnpjDigitos : null;
     if (dtIni && dtFin) competencia = `${dtIni} a ${dtFin}`;
   }
 
@@ -200,6 +214,7 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
     porRegistro,
     linhas,
     competencia,
+    cnpjEmpresa,
     nomeEmpresa,
     tipoSped,
     notasSaida,

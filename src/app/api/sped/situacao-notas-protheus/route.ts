@@ -61,10 +61,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ notas: [], ultimaSincronizacao: null });
   }
 
+  // O Conversor SPED não tem seletor de "Filial" próprio — a empresa
+  // vem do CNPJ do registro 0000 do próprio arquivo, não do seletor
+  // global do Topbar (`session.currentEmpresaGrupoId`), que pode estar
+  // numa filial diferente da do arquivo importado. Resolve por CNPJ
+  // primeiro; só cai pro seletor global se o arquivo não trouxer CNPJ
+  // reconhecível ou ele não bater com nenhuma filial cadastrada neste
+  // tenant (mantém o comportamento anterior nesses casos).
+  const cnpjEmpresaDigitos = String(body?.cnpjEmpresa ?? '').replace(/\D/g, '');
+  let empresaGrupoId: string | null = session.currentEmpresaGrupoId;
+  if (cnpjEmpresaDigitos.length === 14) {
+    // Comparação por dígitos (não SQL "contains" com string formatada,
+    // frágil) — mesmo padrão já usado em carregarCnpjsGrupo
+    // (analise-fiscal-config-db.ts).
+    const [filiais, tenant] = await Promise.all([
+      prisma.analiseFiscalCnpjGrupo.findMany({ where: { companyId: session.currentCompanyId }, select: { id: true, cnpj: true } }),
+      prisma.company.findUnique({ where: { id: session.currentCompanyId }, select: { cnpj: true } }),
+    ]);
+    const filial = filiais.find((f) => f.cnpj.replace(/\D/g, '') === cnpjEmpresaDigitos);
+    if (filial) {
+      empresaGrupoId = filial.id;
+    } else if (tenant && tenant.cnpj.replace(/\D/g, '') === cnpjEmpresaDigitos) {
+      empresaGrupoId = null; // cadastro geral do tenant
+    }
+  }
+
   const linhas = await prisma.notaFiscalSituacaoProtheus.findMany({
     where: {
       companyId: session.currentCompanyId,
-      empresaGrupoId: session.currentEmpresaGrupoId,
+      empresaGrupoId,
       OR: faixas.map((f) => ({
         modelo: f.modelo,
         serie: f.serie,

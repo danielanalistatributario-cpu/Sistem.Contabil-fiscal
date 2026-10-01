@@ -16,6 +16,7 @@ type UploadResult = {
   fileName: string;
   competencia: string | null;
   nomeEmpresa: string | null;
+  cnpjEmpresa: string | null;
   totalLinhas: number;
   porBloco: Record<string, number>;
   porRegistro: Record<string, number>;
@@ -68,7 +69,12 @@ export default function SpedPage() {
   // número que o próprio arquivo definiu (extrairFaixasNumeracao) — a
   // sincronização guarda até 3 anos de histórico, mas a busca pra uma
   // análise de um mês não deve trazer os outros anos inteiros (pedido
-  // explícito do usuário).
+  // explícito do usuário). Manda o CNPJ do registro 0000 do próprio
+  // arquivo pra rota resolver a empresa/filial certa — esta tela não
+  // tem seletor de "Filial" próprio, e o seletor global do Topbar pode
+  // estar numa filial diferente da do arquivo importado (achado real,
+  // 01/10/2026: usuário com Matriz selecionada importou SPED da
+  // Passarela, e o cruzamento buscava no lugar errado).
   useEffect(() => {
     if (!result) {
       setSf3NotasProtheus([]);
@@ -81,7 +87,7 @@ export default function SpedPage() {
       const res = await fetch('/api/sped/situacao-notas-protheus', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ faixas }),
+        body: JSON.stringify({ faixas, cnpjEmpresa: result.cnpjEmpresa }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -227,6 +233,7 @@ export default function SpedPage() {
         fileName: file.name,
         competencia: resumo.competencia,
         nomeEmpresa: resumo.nomeEmpresa,
+        cnpjEmpresa: resumo.cnpjEmpresa,
         totalLinhas: resumo.totalLinhas,
         porBloco: resumo.porBloco,
         porRegistro: resumo.porRegistro,
