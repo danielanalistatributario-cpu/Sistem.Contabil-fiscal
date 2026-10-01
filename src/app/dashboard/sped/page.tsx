@@ -3,11 +3,12 @@
 import { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { ImportHero, ImportTrustNote } from '@/components/ImportHero';
-import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine, type NotaSaidaCriticada } from '@/lib/sped-parser';
+import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine, type NotaSaida } from '@/lib/sped-parser';
 import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
 import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
 import { gerarExcelTributos } from '@/lib/analise-fiscal-excel-tributos';
+import { analisarNumeracaoSaida } from '@/lib/sped-numeracao';
 
 type UploadResult = {
   spedFileId: string;
@@ -19,7 +20,8 @@ type UploadResult = {
   porRegistro: Record<string, number>;
   tipoSped: TipoSped;
   linhas: SpedLine[];
-  notasSaidaCriticadas: NotaSaidaCriticada[];
+  notasSaida: NotaSaida[];
+  notasSaidaCriticadas: NotaSaida[];
 };
 
 const TIPO_SPED_LABELS: Record<TipoSped, string> = {
@@ -156,6 +158,7 @@ export default function SpedPage() {
         porRegistro: resumo.porRegistro,
         tipoSped: resumo.tipoSped,
         linhas: resumo.linhas,
+        notasSaida: resumo.notasSaida,
         notasSaidaCriticadas: resumo.notasSaidaCriticadas,
       });
     } catch {
@@ -173,6 +176,11 @@ export default function SpedPage() {
       return true;
     });
   }, [result, filtroBloco, filtroRegistro]);
+
+  const gruposNumeracao = useMemo(() => {
+    if (!result) return [];
+    return analisarNumeracaoSaida(result.notasSaida);
+  }, [result]);
 
   function handleExportExcel() {
     if (!result) return;
@@ -215,6 +223,34 @@ export default function SpedPage() {
         }))
       );
       XLSX.utils.book_append_sheet(workbook, wsCriticas, 'Saída Cancel-Inutil-Deneg');
+    }
+
+    // Abas de análise de numeração da Saída, só quando houver alguma
+    // série lida — resumo por série + lista dos números faltantes.
+    if (gruposNumeracao.length > 0) {
+      const wsNumResumo = XLSX.utils.json_to_sheet(
+        gruposNumeracao.map((g) => ({
+          Modelo: g.modeloLabel,
+          Série: g.serie,
+          'Nº Mínimo': g.numeroMinimo,
+          'Nº Máximo': g.numeroMaximo,
+          'Total Esperado': g.totalEsperado,
+          Autorizadas: g.qtdAutorizadas,
+          Canceladas: g.qtdCanceladas,
+          Inutilizadas: g.qtdInutilizadas,
+          Denegadas: g.qtdDenegadas,
+          'Não Localizadas': g.qtdNaoLocalizadas,
+        }))
+      );
+      XLSX.utils.book_append_sheet(workbook, wsNumResumo, 'Numeração Saída - Resumo');
+
+      const faltantesLinhas = gruposNumeracao.flatMap((g) =>
+        g.faltantes.map((f) => ({ Modelo: g.modeloLabel, Série: g.serie, Número: f.numero }))
+      );
+      if (faltantesLinhas.length > 0) {
+        const wsFaltantes = XLSX.utils.json_to_sheet(faltantesLinhas);
+        XLSX.utils.book_append_sheet(workbook, wsFaltantes, 'Numeração Saída - Faltantes');
+      }
     }
 
     // Aba resumo
@@ -391,6 +427,89 @@ export default function SpedPage() {
             <p className="text-xs text-teal bg-teal/5 border border-teal/20 rounded-lg px-3 py-2">
               Nenhuma nota de Saída cancelada, inutilizada ou denegada encontrada no arquivo (COD_SIT do C100).
             </p>
+          )}
+
+          {gruposNumeracao.length > 0 && (
+            <div className="card-surface p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h2 className="font-semibold text-brand">Análise de Numeração — Saída</h2>
+                <p className="text-xs text-gray-500">
+                  Um grupo por modelo + série — compara o intervalo mínimo–máximo de número encontrado contra o que
+                  realmente apareceu no arquivo. &quot;Não localizada&quot; é um número que não está em nenhum C100
+                  deste SPED — pode existir na Sefaz sem ter sido escriturado aqui, ou nunca ter sido emitido; o
+                  arquivo sozinho não distingue os dois casos.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {gruposNumeracao.map((g) => (
+                  <div key={`${g.modelo}-${g.serie}`} className="border border-gray-100 rounded-lg p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <p className="text-sm font-medium text-gray-800">
+                        {g.modeloLabel} · Série {g.serie}{' '}
+                        <span className="text-gray-400 font-normal">
+                          — nº {g.numeroMinimo} a {g.numeroMaximo} ({g.totalEsperado} esperado{g.totalEsperado === 1 ? '' : 's'})
+                        </span>
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      <div className="rounded-lg px-3 py-2 bg-green-50 border border-green-100">
+                        <p className="text-[10px] uppercase text-green-700">Autorizadas</p>
+                        <p className="text-lg font-bold text-green-700">{g.qtdAutorizadas}</p>
+                      </div>
+                      <div className="rounded-lg px-3 py-2 bg-gray-50 border border-gray-200">
+                        <p className="text-[10px] uppercase text-gray-500">Canceladas</p>
+                        <p className="text-lg font-bold text-gray-700">{g.qtdCanceladas}</p>
+                      </div>
+                      <div className="rounded-lg px-3 py-2 bg-amber-50 border border-amber-100">
+                        <p className="text-[10px] uppercase text-amber-700">Inutilizadas</p>
+                        <p className="text-lg font-bold text-amber-700">{g.qtdInutilizadas}</p>
+                      </div>
+                      <div className="rounded-lg px-3 py-2 bg-orange-50 border border-orange-100">
+                        <p className="text-[10px] uppercase text-orange-700">Denegadas</p>
+                        <p className="text-lg font-bold text-orange-700">{g.qtdDenegadas}</p>
+                      </div>
+                      <div className={`rounded-lg px-3 py-2 border ${g.qtdNaoLocalizadas > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+                        <p className={`text-[10px] uppercase ${g.qtdNaoLocalizadas > 0 ? 'text-red-700' : 'text-gray-500'}`}>Não localizadas</p>
+                        <p className={`text-lg font-bold ${g.qtdNaoLocalizadas > 0 ? 'text-red-700' : 'text-gray-700'}`}>{g.qtdNaoLocalizadas}</p>
+                      </div>
+                    </div>
+
+                    {g.intervaloGrandeDemais && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+                        Intervalo entre o menor e o maior número ({g.totalEsperado.toLocaleString('pt-BR')} posições) é
+                        grande demais pra listar um a um — confira se o número da nota foi lido corretamente nesta
+                        série antes de confiar nas contagens acima.
+                      </p>
+                    )}
+
+                    {!g.intervaloGrandeDemais && g.faltantes.length > 0 && (
+                      <div className="mt-3 overflow-x-auto max-h-48 overflow-y-auto border border-red-100 rounded-lg">
+                        <table className="w-full text-xs">
+                          <thead className="bg-red-50 sticky top-0">
+                            <tr>
+                              <th className="text-left px-3 py-1.5 font-medium text-red-700">Número não localizado</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.faltantes.slice(0, 200).map((f) => (
+                              <tr key={f.numero} className="border-t border-red-50">
+                                <td className="px-3 py-1 font-mono text-red-700">{f.numero}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {g.faltantes.length > 200 && (
+                          <p className="text-[11px] text-gray-400 text-center py-1.5">
+                            Mostrando os 200 primeiros de {g.faltantes.length} — exporte para Excel para ver todos.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           <div className="card-surface p-5 border border-accent/30">

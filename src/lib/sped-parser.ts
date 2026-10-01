@@ -63,8 +63,9 @@ export const COD_SIT_LABELS: Record<string, string> = {
 // Saída — já não representam mais uma operação válida de mercadoria.
 const COD_SIT_CRITICOS = new Set(['02', '03', '04', '05']);
 
-export type NotaSaidaCriticada = {
+export type NotaSaida = {
   linhaOriginal: number;
+  modelo: string;
   codSit: string;
   situacao: string;
   serie: string;
@@ -104,9 +105,13 @@ export type SpedSummary = {
   competencia: string | null;
   nomeEmpresa: string | null;
   tipoSped: TipoSped;
-  // Notas fiscais de Saída (C100, IND_OPER=1) com COD_SIT cancelado,
-  // inutilizado ou denegado — pedido explícito do usuário.
-  notasSaidaCriticadas: NotaSaidaCriticada[];
+  // TODAS as notas de Saída (C100, IND_OPER=1), qualquer COD_SIT — base
+  // pra análise de numeração (ver sped-numeracao.ts), que precisa saber
+  // quais números EXISTEM no arquivo pra achar os que faltam.
+  notasSaida: NotaSaida[];
+  // Subconjunto de notasSaida com COD_SIT cancelado, inutilizado ou
+  // denegado — pedido explícito do usuário.
+  notasSaidaCriticadas: NotaSaida[];
 };
 
 export function parseSpedFiscal(conteudo: string): SpedSummary {
@@ -115,7 +120,7 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
   const porBloco: Record<string, number> = {};
   const porRegistro: Record<string, number> = {};
   const linhas: SpedLine[] = [];
-  const notasSaidaCriticadas: NotaSaidaCriticada[] = [];
+  const notasSaida: NotaSaida[] = [];
   let camposRegistro0000: string[] | null = null;
   let documentoAtual: { cabecalho: string; operacao: SpedLine['operacao'] } | null = null;
 
@@ -145,9 +150,10 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
       if (registro === 'C100') {
         const codSit = campos[5] || '';
         situacaoDocumento = COD_SIT_LABELS[codSit] || '';
-        if (operacao === 'Saída' && COD_SIT_CRITICOS.has(codSit)) {
-          notasSaidaCriticadas.push({
+        if (operacao === 'Saída') {
+          notasSaida.push({
             linhaOriginal: idx + 1,
+            modelo: campos[4] || '',
             codSit,
             situacao: situacaoDocumento,
             serie: campos[6] || '',
@@ -196,7 +202,8 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
     competencia,
     nomeEmpresa,
     tipoSped,
-    notasSaidaCriticadas,
+    notasSaida,
+    notasSaidaCriticadas: notasSaida.filter((n) => COD_SIT_CRITICOS.has(n.codSit)),
   };
 }
 
