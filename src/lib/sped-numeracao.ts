@@ -77,6 +77,21 @@ export type ItemNumeracao = {
   // (achado direto no C100 do SPED, ou ainda "Não localizada" mesmo
   // depois de checar a segunda fonte).
   fonte: 'SF3' | null;
+  // Confronto do número com a tabela SF3 do Protheus (pedido do usuário,
+  // 03/10/2026): 'encontrado' = existe na SF3 (cfopsSf3 diz em qual(is)
+  // CFOP(s) — a SF3 grava uma linha por CFOP); 'nao_encontrado' = a SF3
+  // foi consultada e não tem esse número; 'nao_consultado' = não havia
+  // SF3 sincronizada/planilha pra este arquivo, então nada se pode
+  // afirmar. Só preenchido de verdade pros itens de `faltantes`.
+  statusSf3: 'encontrado' | 'nao_encontrado' | 'nao_consultado';
+  cfopsSf3: string | null;
+  cStatSf3: string | null;
+};
+
+export const STATUS_SF3_LABELS: Record<ItemNumeracao['statusSf3'], string> = {
+  encontrado: 'Encontrado no SF3',
+  nao_encontrado: 'Não encontrado no SF3',
+  nao_consultado: 'SF3 não consultada',
 };
 
 export type GrupoNumeracao = {
@@ -153,7 +168,11 @@ export function extrairFaixasNumeracao(notas: NotaSaida[]): FaixaNumeracao[] {
 
 export function analisarNumeracaoSaida(
   notas: NotaSaida[],
-  situacoesSf3?: Map<string, NotaSf3>
+  situacoesSf3?: Map<string, NotaSf3>,
+  // true = a SF3 cobre o período do arquivo (planilha anexada ou sincronização
+  // automática com janela suficiente), então número ausente nela vira
+  // "Não encontrado no SF3". Sem isso, o mapa pode existir mas ser parcial.
+  sf3Consultada: boolean = situacoesSf3 !== undefined
 ): GrupoNumeracao[] {
   const porGrupo = new Map<string, { modelo: string; serie: string; itens: Map<number, ItemNumeracao> }>();
 
@@ -185,6 +204,9 @@ export function analisarNumeracaoSaida(
       valor: nota.valor || null,
       linhaOriginal: nota.linhaOriginal,
       fonte: null,
+      statusSf3: 'nao_consultado',
+      cfopsSf3: null,
+      cStatSf3: null,
     });
   }
 
@@ -230,12 +252,32 @@ export function analisarNumeracaoSaida(
             valor: null,
             linhaOriginal: null,
             fonte: 'SF3',
+            statusSf3: 'encontrado',
+            cfopsSf3: sf3.cfops,
+            cStatSf3: sf3.cStat || null,
           });
           continue;
         }
 
         qtdNaoLocalizadas++;
-        faltantes.push({ numero: n, categoria: 'Quebra de sequencial/Faltante', codSit: null, situacaoDetalhe: null, chave: null, dataEmissao: null, valor: null, linhaOriginal: null, fonte: null });
+        // Chegou aqui: ou a SF3 não tem o número, ou tem mas sem Retorno
+        // SEFA reconhecível (cStat vazio/código intermediário) — em ambos
+        // continua "Quebra de sequencial/Faltante", mas informando se o
+        // número existe na SF3 e em qual CFOP.
+        faltantes.push({
+          numero: n,
+          categoria: 'Quebra de sequencial/Faltante',
+          codSit: null,
+          situacaoDetalhe: null,
+          chave: sf3?.chave ?? null,
+          dataEmissao: null,
+          valor: null,
+          linhaOriginal: null,
+          fonte: null,
+          statusSf3: sf3 ? 'encontrado' : sf3Consultada ? 'nao_encontrado' : 'nao_consultado',
+          cfopsSf3: sf3?.cfops ?? null,
+          cStatSf3: sf3?.cStat || null,
+        });
       }
     } else {
       // Ainda conta o que está presente (não precisa do loop do

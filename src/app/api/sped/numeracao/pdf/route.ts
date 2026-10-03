@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import PDFDocument from 'pdfkit';
 import { getSession } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
+import { STATUS_SF3_LABELS } from '@/lib/sped-numeracao';
 
 // PDF da Análise de Numeração — Saída (ver sped-numeracao.ts). Os dados
 // já vêm prontos do navegador (calculados lá, cruzando SPED + Protheus)
@@ -12,6 +13,9 @@ type ItemNumeracaoRecebido = {
   categoria: string;
   situacaoDetalhe: string | null;
   fonte: string | null;
+  statusSf3?: string;
+  cfopsSf3?: string | null;
+  cStatSf3?: string | null;
 };
 type GrupoRecebido = {
   modeloLabel: string;
@@ -49,10 +53,12 @@ function gerarPdf(grupos: GrupoRecebido[], meta: { fileName: string; nomeEmpresa
     doc.fillColor('#000').moveDown(1);
 
     const COLS = [
-      { key: 'numero', label: 'Número', x: MARGEM, width: 80 },
-      { key: 'categoria', label: 'Situação', x: MARGEM + 80, width: 150 },
-      { key: 'fonte', label: 'Fonte', x: MARGEM + 230, width: 110 },
-      { key: 'detalhe', label: 'Detalhe', x: MARGEM + 340, width: LARGURA_UTIL - 340 },
+      { key: 'numero', label: 'Número', x: MARGEM, width: 60 },
+      { key: 'categoria', label: 'Situação', x: MARGEM + 60, width: 130 },
+      { key: 'fonte', label: 'Fonte', x: MARGEM + 190, width: 85 },
+      { key: 'sf3', label: 'No SF3?', x: MARGEM + 275, width: 125 },
+      { key: 'cfop', label: 'CFOP (SF3)', x: MARGEM + 400, width: 95 },
+      { key: 'detalhe', label: 'Detalhe', x: MARGEM + 495, width: LARGURA_UTIL - 495 },
     ];
 
     function desenharCabecalhoTabela() {
@@ -106,6 +112,8 @@ function gerarPdf(grupos: GrupoRecebido[], meta: { fileName: string; nomeEmpresa
           ['numero', String(f.numero)],
           ['categoria', f.categoria],
           ['fonte', f.fonte === 'SF3' ? 'Planilha/Protheus' : 'SPED'],
+          ['sf3', STATUS_SF3_LABELS[f.statusSf3 as keyof typeof STATUS_SF3_LABELS] || '—'],
+          ['cfop', f.cfopsSf3 ? f.cfopsSf3.split(',').join(', ') : '—'],
           ['detalhe', f.situacaoDetalhe || '—'],
         ];
         let maxAltura = 12;

@@ -52,8 +52,12 @@ export type NotaSf3 = {
   modelo: string | null;
   serie: string;
   numero: number;
-  cStat: string;
+  cStat: string; // '' = sem Retorno SEFA registrado
   categoria: SituacaoSf3 | null;
+  // CFOP(s) distintos da nota na SF3, separados por vírgula (a SF3 grava
+  // uma linha por CFOP) — alimenta o "em qual CFOP está esse sequencial?"
+  // da Análise de Numeração.
+  cfops: string | null;
   chave: string | null;
   observacao: string | null;
 };
@@ -66,12 +70,15 @@ function normalizar(v: unknown): string {
     .replace(/\p{Diacritic}/gu, '');
 }
 
-type CampoChave = 'numero' | 'serie' | 'cStat' | 'chave' | 'observacao';
+type CampoChave = 'numero' | 'serie' | 'cStat' | 'cfop' | 'chave' | 'observacao';
 
 const KEYWORDS: Record<CampoChave, string[]> = {
   numero: ['nota fiscal', 'numero nota', 'num nota', 'num. nota'],
   serie: ['serie n.f.', 'serie nf', 'serie'],
   cStat: ['retorno sefa', 'retorno sef', 'cstat', 'status sefaz', 'c-stat'],
+  // "Cod. Fiscal" é o CFOP na tela da SF3 do Protheus (existe também
+  // "CFOP Est.", mas vem bem depois — o primeiro match da linha vence).
+  cfop: ['cod. fiscal', 'cod fiscal', 'cfop'],
   chave: ['chave nfe', 'chave de acesso', 'chave'],
   observacao: ['observacoes', 'observacao'],
 };
@@ -156,7 +163,9 @@ export function lerSituacaoNotasSf3(aoa: unknown[][]): ResultadoLeituraSf3 {
     return { notas: [], erro: 'Colunas obrigatórias não encontradas (Nota Fiscal, Série e Retorno SEFA/cStat).' };
   }
 
-  const notas: NotaSf3[] = [];
+  // A SF3 grava uma linha por CFOP da mesma nota — junta numa nota só
+  // (CFOPs distintos unidos), igual ao script de sincronização.
+  const porNota = new Map<string, NotaSf3 & { _cfops: Set<string> }>();
   for (let i = idxCabecalho + 1; i < aoa.length; i++) {
     const linha = aoa[i] || [];
     const numeroBruto = String(linha[colunas.numero] ?? '').trim();
@@ -168,16 +177,37 @@ export function lerSituacaoNotasSf3(aoa: unknown[][]): ResultadoLeituraSf3 {
     const chave = colunas.chave !== undefined ? String(linha[colunas.chave] ?? '').trim() || null : null;
     const observacao = colunas.observacao !== undefined ? String(linha[colunas.observacao] ?? '').trim() || null : null;
 
-    notas.push({
-      modelo: chave ? extrairModeloDaChave(chave) : null,
-      serie,
-      numero,
-      cStat,
-      categoria: CSTAT_CATEGORIA[cStat] || null,
-      chave,
-      observacao,
-    });
+    const cfop = colunas.cfop !== undefined ? String(linha[colunas.cfop] ?? '').trim() : '';
+    const modelo = chave ? extrairModeloDaChave(chave) : null;
+    const chaveNota = `${modelo ?? ''}|${normalizarSerie(serie)}|${numero}`;
+    const existente = porNota.get(chaveNota);
+    if (!existente) {
+      porNota.set(chaveNota, {
+        modelo,
+        serie,
+        numero,
+        cStat,
+        categoria: CSTAT_CATEGORIA[cStat] || null,
+        cfops: null,
+        chave,
+        observacao,
+        _cfops: new Set(cfop ? [cfop] : []),
+      });
+    } else {
+      if (cfop) existente._cfops.add(cfop);
+      if (existente.cStat === '' && cStat !== '') {
+        existente.cStat = cStat;
+        existente.categoria = CSTAT_CATEGORIA[cStat] || null;
+      }
+      existente.chave = existente.chave || chave;
+      existente.observacao = existente.observacao || observacao;
+    }
   }
+
+  const notas: NotaSf3[] = Array.from(porNota.values()).map(({ _cfops, ...n }) => ({
+    ...n,
+    cfops: _cfops.size > 0 ? Array.from(_cfops).sort().join(',') : null,
+  }));
 
   return { notas, erro: null };
 }

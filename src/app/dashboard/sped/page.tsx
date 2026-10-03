@@ -8,7 +8,7 @@ import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
 import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
 import { gerarExcelTributos } from '@/lib/analise-fiscal-excel-tributos';
-import { analisarNumeracaoSaida, extrairFaixasNumeracao, COD_MOD_LABELS } from '@/lib/sped-numeracao';
+import { analisarNumeracaoSaida, extrairFaixasNumeracao, COD_MOD_LABELS, STATUS_SF3_LABELS } from '@/lib/sped-numeracao';
 import { lerSituacaoNotasSf3, construirMapaSf3, CSTAT_LABELS, type NotaSf3 } from '@/lib/sf3-situacao-reader';
 
 type NotaRetornoDiferente = {
@@ -100,6 +100,11 @@ export default function SpedPage() {
   // manual tem prioridade em caso de conflito — ver mapaSf3 abaixo).
   const [sf3NotasProtheus, setSf3NotasProtheus] = useState<NotaSf3[]>([]);
   const [sf3UltimaSincronizacao, setSf3UltimaSincronizacao] = useState<string | null>(null);
+  // Cobertura da sincronização (AAAAMMDD do início da janela): sem ela,
+  // "Não encontrado no SF3" seria afirmado sobre períodos que nunca
+  // foram sincronizados.
+  const [sf3Sincronizado, setSf3Sincronizado] = useState(false);
+  const [sf3Desde, setSf3Desde] = useState<string | null>(null);
 
   // Só busca depois do SPED importado, e só o intervalo mín-máx de
   // número que o próprio arquivo definiu (extrairFaixasNumeracao) — a
@@ -115,6 +120,8 @@ export default function SpedPage() {
     if (!result) {
       setSf3NotasProtheus([]);
       setSf3UltimaSincronizacao(null);
+      setSf3Sincronizado(false);
+      setSf3Desde(null);
       return;
     }
     const faixas = extrairFaixasNumeracao(result.notasSaida);
@@ -129,6 +136,8 @@ export default function SpedPage() {
         const data = await res.json();
         setSf3NotasProtheus(data.notas || []);
         setSf3UltimaSincronizacao(data.ultimaSincronizacao || null);
+        setSf3Sincronizado(!!data.sincronizado);
+        setSf3Desde(data.desde || null);
       }
     })();
   }, [result]);
@@ -328,6 +337,15 @@ export default function SpedPage() {
   // depois — construirMapaSf3 sobrescreve por chave repetida, então o
   // upload manual vence em caso de conflito (dado mais recente/específico
   // que o usuário trouxe de propósito).
+  // A SF3 só conta como "consultada" (e portanto pode dizer "Não encontrado
+  // no SF3") quando há planilha manual, ou sincronização automática cuja
+  // janela cobre o início da competência do arquivo.
+  const sf3Consultada = useMemo(() => {
+    if (sf3Notas.length > 0) return true;
+    if (!sf3Sincronizado || !sf3Desde || !result) return false;
+    return !result.competenciaInicio || sf3Desde <= result.competenciaInicio;
+  }, [sf3Notas, sf3Sincronizado, sf3Desde, result]);
+
   const mapaSf3 = useMemo(() => {
     const combinado = [...sf3NotasProtheus, ...sf3Notas];
     return combinado.length > 0 ? construirMapaSf3(combinado) : undefined;
@@ -335,8 +353,8 @@ export default function SpedPage() {
 
   const gruposNumeracao = useMemo(() => {
     if (!result) return [];
-    return analisarNumeracaoSaida(result.notasSaida, mapaSf3);
-  }, [result, mapaSf3]);
+    return analisarNumeracaoSaida(result.notasSaida, mapaSf3, sf3Consultada);
+  }, [result, mapaSf3, sf3Consultada]);
 
   function handleExportExcel() {
     if (!result) return;
@@ -408,6 +426,9 @@ export default function SpedPage() {
           Número: f.numero,
           Situação: f.categoria,
           Fonte: f.fonte === 'SF3' ? 'Planilha Protheus' : 'SPED (quebra de sequencial/faltante)',
+          'No SF3?': STATUS_SF3_LABELS[f.statusSf3],
+          'CFOP (SF3)': f.cfopsSf3 || '',
+          'Retorno SEFA (SF3)': f.cStatSf3 || '',
           Chave: f.chave || '',
         }))
       );
@@ -473,6 +494,7 @@ export default function SpedPage() {
   const [filtroCritGrupo, setFiltroCritGrupo] = useState('TODOS');
   const [filtroNumGrupo, setFiltroNumGrupo] = useState('TODOS');
   const [filtroNumSituacao, setFiltroNumSituacao] = useState('TODAS');
+  const [filtroNumSf3, setFiltroNumSf3] = useState('TODOS');
   const [filtroRetModelo, setFiltroRetModelo] = useState('TODOS');
   const [filtroRetCstat, setFiltroRetCstat] = useState('TODOS');
 
@@ -543,9 +565,11 @@ export default function SpedPage() {
         .filter((g) => filtroNumGrupo === 'TODOS' || `${g.modelo}|${g.serie}` === filtroNumGrupo)
         .map((g) => ({
           ...g,
-          faltantes: filtroNumSituacao === 'TODAS' ? g.faltantes : g.faltantes.filter((f) => f.categoria === filtroNumSituacao),
+          faltantes: g.faltantes.filter(
+            (f) => (filtroNumSituacao === 'TODAS' || f.categoria === filtroNumSituacao) && (filtroNumSf3 === 'TODOS' || f.statusSf3 === filtroNumSf3)
+          ),
         })),
-    [gruposNumeracao, filtroNumGrupo, filtroNumSituacao]
+    [gruposNumeracao, filtroNumGrupo, filtroNumSituacao, filtroNumSf3]
   );
 
   // Retorno SEFA ≠ 100: filtra por modelo e por código de retorno.
@@ -649,6 +673,9 @@ export default function SpedPage() {
         Número: f.numero,
         Situação: f.categoria,
         Fonte: f.fonte === 'SF3' ? 'Planilha/Protheus' : 'SPED',
+        'No SF3?': STATUS_SF3_LABELS[f.statusSf3],
+        'CFOP (SF3)': f.cfopsSf3 || '',
+        'Retorno SEFA (SF3)': f.cStatSf3 || '',
         Chave: f.chave || '',
       }))
     );
@@ -976,7 +1003,8 @@ export default function SpedPage() {
                   Algumas notas (ex: inutilizadas) deixaram de ser obrigatórias no SPED a partir de 01/2023 e o
                   Protheus pode não gerar o C100 delas — se você anexar aqui a planilha com a coluna &quot;Retorno
                   SEFA&quot; (cStat), o sistema cruza os números de quebra de sequencial/faltantes com ela antes de
-                  desistir.
+                  desistir, e informa em cada um se está na SF3 e em qual CFOP (coluna &quot;Cod. Fiscal&quot;) — ou &quot;Não
+                  encontrado no SF3&quot;.
                 </p>
                 {lendoSf3 && <span className="text-xs text-gray-500">Lendo...</span>}
               </div>
@@ -1013,6 +1041,19 @@ export default function SpedPage() {
                     </BotaoFiltro>
                   ))}
                 </div>
+                {gruposNumeracao.some((g) => g.faltantes.some((f) => f.statusSf3 !== 'nao_consultado')) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-gray-500 w-20">No SF3:</span>
+                    <BotaoFiltro ativo={filtroNumSf3 === 'TODOS'} onClick={() => setFiltroNumSf3('TODOS')}>
+                      Todos
+                    </BotaoFiltro>
+                    {(['encontrado', 'nao_encontrado'] as const).map((st) => (
+                      <BotaoFiltro key={st} ativo={filtroNumSf3 === st} onClick={() => setFiltroNumSf3(st)}>
+                        {STATUS_SF3_LABELS[st]} ({gruposNumeracao.reduce((acc, g) => acc + g.faltantes.filter((f) => f.statusSf3 === st).length, 0)})
+                      </BotaoFiltro>
+                    ))}
+                  </div>
+                )}
                 <p className="text-[11px] text-gray-400">
                   O filtro de situação age na lista de números de cada grupo (os quadros de contagem continuam
                   mostrando o total). O PDF e o Excel exportam o que está filtrado.
@@ -1076,6 +1117,8 @@ export default function SpedPage() {
                               <th className="text-left px-3 py-1.5 font-medium text-gray-600">Número</th>
                               <th className="text-left px-3 py-1.5 font-medium text-gray-600">Situação</th>
                               <th className="text-left px-3 py-1.5 font-medium text-gray-600">Fonte</th>
+                              <th className="text-left px-3 py-1.5 font-medium text-gray-600">No SF3?</th>
+                              <th className="text-left px-3 py-1.5 font-medium text-gray-600">CFOP (SF3)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1094,6 +1137,16 @@ export default function SpedPage() {
                                   </span>
                                 </td>
                                 <td className="px-3 py-1 text-gray-400">{f.fonte === 'SF3' ? 'Planilha Protheus' : '—'}</td>
+                                <td className="px-3 py-1 whitespace-nowrap">
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                    f.statusSf3 === 'encontrado' ? 'bg-green-100 text-green-700' :
+                                    f.statusSf3 === 'nao_encontrado' ? 'bg-red-100 text-red-700' :
+                                    'bg-gray-100 text-gray-400'
+                                  }`}>
+                                    {STATUS_SF3_LABELS[f.statusSf3]}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-1 font-mono text-gray-700">{f.cfopsSf3 ? f.cfopsSf3.split(',').join(', ') : '—'}</td>
                               </tr>
                             ))}
                           </tbody>
