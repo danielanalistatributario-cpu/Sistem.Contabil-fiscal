@@ -72,12 +72,16 @@ function gerarPdf(grupos: GrupoRecebido[], meta: { fileName: string; nomeEmpresa
     }
 
     for (const g of grupos) {
-      quebrarPaginaSeNecessario();
+      // Quebra de página manual aqui (não quebrarPaginaSeNecessario): essa
+      // função redesenha o cabeçalho da TABELA, que ficaria acima do título
+      // do grupo.
+      if (doc.y > doc.page.height - MARGEM - 80) doc.addPage();
+      doc.x = MARGEM; // a última coluna da tabela anterior deixa doc.x deslocado
       doc.fontSize(11).fillColor('#00753A').text(
         `${g.modeloLabel} · Série ${g.serie} — nº ${g.numeroMinimo} a ${g.numeroMaximo} (${g.totalEsperado} esperado(s))`
       );
       doc.fontSize(9).fillColor('#333').text(
-        `Autorizadas: ${g.qtdAutorizadas}  ·  Canceladas: ${g.qtdCanceladas}  ·  Inutilizadas: ${g.qtdInutilizadas}  ·  Denegadas: ${g.qtdDenegadas}  ·  Não localizadas/Faltantes: ${g.qtdNaoLocalizadas}${g.qtdResolvidasPorSf3 > 0 ? `  ·  Resolvidas pelo Protheus: ${g.qtdResolvidasPorSf3}` : ''}`
+        `Autorizadas: ${g.qtdAutorizadas}  ·  Canceladas: ${g.qtdCanceladas}  ·  Inutilizadas: ${g.qtdInutilizadas}  ·  Denegadas: ${g.qtdDenegadas}  ·  Quebra de sequencial/Faltantes: ${g.qtdNaoLocalizadas}${g.qtdResolvidasPorSf3 > 0 ? `  ·  Resolvidas pelo Protheus: ${g.qtdResolvidasPorSf3}` : ''}`
       );
       doc.fillColor('#000').moveDown(0.3);
 

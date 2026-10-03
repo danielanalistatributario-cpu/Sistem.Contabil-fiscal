@@ -8,7 +8,7 @@ import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
 import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
 import { gerarExcelTributos } from '@/lib/analise-fiscal-excel-tributos';
-import { analisarNumeracaoSaida, extrairFaixasNumeracao } from '@/lib/sped-numeracao';
+import { analisarNumeracaoSaida, extrairFaixasNumeracao, COD_MOD_LABELS } from '@/lib/sped-numeracao';
 import { lerSituacaoNotasSf3, construirMapaSf3, CSTAT_LABELS, type NotaSf3 } from '@/lib/sf3-situacao-reader';
 
 type NotaRetornoDiferente = {
@@ -380,7 +380,7 @@ export default function SpedPage() {
           Canceladas: g.qtdCanceladas,
           Inutilizadas: g.qtdInutilizadas,
           Denegadas: g.qtdDenegadas,
-          'Não Localizadas': g.qtdNaoLocalizadas,
+          'Quebra de Sequencial/Faltantes': g.qtdNaoLocalizadas,
           'Resolvidas pela Planilha Protheus': g.qtdResolvidasPorSf3,
         }))
       );
@@ -392,7 +392,7 @@ export default function SpedPage() {
           Série: g.serie,
           Número: f.numero,
           Situação: f.categoria,
-          Fonte: f.fonte === 'SF3' ? 'Planilha Protheus' : 'SPED (não localizado)',
+          Fonte: f.fonte === 'SF3' ? 'Planilha Protheus' : 'SPED (quebra de sequencial/faltante)',
           Chave: f.chave || '',
         }))
       );
@@ -437,6 +437,89 @@ export default function SpedPage() {
   // rota de servidor com pdfkit (os dados computados aqui são enviados
   // prontos, a rota só desenha — mesmo padrão de outras exportações em
   // PDF do sistema).
+  // Notas de Saída canceladas/inutilizadas/denegadas, ordenadas por
+  // modelo → série → número, com o rótulo do modelo (NF-e/NFC-e) — base
+  // da tabela do card e dos exports dedicados em PDF/Excel.
+  const criticasOrdenadas = useMemo(() => {
+    if (!result) return [];
+    return result.notasSaidaCriticadas
+      .map((n) => ({ ...n, modeloLabel: COD_MOD_LABELS[n.modelo] || (n.modelo ? `Modelo ${n.modelo}` : '—') }))
+      .sort(
+        (a, b) =>
+          a.modelo.localeCompare(b.modelo) ||
+          (parseInt(a.serie, 10) || 0) - (parseInt(b.serie, 10) || 0) ||
+          (parseInt(a.numero, 10) || 0) - (parseInt(b.numero, 10) || 0)
+      );
+  }, [result]);
+
+  const resumoCriticas = useMemo(() => {
+    const mapa = new Map<string, { modeloLabel: string; serie: string; porSituacao: Map<string, number>; total: number }>();
+    for (const n of criticasOrdenadas) {
+      const chave = `${n.modelo}|${n.serie}`;
+      if (!mapa.has(chave)) mapa.set(chave, { modeloLabel: n.modeloLabel, serie: n.serie, porSituacao: new Map(), total: 0 });
+      const g = mapa.get(chave)!;
+      g.total++;
+      g.porSituacao.set(n.situacao, (g.porSituacao.get(n.situacao) || 0) + 1);
+    }
+    return Array.from(mapa.values());
+  }, [criticasOrdenadas]);
+
+  function handleExportCriticasExcel() {
+    if (!result) return;
+    const workbook = XLSX.utils.book_new();
+    const linhasResumo = resumoCriticas.flatMap((g) =>
+      Array.from(g.porSituacao.entries()).map(([situacao, qtd]) => ({
+        Modelo: g.modeloLabel,
+        Série: g.serie,
+        Situação: situacao,
+        Quantidade: qtd,
+      }))
+    );
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(linhasResumo), 'Resumo');
+    // Uma aba por modelo + série (ex: "NF-e Série 001", "NFC-e Série 005").
+    for (const g of resumoCriticas) {
+      const linhas = criticasOrdenadas
+        .filter((n) => n.modeloLabel === g.modeloLabel && n.serie === g.serie)
+        .map((n) => ({
+          Modelo: n.modeloLabel,
+          Série: n.serie,
+          Número: n.numero,
+          Situação: n.situacao,
+          'Cód. Situação': n.codSit,
+          'Chave NF-e': n.chave,
+          'Data Emissão': n.dataEmissao,
+          Valor: n.valor,
+        }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(linhas), `${g.modeloLabel} Série ${g.serie}`.slice(0, 31));
+    }
+    XLSX.writeFile(workbook, `Notas_Saida_Canceladas_Inutilizadas_Denegadas_${result.fileName.replace(/\.[^.]+$/, '')}.xlsx`);
+  }
+
+  async function handleExportCriticasPdf() {
+    if (!result) return;
+    const res = await fetch('/api/sped/notas-criticadas/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notas: criticasOrdenadas.map((n) => ({
+          modeloLabel: n.modeloLabel,
+          serie: n.serie,
+          numero: n.numero,
+          situacao: n.situacao,
+          chave: n.chave,
+          dataEmissao: n.dataEmissao,
+          valor: n.valor,
+        })),
+        fileName: result.fileName,
+        nomeEmpresa: result.nomeEmpresa,
+        competencia: result.competencia,
+      }),
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    window.open(window.URL.createObjectURL(blob), '_blank');
+  }
+
   function handleExportNumeracaoExcel() {
     if (!result) return;
     const workbook = XLSX.utils.book_new();
@@ -451,7 +534,7 @@ export default function SpedPage() {
         Canceladas: g.qtdCanceladas,
         Inutilizadas: g.qtdInutilizadas,
         Denegadas: g.qtdDenegadas,
-        'Não Localizadas/Faltantes': g.qtdNaoLocalizadas,
+        'Quebra de Sequencial/Faltantes': g.qtdNaoLocalizadas,
         'Resolvidas pela Planilha/Protheus': g.qtdResolvidasPorSf3,
       }))
     );
@@ -468,7 +551,7 @@ export default function SpedPage() {
     );
     if (faltantesLinhas.length > 0) {
       const wsFaltantes = XLSX.utils.json_to_sheet(faltantesLinhas);
-      XLSX.utils.book_append_sheet(workbook, wsFaltantes, 'Não Localizadas-Faltantes');
+      XLSX.utils.book_append_sheet(workbook, wsFaltantes, 'Quebra Sequencial-Faltantes');
     }
     XLSX.writeFile(workbook, `Analise_Numeracao_${result.fileName.replace(/\.[^.]+$/, '')}.xlsx`);
   }
@@ -646,15 +729,35 @@ export default function SpedPage() {
                 <h2 className="font-semibold text-red-700">
                   ⚠ {result.notasSaidaCriticadas.length} nota(s) de Saída cancelada(s)/inutilizada(s)/denegada(s)
                 </h2>
-                <p className="text-xs text-gray-500">
-                  Lido do COD_SIT (registro C100) — exportadas também na aba &quot;Saída Cancel-Inutil-Deneg&quot;
-                  do Excel completo.
+                <div className="flex items-center gap-2">
+                  <button onClick={handleExportCriticasPdf} className="border border-accent text-accent rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                    Exportar PDF
+                  </button>
+                  <button onClick={handleExportCriticasExcel} className="bg-accent text-white rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap">
+                    Exportar Excel
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 basis-full">
+                  Lido do COD_SIT (registro C100) — o PDF e o Excel separam por modelo e série; também vai na aba
+                  &quot;Saída Cancel-Inutil-Deneg&quot; do Excel completo.
                 </p>
+              </div>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {resumoCriticas.map((g) => (
+                  <div key={`${g.modeloLabel}-${g.serie}`} className="text-xs bg-white border border-red-100 rounded-lg px-3 py-1.5">
+                    <span className="font-medium text-gray-800">{g.modeloLabel} · Série {g.serie}</span>
+                    <span className="text-gray-500"> — {g.total} nota(s): </span>
+                    <span className="text-red-700">
+                      {Array.from(g.porSituacao.entries()).map(([s, q]) => `${s} ${q}`).join(' · ')}
+                    </span>
+                  </div>
+                ))}
               </div>
               <div className="overflow-x-auto max-h-72 overflow-y-auto border border-red-100 rounded-lg bg-white">
                 <table className="w-full text-xs">
-                  <thead className="bg-red-100/60 sticky top-0">
+                  <thead className="bg-red-100 sticky top-0 z-10">
                     <tr>
+                      <th className="text-left px-3 py-2 font-medium text-red-700">Modelo</th>
                       <th className="text-left px-3 py-2 font-medium text-red-700">Situação</th>
                       <th className="text-left px-3 py-2 font-medium text-red-700">Série</th>
                       <th className="text-left px-3 py-2 font-medium text-red-700">Número</th>
@@ -664,8 +767,9 @@ export default function SpedPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.notasSaidaCriticadas.map((n, idx) => (
+                    {criticasOrdenadas.map((n, idx) => (
                       <tr key={`${n.linhaOriginal}-${idx}`} className="border-t border-red-50">
+                        <td className="px-3 py-1.5 whitespace-nowrap">{n.modeloLabel}</td>
                         <td className="px-3 py-1.5">
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 whitespace-nowrap">
                             {n.situacao}
@@ -702,7 +806,7 @@ export default function SpedPage() {
                 </div>
                 <p className="text-xs text-gray-500 max-w-xl basis-full">
                   Um grupo por modelo + série — compara o intervalo mínimo–máximo de número encontrado contra o que
-                  realmente apareceu no arquivo. &quot;Não localizada/Faltante&quot; é um número que não está em
+                  realmente apareceu no arquivo. &quot;Quebra de sequencial/Faltante&quot; é um número que não está em
                   nenhum C100 deste SPED — pode existir na Sefaz sem ter sido escriturado aqui, ou nunca ter sido
                   emitido; o arquivo sozinho não distingue os dois casos.
                 </p>
@@ -739,7 +843,7 @@ export default function SpedPage() {
                 <p className="text-[11px] text-gray-400 flex-1 min-w-[220px]">
                   Algumas notas (ex: inutilizadas) deixaram de ser obrigatórias no SPED a partir de 01/2023 e o
                   Protheus pode não gerar o C100 delas — se você anexar aqui a planilha com a coluna &quot;Retorno
-                  SEFA&quot; (cStat), o sistema cruza os números &quot;não localizados&quot; com ela antes de
+                  SEFA&quot; (cStat), o sistema cruza os números de quebra de sequencial/faltantes com ela antes de
                   desistir.
                 </p>
                 {lendoSf3 && <span className="text-xs text-gray-500">Lendo...</span>}
@@ -781,7 +885,7 @@ export default function SpedPage() {
                         <p className="text-lg font-bold text-orange-700">{g.qtdDenegadas}</p>
                       </div>
                       <div className={`rounded-lg px-3 py-2 border ${g.qtdNaoLocalizadas > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-                        <p className={`text-[10px] uppercase ${g.qtdNaoLocalizadas > 0 ? 'text-red-700' : 'text-gray-500'}`}>Não localizadas</p>
+                        <p className={`text-[10px] uppercase ${g.qtdNaoLocalizadas > 0 ? 'text-red-700' : 'text-gray-500'}`}>Quebra de sequencial/Faltantes</p>
                         <p className={`text-lg font-bold ${g.qtdNaoLocalizadas > 0 ? 'text-red-700' : 'text-gray-700'}`}>{g.qtdNaoLocalizadas}</p>
                       </div>
                     </div>
@@ -789,7 +893,7 @@ export default function SpedPage() {
                     {g.qtdResolvidasPorSf3 > 0 && (
                       <p className="text-xs text-teal bg-teal/5 border border-teal/20 rounded-lg px-3 py-2 mt-3">
                         {g.qtdResolvidasPorSf3} número(s) que o SPED não trazia foram explicados pela planilha
-                        Protheus (contados acima na categoria certa, não mais em &quot;Não localizadas&quot;).
+                        Protheus (contados acima na categoria certa, não mais em &quot;Quebra de sequencial/Faltantes&quot;).
                       </p>
                     )}
 
@@ -817,7 +921,7 @@ export default function SpedPage() {
                                 <td className="px-3 py-1 font-mono text-gray-700">{f.numero}</td>
                                 <td className="px-3 py-1">
                                   <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${
-                                    f.categoria === 'Não localizada/Faltante' ? 'bg-red-100 text-red-700' :
+                                    f.categoria === 'Quebra de sequencial/Faltante' ? 'bg-red-100 text-red-700' :
                                     f.categoria === 'Autorizada' ? 'bg-green-100 text-green-700' :
                                     f.categoria === 'Cancelada' ? 'bg-gray-200 text-gray-700' :
                                     f.categoria === 'Inutilizada' ? 'bg-amber-100 text-amber-700' :
