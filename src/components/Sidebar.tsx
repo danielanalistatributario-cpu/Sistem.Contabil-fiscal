@@ -29,7 +29,7 @@ const GROUPS: NavGroup[] = [
     label: 'Módulos fiscais',
     items: [
       { href: '/dashboard/analise-fiscal', label: 'Análise e Apuração Fiscal', icon: ClipboardCheck, moduleKey: 'analiseFiscal', accent: 'text-accent' },
-      { href: '/dashboard/sped', label: 'Conversor SPED Fiscal', icon: FileSpreadsheet, moduleKey: 'sped', accent: 'text-lime' },
+      { href: '/dashboard/sped', label: 'Auditor SPED Fiscal ICMS/PIS/COFINS', icon: FileSpreadsheet, moduleKey: 'sped', accent: 'text-lime' },
       { href: '/dashboard/icms', label: 'ICMS Antecipado Especial', icon: Calculator, moduleKey: 'icms', accent: 'text-accent' },
       { href: '/dashboard/difal', label: 'DIFAL', icon: Percent, moduleKey: 'difal', accent: 'text-teal' },
       { href: '/dashboard/conciliacao', label: 'Conciliação Contábil', icon: BookOpenCheck, moduleKey: 'conciliacao', accent: 'text-pink' },
@@ -83,7 +83,7 @@ export default function Sidebar({ role }: { role: Role | null }) {
                   >
                     {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-accent" />}
                     <Icon size={17} strokeWidth={2} className={active ? item.accent : 'text-white/60 group-hover:text-white/90'} />
-                    <span className="truncate">{item.label}</span>
+                    <span className="leading-snug">{item.label}</span>
                   </Link>
                 );
               })}

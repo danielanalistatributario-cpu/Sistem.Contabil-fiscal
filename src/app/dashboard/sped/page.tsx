@@ -721,15 +721,15 @@ export default function SpedPage() {
       {!result && (
         <ImportHero
           eyebrow="EFD ICMS/IPI e EFD Contribuições"
-          titleParts={['SPED', '→', { text: 'Relatório de Entrada', accent: true }, 'de NF-e']}
-          description="Envie o arquivo .txt do SPED Fiscal (EFD ICMS/IPI) ou do SPED Contribuições (EFD PIS/COFINS) e receba o resumo por blocos/registros, pronto para exportar em Excel — inclusive no layout exato do seu modelo, cabeçalho (C100), itens (C170), participantes (0150) e produtos (0200) já cruzados, linha por item. O tipo de arquivo é identificado automaticamente."
+          titleParts={['Auditor', 'SPED Fiscal', { text: 'ICMS/PIS/COFINS', accent: true }]}
+          description="Envie o arquivo .txt do SPED Fiscal (EFD ICMS/IPI) ou do SPED Contribuições (EFD PIS/COFINS) e audite: notas de Saída canceladas, inutilizadas ou denegadas, quebras de sequencial na numeração e retorno da SEFA — além do resumo por blocos/registros, pronto para exportar em Excel, inclusive no layout exato do seu modelo, cabeçalho (C100), itens (C170), participantes (0150) e produtos (0200) já cruzados, linha por item. O tipo de arquivo é identificado automaticamente."
           badges={['Processamento local, sem envio a servidor', 'Layout idêntico ao modelo enviado']}
         />
       )}
 
       {!result && (
         <div>
-          <h1 className="sr-only">Conversor de SPED Fiscal para Excel</h1>
+          <h1 className="sr-only">Auditor SPED Fiscal ICMS/PIS/COFINS</h1>
           <form onSubmit={handleUpload}>
             <div
               onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -782,7 +782,7 @@ export default function SpedPage() {
         <>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-display font-semibold text-brand">Conversor de SPED Fiscal para Excel</h1>
+              <h1 className="text-2xl font-display font-semibold text-brand">Auditor SPED Fiscal ICMS/PIS/COFINS</h1>
               <p className="text-gray-500 text-sm mt-1">Resumo do arquivo importado — filtre, confira e exporte.</p>
             </div>
             <button

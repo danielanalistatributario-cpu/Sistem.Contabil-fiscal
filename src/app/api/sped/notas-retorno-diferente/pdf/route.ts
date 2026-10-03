@@ -43,7 +43,7 @@ function gerarPdf(
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(16).text('Notas com Retorno SEFA diferente de 100 (Conversor SPED Fiscal)');
+    doc.fontSize(16).text('Notas com Retorno SEFA diferente de 100 (Auditor SPED Fiscal ICMS/PIS/COFINS)');
     doc.fontSize(10).fillColor('#666');
     doc.text(`Arquivo: ${meta.fileName}`);
     if (meta.nomeEmpresa) doc.text(`Empresa: ${meta.nomeEmpresa}`);

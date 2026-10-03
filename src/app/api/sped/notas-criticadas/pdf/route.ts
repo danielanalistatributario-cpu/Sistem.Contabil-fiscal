@@ -38,7 +38,7 @@ function gerarPdf(
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(16).text('Notas de Saída canceladas / inutilizadas / denegadas (Conversor SPED Fiscal)');
+    doc.fontSize(16).text('Notas de Saída canceladas / inutilizadas / denegadas (Auditor SPED Fiscal ICMS/PIS/COFINS)');
     doc.fontSize(10).fillColor('#666');
     doc.text(`Arquivo: ${meta.fileName}`);
     if (meta.nomeEmpresa) doc.text(`Empresa: ${meta.nomeEmpresa}`);

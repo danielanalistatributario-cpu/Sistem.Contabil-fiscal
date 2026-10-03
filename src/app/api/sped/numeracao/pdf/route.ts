@@ -40,7 +40,7 @@ function gerarPdf(grupos: GrupoRecebido[], meta: { fileName: string; nomeEmpresa
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(16).text('Análise de Numeração — Saída (Conversor SPED Fiscal)');
+    doc.fontSize(16).text('Análise de Numeração — Saída (Auditor SPED Fiscal ICMS/PIS/COFINS)');
     doc.fontSize(10).fillColor('#666');
     doc.text(`Arquivo: ${meta.fileName}`);
     if (meta.nomeEmpresa) doc.text(`Empresa: ${meta.nomeEmpresa}`);

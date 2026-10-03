@@ -276,8 +276,8 @@ function DifalPageInner() {
       {!apuracao && (
         <div className="card-surface p-5 space-y-3">
           <p className="text-xs text-gray-500">
-            Envie o relatório de entradas no layout "NF-e de Entrada e Saída" (o mesmo gerado pelo Conversor de SPED
-            Fiscal, ou exportado diretamente do seu ERP). O sistema identifica automaticamente os itens com CFOP de
+            Envie o relatório de entradas no layout "NF-e de Entrada e Saída" (o mesmo gerado pelo Auditor SPED Fiscal ICMS/PIS/COFINS,
+            ou exportado diretamente do seu ERP). O sistema identifica automaticamente os itens com CFOP de
             DIFAL (2551 — Ativo Imobilizado, 2556 — Uso e Consumo).
           </p>
           <div className="flex flex-wrap items-center gap-3">

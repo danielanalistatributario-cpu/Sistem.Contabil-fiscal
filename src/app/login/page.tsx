@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { FileSpreadsheet, Calculator, Percent, BookOpenCheck, ArrowRight } from 'lucide-react';
 
 const HIGHLIGHTS = [
-  { icon: FileSpreadsheet, label: 'Conversor de SPED Fiscal' },
+  { icon: FileSpreadsheet, label: 'Auditor SPED Fiscal ICMS/PIS/COFINS' },
   { icon: Calculator, label: 'ICMS Antecipado Especial' },
   { icon: Percent, label: 'DIFAL automático' },
   { icon: BookOpenCheck, label: 'Conciliação Contábil' },
