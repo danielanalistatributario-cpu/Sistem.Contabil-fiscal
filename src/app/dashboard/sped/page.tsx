@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react';
 import * as XLSX from 'xlsx';
 import { ImportHero, ImportTrustNote } from '@/components/ImportHero';
 import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine, type NotaSaida } from '@/lib/sped-parser';
@@ -51,6 +51,21 @@ const TIPO_SPED_LABELS: Record<TipoSped, string> = {
 function fmtDataYyyymmdd(v: string | null): string {
   if (!v || v.length !== 8) return '—';
   return `${v.slice(6, 8)}/${v.slice(4, 6)}/${v.slice(0, 4)}`;
+}
+
+// Botão de filtro (chip) dos cards de análise — ativo = preenchido.
+function BotaoFiltro({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-xs px-3 py-1 rounded-full border whitespace-nowrap transition-colors ${
+        ativo ? 'bg-brand text-white border-brand' : 'bg-white border-gray-300 text-gray-600 hover:border-brand'
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function SpedPage() {
@@ -452,9 +467,55 @@ export default function SpedPage() {
       );
   }, [result]);
 
+  // Filtros em botão dos três cards (pedido do usuário) — os exports em
+  // PDF/Excel respeitam o filtro aplicado: exporta o que está na tela.
+  const [filtroCritSituacao, setFiltroCritSituacao] = useState('TODAS');
+  const [filtroCritGrupo, setFiltroCritGrupo] = useState('TODOS');
+  const [filtroNumGrupo, setFiltroNumGrupo] = useState('TODOS');
+  const [filtroNumSituacao, setFiltroNumSituacao] = useState('TODAS');
+  const [filtroRetModelo, setFiltroRetModelo] = useState('TODOS');
+  const [filtroRetCstat, setFiltroRetCstat] = useState('TODOS');
+
+  // Novo arquivo importado: volta todos os filtros pro padrão.
+  useEffect(() => {
+    setFiltroCritSituacao('TODAS');
+    setFiltroCritGrupo('TODOS');
+    setFiltroNumGrupo('TODOS');
+    setFiltroNumSituacao('TODAS');
+    setFiltroRetModelo('TODOS');
+    setFiltroRetCstat('TODOS');
+  }, [result]);
+
+  const criticasFiltradas = useMemo(
+    () =>
+      criticasOrdenadas.filter(
+        (n) =>
+          (filtroCritSituacao === 'TODAS' || n.situacao === filtroCritSituacao) &&
+          (filtroCritGrupo === 'TODOS' || `${n.modelo}|${n.serie}` === filtroCritGrupo)
+      ),
+    [criticasOrdenadas, filtroCritSituacao, filtroCritGrupo]
+  );
+
+  // Opções dos botões vêm da lista completa (não da filtrada), pra um
+  // botão não sumir depois de clicado.
+  const opcoesCritSituacao = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of criticasOrdenadas) m.set(n.situacao, (m.get(n.situacao) || 0) + 1);
+    return Array.from(m.entries());
+  }, [criticasOrdenadas]);
+  const opcoesCritGrupo = useMemo(() => {
+    const m = new Map<string, { label: string; qtd: number }>();
+    for (const n of criticasOrdenadas) {
+      const k = `${n.modelo}|${n.serie}`;
+      if (!m.has(k)) m.set(k, { label: `${n.modeloLabel} · Série ${n.serie}`, qtd: 0 });
+      m.get(k)!.qtd++;
+    }
+    return Array.from(m.entries());
+  }, [criticasOrdenadas]);
+
   const resumoCriticas = useMemo(() => {
     const mapa = new Map<string, { modeloLabel: string; serie: string; porSituacao: Map<string, number>; total: number }>();
-    for (const n of criticasOrdenadas) {
+    for (const n of criticasFiltradas) {
       const chave = `${n.modelo}|${n.serie}`;
       if (!mapa.has(chave)) mapa.set(chave, { modeloLabel: n.modeloLabel, serie: n.serie, porSituacao: new Map(), total: 0 });
       const g = mapa.get(chave)!;
@@ -462,7 +523,49 @@ export default function SpedPage() {
       g.porSituacao.set(n.situacao, (g.porSituacao.get(n.situacao) || 0) + 1);
     }
     return Array.from(mapa.values());
-  }, [criticasOrdenadas]);
+  }, [criticasFiltradas]);
+
+  // Análise de Numeração: filtra por modelo+série (esconde grupos) e por
+  // situação (esconde itens da lista de cada grupo — os contadores do
+  // grupo continuam mostrando o total real).
+  const opcoesNumGrupo = useMemo(
+    () => gruposNumeracao.map((g) => [`${g.modelo}|${g.serie}`, `${g.modeloLabel} · Série ${g.serie}`] as const),
+    [gruposNumeracao]
+  );
+  const opcoesNumSituacao = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const g of gruposNumeracao) for (const f of g.faltantes) m.set(f.categoria, (m.get(f.categoria) || 0) + 1);
+    return Array.from(m.entries());
+  }, [gruposNumeracao]);
+  const gruposNumeracaoFiltrados = useMemo(
+    () =>
+      gruposNumeracao
+        .filter((g) => filtroNumGrupo === 'TODOS' || `${g.modelo}|${g.serie}` === filtroNumGrupo)
+        .map((g) => ({
+          ...g,
+          faltantes: filtroNumSituacao === 'TODAS' ? g.faltantes : g.faltantes.filter((f) => f.categoria === filtroNumSituacao),
+        })),
+    [gruposNumeracao, filtroNumGrupo, filtroNumSituacao]
+  );
+
+  // Retorno SEFA ≠ 100: filtra por modelo e por código de retorno.
+  const opcoesRetModelo = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of notasRetornoDiferente) m.set(n.modeloLabel, (m.get(n.modeloLabel) || 0) + 1);
+    return Array.from(m.entries());
+  }, [notasRetornoDiferente]);
+  const opcoesRetCstat = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of notasRetornoDiferente) m.set(n.cStat, (m.get(n.cStat) || 0) + 1);
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [notasRetornoDiferente]);
+  const notasRetornoFiltradas = useMemo(
+    () =>
+      notasRetornoDiferente.filter(
+        (n) => (filtroRetModelo === 'TODOS' || n.modeloLabel === filtroRetModelo) && (filtroRetCstat === 'TODOS' || n.cStat === filtroRetCstat)
+      ),
+    [notasRetornoDiferente, filtroRetModelo, filtroRetCstat]
+  );
 
   function handleExportCriticasExcel() {
     if (!result) return;
@@ -478,7 +581,7 @@ export default function SpedPage() {
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(linhasResumo), 'Resumo');
     // Uma aba por modelo + série (ex: "NF-e Série 001", "NFC-e Série 005").
     for (const g of resumoCriticas) {
-      const linhas = criticasOrdenadas
+      const linhas = criticasFiltradas
         .filter((n) => n.modeloLabel === g.modeloLabel && n.serie === g.serie)
         .map((n) => ({
           Modelo: n.modeloLabel,
@@ -501,7 +604,7 @@ export default function SpedPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        notas: criticasOrdenadas.map((n) => ({
+        notas: criticasFiltradas.map((n) => ({
           modeloLabel: n.modeloLabel,
           serie: n.serie,
           numero: n.numero,
@@ -524,7 +627,7 @@ export default function SpedPage() {
     if (!result) return;
     const workbook = XLSX.utils.book_new();
     const wsResumo = XLSX.utils.json_to_sheet(
-      gruposNumeracao.map((g) => ({
+      gruposNumeracaoFiltrados.map((g) => ({
         Modelo: g.modeloLabel,
         Série: g.serie,
         'Nº Mínimo': g.numeroMinimo,
@@ -539,7 +642,7 @@ export default function SpedPage() {
       }))
     );
     XLSX.utils.book_append_sheet(workbook, wsResumo, 'Resumo');
-    const faltantesLinhas = gruposNumeracao.flatMap((g) =>
+    const faltantesLinhas = gruposNumeracaoFiltrados.flatMap((g) =>
       g.faltantes.map((f) => ({
         Modelo: g.modeloLabel,
         Série: g.serie,
@@ -561,7 +664,7 @@ export default function SpedPage() {
     const res = await fetch('/api/sped/numeracao/pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grupos: gruposNumeracao, fileName: result.fileName, nomeEmpresa: result.nomeEmpresa, competencia: result.competencia }),
+      body: JSON.stringify({ grupos: gruposNumeracaoFiltrados, fileName: result.fileName, nomeEmpresa: result.nomeEmpresa, competencia: result.competencia }),
     });
     if (!res.ok) return;
     const blob = await res.blob();
@@ -572,7 +675,7 @@ export default function SpedPage() {
   function handleExportRetornoDiferenteExcel() {
     if (!result) return;
     const ws = XLSX.utils.json_to_sheet(
-      notasRetornoDiferente.map((n) => ({
+      notasRetornoFiltradas.map((n) => ({
         Modelo: n.modeloLabel,
         Série: n.serie,
         Número: n.numero,
@@ -594,7 +697,7 @@ export default function SpedPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        notas: notasRetornoDiferente,
+        notas: notasRetornoFiltradas,
         fileName: result.fileName,
         nomeEmpresa: result.nomeEmpresa,
         competenciaInicio: result.competenciaInicio,
@@ -742,6 +845,35 @@ export default function SpedPage() {
                   &quot;Saída Cancel-Inutil-Deneg&quot; do Excel completo.
                 </p>
               </div>
+              <div className="space-y-2 mb-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-gray-500 w-20">Situação:</span>
+                  <BotaoFiltro ativo={filtroCritSituacao === 'TODAS'} onClick={() => setFiltroCritSituacao('TODAS')}>
+                    Todas ({criticasOrdenadas.length})
+                  </BotaoFiltro>
+                  {opcoesCritSituacao.map(([situacao, qtd]) => (
+                    <BotaoFiltro key={situacao} ativo={filtroCritSituacao === situacao} onClick={() => setFiltroCritSituacao(situacao)}>
+                      {situacao} ({qtd})
+                    </BotaoFiltro>
+                  ))}
+                </div>
+                {opcoesCritGrupo.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-gray-500 w-20">Modelo/série:</span>
+                    <BotaoFiltro ativo={filtroCritGrupo === 'TODOS'} onClick={() => setFiltroCritGrupo('TODOS')}>
+                      Todos
+                    </BotaoFiltro>
+                    {opcoesCritGrupo.map(([chave, { label, qtd }]) => (
+                      <BotaoFiltro key={chave} ativo={filtroCritGrupo === chave} onClick={() => setFiltroCritGrupo(chave)}>
+                        {label} ({qtd})
+                      </BotaoFiltro>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[11px] text-gray-400">
+                  Mostrando {criticasFiltradas.length} de {criticasOrdenadas.length} — o PDF e o Excel exportam o que está filtrado.
+                </p>
+              </div>
               <div className="flex flex-wrap gap-2 mb-3">
                 {resumoCriticas.map((g) => (
                   <div key={`${g.modeloLabel}-${g.serie}`} className="text-xs bg-white border border-red-100 rounded-lg px-3 py-1.5">
@@ -767,7 +899,7 @@ export default function SpedPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {criticasOrdenadas.map((n, idx) => (
+                    {criticasFiltradas.map((n, idx) => (
                       <tr key={`${n.linhaOriginal}-${idx}`} className="border-t border-red-50">
                         <td className="px-3 py-1.5 whitespace-nowrap">{n.modeloLabel}</td>
                         <td className="px-3 py-1.5">
@@ -856,8 +988,39 @@ export default function SpedPage() {
                 </p>
               )}
 
+              <div className="space-y-2 mb-4">
+                {opcoesNumGrupo.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-gray-500 w-20">Modelo/série:</span>
+                    <BotaoFiltro ativo={filtroNumGrupo === 'TODOS'} onClick={() => setFiltroNumGrupo('TODOS')}>
+                      Todos
+                    </BotaoFiltro>
+                    {opcoesNumGrupo.map(([chave, label]) => (
+                      <BotaoFiltro key={chave} ativo={filtroNumGrupo === chave} onClick={() => setFiltroNumGrupo(chave)}>
+                        {label}
+                      </BotaoFiltro>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-gray-500 w-20">Situação:</span>
+                  <BotaoFiltro ativo={filtroNumSituacao === 'TODAS'} onClick={() => setFiltroNumSituacao('TODAS')}>
+                    Todas
+                  </BotaoFiltro>
+                  {opcoesNumSituacao.map(([categoria, qtd]) => (
+                    <BotaoFiltro key={categoria} ativo={filtroNumSituacao === categoria} onClick={() => setFiltroNumSituacao(categoria)}>
+                      {categoria} ({qtd})
+                    </BotaoFiltro>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  O filtro de situação age na lista de números de cada grupo (os quadros de contagem continuam
+                  mostrando o total). O PDF e o Excel exportam o que está filtrado.
+                </p>
+              </div>
+
               <div className="space-y-4">
-                {gruposNumeracao.map((g) => (
+                {gruposNumeracaoFiltrados.map((g) => (
                   <div key={`${g.modelo}-${g.serie}`} className="border border-gray-100 rounded-lg p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                       <p className="text-sm font-medium text-gray-800">
@@ -976,6 +1139,36 @@ export default function SpedPage() {
                   Protheus pra esta empresa ainda não rodou).
                 </p>
               ) : (
+                <>
+                <div className="space-y-2 mb-3">
+                  {opcoesRetModelo.length > 1 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-gray-500 w-20">Modelo:</span>
+                      <BotaoFiltro ativo={filtroRetModelo === 'TODOS'} onClick={() => setFiltroRetModelo('TODOS')}>
+                        Todos ({notasRetornoDiferente.length})
+                      </BotaoFiltro>
+                      {opcoesRetModelo.map(([modeloLabel, qtd]) => (
+                        <BotaoFiltro key={modeloLabel} ativo={filtroRetModelo === modeloLabel} onClick={() => setFiltroRetModelo(modeloLabel)}>
+                          {modeloLabel} ({qtd})
+                        </BotaoFiltro>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-gray-500 w-20">Retorno:</span>
+                    <BotaoFiltro ativo={filtroRetCstat === 'TODOS'} onClick={() => setFiltroRetCstat('TODOS')}>
+                      Todos
+                    </BotaoFiltro>
+                    {opcoesRetCstat.map(([cStat, qtd]) => (
+                      <BotaoFiltro key={cStat} ativo={filtroRetCstat === cStat} onClick={() => setFiltroRetCstat(cStat)}>
+                        {cStat} — {CSTAT_LABELS[cStat] || 'Código ' + cStat} ({qtd})
+                      </BotaoFiltro>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Mostrando {notasRetornoFiltradas.length} de {notasRetornoDiferente.length} — o PDF e o Excel exportam o que está filtrado.
+                  </p>
+                </div>
                 <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-100 rounded-lg">
                   <table className="w-full text-xs">
                     <thead className="bg-gray-50 sticky top-0">
@@ -989,7 +1182,7 @@ export default function SpedPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {notasRetornoDiferente.map((n, idx) => (
+                      {notasRetornoFiltradas.map((n, idx) => (
                         <tr key={`${n.modelo}-${n.serie}-${n.numero}-${idx}`} className="border-t border-gray-50">
                           <td className="px-3 py-1.5">{n.modeloLabel}</td>
                           <td className="px-3 py-1.5">{n.serie}</td>
@@ -1006,6 +1199,7 @@ export default function SpedPage() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           )}
