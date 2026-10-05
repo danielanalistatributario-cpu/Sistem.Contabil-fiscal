@@ -7,7 +7,7 @@ import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine, type N
 import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
 import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
-import { gerarExcelTributos } from '@/lib/analise-fiscal-excel-tributos';
+import { gerarExcelTributos, COLUNAS_PLANILHA_TRIBUTOS } from '@/lib/analise-fiscal-excel-tributos';
 import { analisarNumeracaoSaida, extrairFaixasNumeracao, COD_MOD_LABELS, STATUS_SF3_LABELS } from '@/lib/sped-numeracao';
 import { lerSituacaoNotasSf3, construirMapaSf3, CSTAT_LABELS, type NotaSf3 } from '@/lib/sf3-situacao-reader';
 
@@ -79,6 +79,28 @@ export default function SpedPage() {
   const [erroRelatorioModelo, setErroRelatorioModelo] = useState<string | null>(null);
   const [gerandoExcelTributos, setGerandoExcelTributos] = useState(false);
   const [erroExcelTributos, setErroExcelTributos] = useState<string | null>(null);
+  // Colunas escolhidas pro export da Planilha ICMS/PIS/COFINS (todas por
+  // padrão). A escolha fica lembrada neste navegador, quando disponível.
+  const [colunasTributos, setColunasTributos] = useState<string[]>(COLUNAS_PLANILHA_TRIBUTOS);
+  useEffect(() => {
+    try {
+      const salvo = JSON.parse(localStorage.getItem('sped-colunas-tributos') || 'null');
+      if (Array.isArray(salvo)) {
+        const validas = salvo.filter((c: unknown): c is string => typeof c === 'string' && COLUNAS_PLANILHA_TRIBUTOS.includes(c));
+        if (validas.length > 0) setColunasTributos(validas);
+      }
+    } catch {
+      // sem localStorage (janela privada etc.) — segue com todas marcadas
+    }
+  }, []);
+  function alterarColunasTributos(novas: string[]) {
+    setColunasTributos(novas);
+    try {
+      localStorage.setItem('sped-colunas-tributos', JSON.stringify(novas));
+    } catch {
+      // ignora
+    }
+  }
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -252,7 +274,7 @@ export default function SpedPage() {
         return;
       }
       const itens = mapearSpedParaItensTributo(rows);
-      const buffer = await gerarExcelTributos(itens, 'ICMS-PIS-COFINS');
+      const buffer = await gerarExcelTributos(itens, 'ICMS-PIS-COFINS', colunasTributos);
       baixarBlob(buffer, `ICMS_PIS_COFINS_SPED_${file.name.replace(/\.[^.]+$/, '')}.xlsx`);
 
       fetch('/api/sped/excel-tributos', {
@@ -1296,6 +1318,53 @@ export default function SpedPage() {
               >
                 {gerandoExcelTributos ? 'Gerando...' : 'Exportar Planilha ICMS/PIS/COFINS'}
               </button>
+            </div>
+            <div className="mt-4 border-t border-gray-100 pt-3">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="text-xs font-medium text-gray-600">
+                  Colunas a exportar ({colunasTributos.length} de {COLUNAS_PLANILHA_TRIBUTOS.length}):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => alterarColunasTributos(COLUNAS_PLANILHA_TRIBUTOS)}
+                  className="text-[11px] text-accent underline"
+                >
+                  Marcar todas
+                </button>
+                <button type="button" onClick={() => alterarColunasTributos([])} className="text-[11px] text-gray-500 underline">
+                  Limpar
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {COLUNAS_PLANILHA_TRIBUTOS.map((col) => {
+                  const marcada = colunasTributos.includes(col);
+                  return (
+                    <label
+                      key={col}
+                      className={`flex items-center gap-1.5 text-xs rounded-full border px-3 py-1 cursor-pointer select-none ${
+                        marcada ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={marcada}
+                        onChange={() =>
+                          alterarColunasTributos(
+                            marcada
+                              ? colunasTributos.filter((c) => c !== col)
+                              : COLUNAS_PLANILHA_TRIBUTOS.filter((c) => c === col || colunasTributos.includes(c))
+                          )
+                        }
+                      />
+                      {col}
+                    </label>
+                  );
+                })}
+              </div>
+              {colunasTributos.length === 0 && (
+                <p className="text-[11px] text-amber-700 mt-2">Nenhuma coluna marcada — a exportação trará todas.</p>
+              )}
             </div>
             {erroExcelTributos && <p className="text-sm text-red-600 mt-3">{erroExcelTributos}</p>}
           </div>

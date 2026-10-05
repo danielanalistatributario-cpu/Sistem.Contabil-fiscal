@@ -93,25 +93,39 @@ const COLUNAS: { header: string; width: number; numFmt?: string }[] = [
 
 const COLUNA_OPERACAO = { header: 'Operação', width: 12 };
 
+// Cabeçalhos selecionáveis na exportação (pedido do usuário, 05/10/2026:
+// escolher quais colunas da planilha exportar). "Operação" só existe na
+// planilha quando a origem a traz (SPED) — ver temOperacao abaixo.
+export const COLUNAS_PLANILHA_TRIBUTOS: string[] = [COLUNAS[0].header, COLUNA_OPERACAO.header, ...COLUNAS.slice(1).map((c) => c.header)];
+
 // Devolve Uint8Array (não Buffer, API só do Node) porque esta função roda
 // tanto em rotas server-side (Análise Fiscal) quanto no navegador (Conversor
 // SPED, que processa o arquivo localmente pra não estourar o limite de
 // upload da Vercel — ver [[analise-apuracao-fiscal-modulo]]). Confirmado no
 // navegador: workbook.xlsx.writeBuffer() já devolve um Uint8Array nesse
 // ambiente. NextResponse e Blob aceitam Uint8Array direto, sem conversão.
-export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string): Promise<Uint8Array> {
+export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string, colunasSelecionadas?: string[]): Promise<Uint8Array> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet(tituloAba.slice(0, 31));
 
   // Operação entra logo depois de "Nota Fiscal", só se algum item a trouxer.
   const temOperacao = itens.some((i) => (i.operacao || '').trim());
-  const colunas: { header: string; width: number; numFmt?: string }[] = temOperacao
+  const todasColunas: { header: string; width: number; numFmt?: string }[] = temOperacao
     ? [COLUNAS[0], COLUNA_OPERACAO, ...COLUNAS.slice(1)]
     : COLUNAS;
 
+  // Subconjunto escolhido pelo usuário (ordem original preservada). Sem
+  // seleção, ou seleção que não casa com nenhuma coluna, exporta tudo.
+  const selecionadas = colunasSelecionadas ? new Set(colunasSelecionadas) : null;
+  let indices = todasColunas.map((_, i) => i).filter((i) => !selecionadas || selecionadas.has(todasColunas[i].header));
+  if (indices.length === 0) indices = todasColunas.map((_, i) => i);
+  const colunas = indices.map((i) => todasColunas[i]);
+
   sheet.columns = colunas.map((c) => ({ width: c.width }));
 
-  const temAlgumCst = itens.some((i) => (i.cstPis || '').trim() || (i.cstCofins || '').trim());
+  // O aviso de CST só faz sentido se alguma coluna de CST foi exportada.
+  const exportaCst = colunas.some((c) => c.header === 'CST PIS' || c.header === 'CST COFINS');
+  const temAlgumCst = !exportaCst || itens.some((i) => (i.cstPis || '').trim() || (i.cstCofins || '').trim());
 
   let linhaCabecalho = 1;
   if (!temAlgumCst && itens.length > 0) {
@@ -138,7 +152,7 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
   itens.forEach((item, idx) => {
     const { codigo, descricao } = resolverProduto(item);
     const row = sheet.getRow(linhaCabecalho + 1 + idx);
-    const valores = [
+    const todosValores = [
       txt(item.numeroNf),
       ...(temOperacao ? [txt(item.operacao)] : []),
       codigo,
@@ -157,6 +171,7 @@ export async function gerarExcelTributos(itens: ItemTributo[], tituloAba: string
       num(item.valorPis),
       num(item.valorCofins),
     ];
+    const valores = indices.map((i) => todosValores[i]);
     valores.forEach((v, colIdx) => {
       const cell = row.getCell(colIdx + 1);
       cell.value = v as ExcelJS.CellValue;
