@@ -7,7 +7,7 @@ import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine, type N
 import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
 import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
-import { gerarExcelTributos, COLUNAS_PLANILHA_TRIBUTOS } from '@/lib/analise-fiscal-excel-tributos';
+import { gerarExcelTributos, COLUNAS_PLANILHA_TRIBUTOS, COLUNAS_PLANILHA_TRIBUTOS_PADRAO, COLUNAS_PLANILHA_TRIBUTOS_EXTRAS } from '@/lib/analise-fiscal-excel-tributos';
 import { analisarNumeracaoSaida, extrairFaixasNumeracao, COD_MOD_LABELS, STATUS_SF3_LABELS } from '@/lib/sped-numeracao';
 import { lerSituacaoNotasSf3, construirMapaSf3, CSTAT_LABELS, type NotaSf3 } from '@/lib/sf3-situacao-reader';
 
@@ -79,9 +79,10 @@ export default function SpedPage() {
   const [erroRelatorioModelo, setErroRelatorioModelo] = useState<string | null>(null);
   const [gerandoExcelTributos, setGerandoExcelTributos] = useState(false);
   const [erroExcelTributos, setErroExcelTributos] = useState<string | null>(null);
-  // Colunas escolhidas pro export da Planilha ICMS/PIS/COFINS (todas por
-  // padrão). A escolha fica lembrada neste navegador, quando disponível.
-  const [colunasTributos, setColunasTributos] = useState<string[]>(COLUNAS_PLANILHA_TRIBUTOS);
+  // Colunas escolhidas pro export da Planilha ICMS/PIS/COFINS (layout
+  // original por padrão; as "adicionais do SPED" — CNPJ/CPF, Fornecedor etc.
+  // — começam desmarcadas). A escolha fica lembrada neste navegador.
+  const [colunasTributos, setColunasTributos] = useState<string[]>(COLUNAS_PLANILHA_TRIBUTOS_PADRAO);
   useEffect(() => {
     try {
       const salvo = JSON.parse(localStorage.getItem('sped-colunas-tributos') || 'null');
@@ -1331,6 +1332,13 @@ export default function SpedPage() {
                 >
                   Marcar todas
                 </button>
+                <button
+                  type="button"
+                  onClick={() => alterarColunasTributos(COLUNAS_PLANILHA_TRIBUTOS_PADRAO)}
+                  className="text-[11px] text-accent underline"
+                >
+                  Layout padrão
+                </button>
                 <button type="button" onClick={() => alterarColunasTributos([])} className="text-[11px] text-gray-500 underline">
                   Limpar
                 </button>
@@ -1338,11 +1346,12 @@ export default function SpedPage() {
               <div className="flex flex-wrap gap-2">
                 {COLUNAS_PLANILHA_TRIBUTOS.map((col) => {
                   const marcada = colunasTributos.includes(col);
+                  const adicional = COLUNAS_PLANILHA_TRIBUTOS_EXTRAS.includes(col);
                   return (
                     <label
                       key={col}
                       className={`flex items-center gap-1.5 text-xs rounded-full border px-3 py-1 cursor-pointer select-none ${
-                        marcada ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-300'
+                        marcada ? 'bg-brand text-white border-brand' : adicional ? 'bg-lime/10 text-gray-600 border-lime/60' : 'bg-white text-gray-600 border-gray-300'
                       }`}
                     >
                       <input
@@ -1362,8 +1371,12 @@ export default function SpedPage() {
                   );
                 })}
               </div>
+              <p className="text-[11px] text-gray-400 mt-2">
+                Colunas com contorno verde-claro são adicionais, lidas direto do SPED (ex: CNPJ/CPF, Fornecedor/Cliente,
+                CFOP, Chave NF-e) — saem só se você marcar.
+              </p>
               {colunasTributos.length === 0 && (
-                <p className="text-[11px] text-amber-700 mt-2">Nenhuma coluna marcada — a exportação trará todas.</p>
+                <p className="text-[11px] text-amber-700 mt-2">Nenhuma coluna marcada — a exportação trará o layout padrão.</p>
               )}
             </div>
             {erroExcelTributos && <p className="text-sm text-red-600 mt-3">{erroExcelTributos}</p>}
