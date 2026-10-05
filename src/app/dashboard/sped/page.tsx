@@ -7,6 +7,7 @@ import { BLOCO_DESCRICOES, parseSpedFiscal, type TipoSped, type SpedLine, type N
 import { buildRelatorioNFeRows } from '@/lib/sped-nfe-report';
 import { gerarRelatorioNFeExcel } from '@/lib/sped-nfe-excel';
 import { mapearSpedParaItensTributo } from '@/lib/sped-excel-tributos';
+import { mapearFreteContribuicoesParaItensTributo } from '@/lib/sped-frete-contribuicoes';
 import { gerarExcelTributos, COLUNAS_PLANILHA_TRIBUTOS, COLUNAS_PLANILHA_TRIBUTOS_PADRAO, COLUNAS_PLANILHA_TRIBUTOS_EXTRAS } from '@/lib/analise-fiscal-excel-tributos';
 import { analisarNumeracaoSaida, extrairFaixasNumeracao, COD_MOD_LABELS, STATUS_SF3_LABELS } from '@/lib/sped-numeracao';
 import { lerSituacaoNotasSf3, construirMapaSf3, CSTAT_LABELS, type NotaSf3 } from '@/lib/sf3-situacao-reader';
@@ -270,11 +271,14 @@ export default function SpedPage() {
     try {
       const texto = await file.text();
       const rows = buildRelatorioNFeRows(texto);
-      if (rows.length === 0) {
-        setErroExcelTributos('Nenhum item de nota fiscal (registros C100/C170) foi encontrado no arquivo.');
+      // Fretes (CT-e: D100/D101/D105) do EFD Contribuições também têm crédito
+      // de PIS/COFINS (ex: CST 53) e entram na planilha, depois dos itens.
+      const fretes = mapearFreteContribuicoesParaItensTributo(texto);
+      if (rows.length === 0 && fretes.length === 0) {
+        setErroExcelTributos('Nenhum item de nota fiscal (registros C100/C170 ou D100/D101/D105) foi encontrado no arquivo.');
         return;
       }
-      const itens = mapearSpedParaItensTributo(rows);
+      const itens = [...mapearSpedParaItensTributo(rows), ...fretes];
       const buffer = await gerarExcelTributos(itens, 'ICMS-PIS-COFINS', colunasTributos);
       baixarBlob(buffer, `ICMS_PIS_COFINS_SPED_${file.name.replace(/\.[^.]+$/, '')}.xlsx`);
 
@@ -1307,7 +1311,7 @@ export default function SpedPage() {
                 <h2 className="font-semibold text-brand">Planilha ICMS/PIS/COFINS por nota e produto</h2>
                 <p className="text-xs text-gray-500 mt-1 max-w-xl">
                   Mesmo layout da planilha de conferência da Análise e Apuração Fiscal (15 colunas, com filtro
-                  automático), extraído dos registros C100/C170/C190 do SPED. Campo que o SPED não trouxer
+                  automático), extraído dos registros C100/C170/C190 do SPED (e, no EFD Contribuições, dos fretes D100/D101/D105). Campo que o SPED não trouxer
                   (ex: TES — não existe no layout do SPED — ou CST PIS/COFINS quando o arquivo não os declarou)
                   aparece como "—", sem inventar valor.
                 </p>
