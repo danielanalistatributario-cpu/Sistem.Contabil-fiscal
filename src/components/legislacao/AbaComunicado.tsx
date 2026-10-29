@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Download, FileDown, MessageCircle, Mail, Pencil, Save, X, UserCog, Star, Trash2, Copy } from 'lucide-react';
 import ComunicadoVisual from './ComunicadoVisual';
-import { ASSINATURA_PADRAO, type Comunicado } from '@/lib/legislacao/tipos';
+import { ASSINATURA_PADRAO, type Comunicado, type Marco } from '@/lib/legislacao/tipos';
+import { MODELOS_VISUAIS, type ModeloVisual } from '@/lib/legislacao/modelos';
 import { textoComunicado, type Assinatura } from '@/lib/legislacao/formatar';
 
 type AssinaturaDb = { id: string; nome: string; cargo: string; setor: string | null; padrao: boolean };
@@ -33,13 +34,18 @@ export default function AbaComunicado({
   tipoDocumento,
   assinaturaIdInicial,
   onComunicadoSalvo,
+  modeloInicial,
+  marcos,
 }: {
   analiseId: string;
   comunicado: Comunicado;
   tipoDocumento: string;
   assinaturaIdInicial: string | null;
   onComunicadoSalvo: (c: Comunicado) => void;
+  modeloInicial: ModeloVisual;
+  marcos: Marco[];
 }) {
+  const [modelo, setModelo] = useState<ModeloVisual>(modeloInicial);
   const nodeRef = useRef<HTMLDivElement>(null);
   const caixaRef = useRef<HTMLDivElement>(null);
   const [escala, setEscala] = useState(0.6);
@@ -82,7 +88,13 @@ export default function AbaComunicado({
     if (caixaRef.current) ro.observe(caixaRef.current);
     if (nodeRef.current) ro.observe(nodeRef.current);
     return () => ro.disconnect();
-  }, []);
+    // Trocar de modelo troca o nó medido (cada modelo é outro componente).
+  }, [modelo]);
+
+  async function escolherModelo(m: ModeloVisual) {
+    setModelo(m);
+    await fetch(`/api/legislacao/analises/${analiseId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modeloVisual: m }) });
+  }
 
   async function escolherAssinatura(id: string) {
     setAssinaturaId(id || null);
@@ -189,6 +201,27 @@ export default function AbaComunicado({
         )}
       </div>
 
+      <div className="card-surface p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2.5">Modelo do comunicado</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {MODELOS_VISUAIS.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => escolherModelo(m.id)}
+              className={`text-left rounded-xl border px-3 py-2.5 transition-colors ${modelo === m.id ? 'border-accent bg-accent/5 ring-1 ring-accent' : 'border-gray-200 hover:border-gray-300'}`}
+            >
+              <span className="flex gap-1 mb-1.5">
+                {m.cores.map((cor) => (
+                  <span key={cor} className="w-5 h-2.5 rounded-sm" style={{ background: cor }} />
+                ))}
+              </span>
+              <span className="block text-sm font-medium text-gray-800">{m.nome}</span>
+              <span className="block text-[11px] text-gray-400 leading-snug mt-0.5">{m.descricao}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="card-surface p-4 flex flex-wrap items-center gap-3 text-sm">
         <UserCog size={17} className="text-brand" />
         <span className="text-gray-600">Assinatura do rodapé:</span>
@@ -280,6 +313,8 @@ export default function AbaComunicado({
             assinatura={assinatura}
             tipoDocumento={tipoDocumento}
             dataGeracao={dataGeracao}
+            modelo={modelo}
+            marcos={marcos}
           />
         </div>
       </div>

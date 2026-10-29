@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { sessaoLegislacao } from '@/lib/legislacao/servidor';
 import { STATUS_ANALISE, type Comunicado } from '@/lib/legislacao/tipos';
+import { ehModeloVisual } from '@/lib/legislacao/modelos';
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await sessaoLegislacao();
@@ -46,6 +47,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       fonte: texto(c.fonte),
     };
     data.resultado = { ...(atual.resultado as object), comunicado };
+  }
+  if (ehModeloVisual(body.modeloVisual)) {
+    data.resultado = { ...((data.resultado ?? atual.resultado) as object), modeloVisual: body.modeloVisual };
   }
 
   const analise = await prisma.legislacaoAnalise.update({ where: { id: atual.id }, data });

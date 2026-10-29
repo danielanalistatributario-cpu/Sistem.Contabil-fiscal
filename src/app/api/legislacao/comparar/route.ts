@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { compararLegislacoes } from '@/lib/legislacao/ia';
-import { lerDocumentoDoForm, respostaStreaming, progressoThrottled, sessaoLegislacao } from '@/lib/legislacao/servidor';
+import { lerDocumentoDoForm, respostaStreaming, progressoThrottled, sessaoLegislacao, modeloParaNovaAnalise } from '@/lib/legislacao/servidor';
 
 export const maxDuration = 300;
 
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
         dataDocumento: docB.data || null,
         titulo: `${rotulo(resultado.documentoA, a.doc.nome)} × ${rotulo(docB, b.doc.nome)}`,
         resumo: resultado.relacao || null,
-        resultado: resultado as object,
+        resultado: { ...resultado, modeloVisual: await modeloParaNovaAnalise(session.currentCompanyId) } as object,
         modelo: uso.modelo,
         leituraTexto: a.leituraTexto || b.leituraTexto,
         tokensEntrada: uso.tokensEntrada,

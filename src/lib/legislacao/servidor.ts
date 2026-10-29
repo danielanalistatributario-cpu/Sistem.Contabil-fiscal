@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSession, type SessionUser } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
+import { prisma } from '@/lib/db';
+import { proximoModelo, modeloDaAnalise, type ModeloVisual } from './modelos';
 import type { DocumentoEntrada } from './ia';
 
 // Utilidades das rotas /api/legislacao/*.
@@ -14,6 +16,14 @@ export async function sessaoLegislacao(): Promise<{ session: SessionUser & { cur
     return { erro: NextResponse.json({ error: 'Sem permissão para este módulo.' }, { status: 403 }) };
   }
   return { session: session as SessionUser & { currentCompanyId: string } };
+}
+
+// Rodízio de modelos visuais: a análise nova recebe o modelo seguinte ao
+// da última análise da empresa, pra os comunicados variarem.
+export async function modeloParaNovaAnalise(companyId: string): Promise<ModeloVisual> {
+  const ultima = await prisma.legislacaoAnalise.findFirst({ where: { companyId }, orderBy: { createdAt: 'desc' }, select: { id: true, resultado: true } });
+  if (!ultima) return 'corporativo';
+  return proximoModelo(modeloDaAnalise(ultima.id, (ultima.resultado as { modeloVisual?: unknown } | null)?.modeloVisual));
 }
 
 const MAX_PAGINAS_TEXTO = 1500;

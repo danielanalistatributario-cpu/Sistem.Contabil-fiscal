@@ -2,8 +2,10 @@
 
 import { forwardRef } from 'react';
 import { CalendarClock, Users, ListChecks, Settings2, AlertTriangle, BookOpen, Sparkles } from 'lucide-react';
-import type { Comunicado } from '@/lib/legislacao/tipos';
+import type { Comunicado, Marco } from '@/lib/legislacao/tipos';
 import type { Assinatura } from '@/lib/legislacao/formatar';
+import type { ModeloVisual } from '@/lib/legislacao/modelos';
+import { ModeloLinhaDoTempo, ModeloAlerta, ModeloExecutivo, ModeloMosaico } from './ModelosComunicado';
 
 // Comunicado visual de uma página (infográfico corporativo) gerado a
 // partir da análise. Largura fixa de 1080px — o formato que melhor
@@ -48,7 +50,7 @@ export type ComunicadoVisualProps = {
   dataGeracao: string; // DD/MM/AAAA
 };
 
-const ComunicadoVisual = forwardRef<HTMLDivElement, ComunicadoVisualProps>(function ComunicadoVisual({ comunicado: c, assinatura, tipoDocumento, dataGeracao }, ref) {
+const ModeloCorporativo = forwardRef<HTMLDivElement, ComunicadoVisualProps>(function ModeloCorporativo({ comunicado: c, assinatura, tipoDocumento, dataGeracao }, ref) {
   return (
     <div ref={ref} style={{ width: 1080, background: C.fundo, fontFamily: fonteTexto, color: C.tinta, boxSizing: 'border-box' }}>
       {/* Cabeçalho */}
@@ -173,6 +175,15 @@ const ComunicadoVisual = forwardRef<HTMLDivElement, ComunicadoVisualProps>(funct
       </div>
     </div>
   );
+});
+
+// Escolhe o layout pelo modelo (ver lib/legislacao/modelos.ts).
+const ComunicadoVisual = forwardRef<HTMLDivElement, ComunicadoVisualProps & { modelo?: ModeloVisual; marcos?: Marco[] }>(function ComunicadoVisual({ modelo = 'corporativo', marcos, ...props }, ref) {
+  if (modelo === 'linha-do-tempo') return <ModeloLinhaDoTempo ref={ref} {...props} marcos={marcos} />;
+  if (modelo === 'alerta') return <ModeloAlerta ref={ref} {...props} />;
+  if (modelo === 'executivo') return <ModeloExecutivo ref={ref} {...props} />;
+  if (modelo === 'mosaico') return <ModeloMosaico ref={ref} {...props} />;
+  return <ModeloCorporativo ref={ref} {...props} />;
 });
 
 export default ComunicadoVisual;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { analisarSemIa, MODELO_LOCAL } from '@/lib/legislacao/analiseLocal';
-import { sessaoLegislacao } from '@/lib/legislacao/servidor';
+import { sessaoLegislacao, modeloParaNovaAnalise } from '@/lib/legislacao/servidor';
 
 // Resumo SEM IA: recebe o texto do PDF já extraído no navegador (página a
 // página), roda as regras de analiseLocal.ts e salva no mesmo formato da
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       orgao: id.orgao || null,
       titulo: id.titulo || nome,
       resumo: resultado.assuntoPrincipal || null,
-      resultado: resultado as object,
+      resultado: { ...resultado, modeloVisual: await modeloParaNovaAnalise(session.currentCompanyId) } as object,
       modelo: MODELO_LOCAL,
       paginas: paginas.length,
       leituraTexto: true,

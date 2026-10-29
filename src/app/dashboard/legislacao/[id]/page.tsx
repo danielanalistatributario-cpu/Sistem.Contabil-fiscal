@@ -10,6 +10,7 @@ import AbaComunicado from '@/components/legislacao/AbaComunicado';
 import { Secao, ListaItensFonte, LinhaDoTempo, RefFonte, SeloNatureza, ListaComparacao } from '@/components/legislacao/Blocos';
 import { ROTULO_STATUS, STATUS_ANALISE, COR_STATUS, type ResultadoAnalise, type ResultadoComparacao, type Comunicado, type StatusAnalise, type ItemChecklist } from '@/lib/legislacao/tipos';
 import { fmtData, ehComparacao } from '@/lib/legislacao/formatar';
+import { modeloDaAnalise } from '@/lib/legislacao/modelos';
 
 type Analise = {
   id: string;
@@ -170,6 +171,8 @@ function Conteudo({ id }: { id: string }) {
           tipoDocumento={comparacao ? 'Atualização normativa' : analise.tipoDocumento || ''}
           assinaturaIdInicial={analise.assinaturaId}
           onComunicadoSalvo={(c: Comunicado) => setAnalise({ ...analise, resultado: { ...r, comunicado: c } as typeof r })}
+          modeloInicial={modeloDaAnalise(analise.id, r.modeloVisual)}
+          marcos={comparacao ? r.novosPrazos : r.linhaDoTempo}
         />
       )}
       {aba === 'checklist' && <AbaChecklist itens={r.checklist} marcados={marcados} status={analise.status} onSalvar={patch} />}

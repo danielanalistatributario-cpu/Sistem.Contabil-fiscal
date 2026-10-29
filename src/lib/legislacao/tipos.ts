@@ -167,6 +167,7 @@ export type ResultadoAnalise = {
   baseLegal: BaseLegal[];
   comunicado: Comunicado;
   limitacoes: string[]; // o que a IA não conseguiu ler/confirmar no documento
+  modeloVisual?: string; // layout do comunicado (lib/legislacao/modelos.ts); fora do schema da IA
 };
 
 export type ItemComparacao = {
@@ -193,6 +194,7 @@ export type ResultadoComparacao = {
   checklist: ItemChecklist[];
   comunicado: Comunicado;
   limitacoes: string[];
+  modeloVisual?: string;
 };
 
 export type ModoAnalise = 'ANALISE' | 'COMPARACAO';
