@@ -79,6 +79,7 @@ function Conteudo({ id }: { id: string }) {
 
   const r = analise.resultado;
   const comparacao = ehComparacao(r);
+  const semIa = (analise.modelo ?? '').startsWith('regras');
   const abas = comparacao ? ABAS_COMPARACAO : ABAS_ANALISE;
   const marcados = analise.checklistMarcados ?? [];
 
@@ -138,8 +139,15 @@ function Conteudo({ id }: { id: string }) {
       <div className="flex items-start gap-2 text-xs text-gray-500 bg-white border border-gray-100 rounded-xl px-4 py-2.5">
         <Info size={15} className="text-brand shrink-0 mt-px" />
         <span>
-          Análise gerada com IA a partir do documento. <SeloNatureza natureza="expresso" /> = está escrito no documento; <SeloNatureza natureza="interpretacao" /> = leitura técnica ou recomendação. Clique na referência de página para ver o trecho de origem.
-          {analise.leituraTexto && <strong className="text-amber-700"> PDF lido pelo texto extraído (arquivo grande) — tabelas e imagens podem não ter sido consideradas.</strong>}
+          {semIa ? (
+            <>
+              <strong className="text-brand">Resumo automático sem IA</strong>: as frases foram localizadas e extraídas do próprio PDF por regras (não reescritas). Confira o comunicado antes de divulgar — dá para editar os textos na aba Comunicado Visual.{' '}
+            </>
+          ) : (
+            'Análise gerada com IA a partir do documento. '
+          )}
+          <SeloNatureza natureza="expresso" /> = está escrito no documento; <SeloNatureza natureza="interpretacao" /> = leitura técnica ou recomendação. Clique na referência de página para ver o trecho de origem.
+          {analise.leituraTexto && !semIa && <strong className="text-amber-700"> PDF lido pelo texto extraído (arquivo grande) — tabelas e imagens podem não ter sido consideradas.</strong>}
         </span>
       </div>
 

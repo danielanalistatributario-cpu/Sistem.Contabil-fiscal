@@ -9,6 +9,7 @@ import SeletorPdf from '@/components/legislacao/SeletorPdf';
 import ProgressoAnalise from '@/components/legislacao/ProgressoAnalise';
 import AvisoIaNaoConfigurada, { useIaConfigurada } from '@/components/legislacao/AvisoIaNaoConfigurada';
 import { anexarDocumento, enviarAnalise, LIMITE_UPLOAD_PDF, type EtapaEnvio } from '@/lib/legislacao/cliente';
+import { extrairTextoPdf } from '@/lib/legislacao/extrairTextoPdf';
 import { ROTULO_STATUS, STATUS_ANALISE, COR_STATUS, type StatusAnalise } from '@/lib/legislacao/tipos';
 import { fmtData } from '@/lib/legislacao/formatar';
 
@@ -69,6 +70,28 @@ export default function LegislacaoPage() {
     }
   }
 
+  // Resumo sem IA: o texto é extraído aqui no navegador (qualquer tamanho
+  // de PDF) e o servidor só aplica as regras — sem chave e sem custo.
+  async function resumirSemIa() {
+    if (!arquivo) return;
+    setErro(null);
+    try {
+      const paginas = await extrairTextoPdf(arquivo, (atual, total) => setEtapa({ etapa: 'extraindo', arquivo: arquivo.name, atual, total }));
+      setEtapa({ etapa: 'enviando' });
+      const res = await fetch('/api/legislacao/analisar-local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: arquivo.name, paginas }),
+      });
+      const corpo = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(corpo?.error || `Falha ao gerar o resumo (${res.status}).`);
+      router.push(`/dashboard/legislacao/${corpo.id}`);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao gerar o resumo.');
+      setEtapa(null);
+    }
+  }
+
   async function excluir(a: AnaliseResumo) {
     if (!confirm(`Excluir a análise "${a.titulo}"? Esta ação não pode ser desfeita.`)) return;
     await fetch(`/api/legislacao/analises/${a.id}`, { method: 'DELETE' });
@@ -92,22 +115,40 @@ export default function LegislacaoPage() {
             <ScanText className="text-brand" size={20} />
             <h2 className="font-display font-semibold text-gray-800">Nova análise</h2>
           </div>
-          {iaConfigurada === false && <AvisoIaNaoConfigurada />}
+          {iaConfigurada === false && <AvisoIaNaoConfigurada comAlternativa />}
           <SeletorPdf rotulo="PDF da legislação" arquivo={arquivo} onArquivo={setArquivo} desabilitado={processando} />
-          {arquivo && arquivo.size > LIMITE_UPLOAD_PDF && !processando && (
+          {iaConfigurada && arquivo && arquivo.size > LIMITE_UPLOAD_PDF && !processando && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              PDF acima de 4 MB: o texto será extraído aqui no navegador e enviado página a página. Tabelas e imagens podem perder parte da estrutura — a análise indica isso em &quot;Limitações&quot;.
+              PDF acima de 4 MB: na análise com IA, o texto será extraído aqui no navegador e enviado página a página. Tabelas e imagens podem perder parte da estrutura — a análise indica isso em &quot;Limitações&quot;.
             </p>
           )}
           <ProgressoAnalise etapa={etapa} />
           {erro && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>}
-          <button
-            onClick={analisar}
-            disabled={!arquivo || processando || iaConfigurada === false}
-            className="w-full sm:w-auto bg-accent hover:bg-accent-dark disabled:opacity-40 text-white font-medium text-sm rounded-xl px-6 py-2.5 transition-colors"
-          >
-            {processando ? 'Analisando…' : 'Analisar documento'}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {/* Sem a chave da IA, o resumo sem IA é a ação principal. */}
+            <button
+              onClick={resumirSemIa}
+              disabled={!arquivo || processando}
+              className={`w-full sm:w-auto disabled:opacity-40 font-medium text-sm rounded-xl px-6 py-2.5 transition-colors ${
+                iaConfigurada ? 'border border-brand text-brand hover:bg-brand/5' : 'bg-accent hover:bg-accent-dark text-white'
+              }`}
+            >
+              {processando ? 'Processando…' : 'Gerar resumo (sem IA)'}
+            </button>
+            <button
+              onClick={analisar}
+              disabled={!arquivo || processando || iaConfigurada === false}
+              className={`w-full sm:w-auto disabled:opacity-40 font-medium text-sm rounded-xl px-6 py-2.5 transition-colors ${
+                iaConfigurada ? 'bg-accent hover:bg-accent-dark text-white' : 'border border-gray-300 text-gray-500'
+              }`}
+              title={iaConfigurada === false ? 'Disponível quando a chave da IA for configurada' : undefined}
+            >
+              Analisar com IA
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400">
+            <strong>Sem IA:</strong> grátis e imediato — localiza no PDF as frases sobre mudanças, prazos, obrigações e códigos, com a página de cada uma. <strong>Com IA:</strong> lê e interpreta o documento, com texto reescrito.
+          </p>
         </div>
 
         <Link href="/dashboard/legislacao/comparar" className="card-surface p-5 hover:shadow-card-hover transition-shadow group flex flex-col">

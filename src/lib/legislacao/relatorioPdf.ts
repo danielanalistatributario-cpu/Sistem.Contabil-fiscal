@@ -20,7 +20,7 @@ function t(s: string | null | undefined): string {
     .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF–—‘’“”•…€]/g, '');
 }
 
-export function gerarPdf(meta: { titulo: string; nomeArquivo: string; nomeArquivoB: string | null; createdAt: Date; assinatura: { nome: string; cargo: string; setor: string | null } }, r: ResultadoAnalise | ResultadoComparacao, marcados: number[]): Promise<Buffer> {
+export function gerarPdf(meta: { titulo: string; nomeArquivo: string; nomeArquivoB: string | null; createdAt: Date; semIa?: boolean; assinatura: { nome: string; cargo: string; setor: string | null } }, r: ResultadoAnalise | ResultadoComparacao, marcados: number[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: MARGEM, size: 'A4', bufferPages: true, info: { Title: t(meta.titulo) } });
     const chunks: Buffer[] = [];
@@ -88,7 +88,7 @@ export function gerarPdf(meta: { titulo: string; nomeArquivo: string; nomeArquiv
     doc.font('Helvetica').fontSize(8).fillColor('#DDEEDD').text(t(`Arquivo: ${meta.nomeArquivo}${meta.nomeArquivoB ? ` × ${meta.nomeArquivoB}` : ''}  ·  Analisado em ${meta.createdAt.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`), MARGEM, 76, { width: largura });
     doc.fillColor('#000');
     doc.y = 110;
-    doc.font('Helvetica-Oblique').fontSize(8).fillColor(CINZA).text('Análise gerada com apoio de IA a partir do documento enviado. Itens marcados como "Interpretação" são leitura técnica, não texto literal da norma — valide com a fonte antes de decidir.', MARGEM, doc.y, { width: largura });
+    doc.font('Helvetica-Oblique').fontSize(8).fillColor(CINZA).text((meta.semIa ? 'Resumo automático SEM IA: frases localizadas e extraídas do próprio documento por regras, não reescritas. ' : 'Análise gerada com apoio de IA a partir do documento enviado. ') + 'Itens marcados como "Interpretação" são leitura técnica, não texto literal da norma — valide com a fonte antes de decidir.', MARGEM, doc.y, { width: largura });
 
     if (ehComparacao(r)) {
       secao('Documentos comparados');

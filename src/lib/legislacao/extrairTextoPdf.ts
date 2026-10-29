@@ -1,10 +1,13 @@
 'use client';
 
+import { textoDaPagina, type ItemTexto } from './textoPdf';
+
 // Extrai o texto de cada página de um PDF no navegador (pdf.js). Usado
-// só quando o PDF é grande demais pro limite de upload da Vercel (~4,5MB
-// por requisição): em vez do arquivo, vai pro servidor o texto página a
-// página — perde imagens e parte da estrutura das tabelas, mas mantém a
-// numeração das páginas pra rastreabilidade.
+// no resumo sem IA (analiseLocal.ts) e, na análise com IA, quando o PDF
+// é grande demais pro limite de upload da Vercel (~4,5MB por requisição):
+// em vez do arquivo, vai pro servidor o texto página a página — perde
+// imagens e parte da estrutura das tabelas, mas mantém a numeração das
+// páginas pra rastreabilidade.
 
 export const LIMITE_UPLOAD_PDF = 4 * 1024 * 1024; // folga sob os 4,5MB da Vercel (o multipart soma cabeçalhos)
 
@@ -23,12 +26,7 @@ export async function extrairTextoPdf(arquivo: File, onPagina?: (atual: number, 
   for (let n = 1; n <= pdf.numPages; n++) {
     const pagina = await pdf.getPage(n);
     const conteudo = await pagina.getTextContent();
-    let texto = '';
-    for (const item of conteudo.items) {
-      if (!('str' in item)) continue;
-      texto += item.str + (item.hasEOL ? '\n' : ' ');
-    }
-    paginas.push(texto.replace(/[ \t]+/g, ' ').trim());
+    paginas.push(textoDaPagina(conteudo.items.filter((i) => 'str' in i) as ItemTexto[]));
     onPagina?.(n, pdf.numPages);
   }
   await pdf.destroy();

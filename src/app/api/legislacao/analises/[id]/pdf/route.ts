@@ -16,7 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     (await prisma.legislacaoAssinatura.findFirst({ where: { companyId: a.companyId, padrao: true } })) || { ...ASSINATURA_PADRAO, setor: null };
 
   const buf = await gerarPdf(
-    { titulo: a.titulo, nomeArquivo: a.nomeArquivo, nomeArquivoB: a.nomeArquivoB, createdAt: a.createdAt, assinatura },
+    { titulo: a.titulo, nomeArquivo: a.nomeArquivo, nomeArquivoB: a.nomeArquivoB, createdAt: a.createdAt, semIa: (a.modelo ?? '').startsWith('regras'), assinatura },
     a.resultado as unknown as ResultadoAnalise | ResultadoComparacao,
     Array.isArray(a.checklistMarcados) ? (a.checklistMarcados as number[]) : []
   );

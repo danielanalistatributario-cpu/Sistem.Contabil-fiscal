@@ -10,10 +10,10 @@ export default function ProgressoAnalise({ etapa }: { etapa: EtapaEnvio | null }
   let texto = '';
   let detalhe = '';
   if (etapa.etapa === 'extraindo') {
-    texto = 'PDF grande — extraindo o texto no navegador';
+    texto = 'Lendo o texto do PDF';
     detalhe = `Página ${etapa.atual} de ${etapa.total} · ${etapa.arquivo}`;
   } else if (etapa.etapa === 'enviando') {
-    texto = 'Enviando o documento';
+    texto = 'Montando o resumo';
   } else {
     // Sem saber o total de antemão, o "passo" avança com o texto gerado.
     const passo = etapa.caracteres === 0 ? 0 : Math.min(PASSOS.length - 1, 1 + Math.floor(etapa.caracteres / 6000));

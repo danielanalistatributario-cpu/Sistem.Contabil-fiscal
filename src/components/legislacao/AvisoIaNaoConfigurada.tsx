@@ -17,14 +17,20 @@ export function useIaConfigurada(): boolean | null {
   return ok;
 }
 
-export default function AvisoIaNaoConfigurada() {
+// `comAlternativa`: na tela de análise existe o resumo sem IA, então o
+// aviso orienta a usá-lo; na comparação não há alternativa sem IA.
+export default function AvisoIaNaoConfigurada({ comAlternativa = false }: { comAlternativa?: boolean }) {
   return (
     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
       <KeyRound className="text-amber-600 shrink-0 mt-0.5" size={20} />
       <div className="text-sm">
         <p className="font-medium text-amber-800">IA ainda não configurada</p>
         <p className="text-amber-900/80 mt-0.5">
-          A análise e a comparação de documentos usam a IA da Anthropic, que precisa de uma chave de API (variável <code className="text-xs bg-white/70 rounded px-1">ANTHROPIC_API_KEY</code> no servidor). O histórico e as análises já salvas continuam disponíveis.
+          {comAlternativa ? (
+            <>Use <strong>Gerar resumo (sem IA)</strong>: monta o resumo executivo, prazos, checklist, base legal e comunicado a partir das frases do próprio PDF. A análise com IA (texto interpretado e reescrito) fica disponível quando a chave da Anthropic for configurada.</>
+          ) : (
+            <>A comparação de documentos usa a IA da Anthropic, que precisa de uma chave de API (variável <code className="text-xs bg-white/70 rounded px-1">ANTHROPIC_API_KEY</code> no servidor). O histórico e as análises já salvas continuam disponíveis.</>
+          )}
         </p>
       </div>
     </div>
