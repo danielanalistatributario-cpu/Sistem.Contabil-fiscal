@@ -20,7 +20,9 @@ export const MODULE_PERMISSIONS = {
   // diferente do resto de "Configurar Análise Fiscal" (TES, CNPJs do grupo),
   // que continua só ADMINISTRADOR.
   analiseFiscalProdutos: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
-  legislacao: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  // Analisador de Legislação — só ADMINISTRADOR (pedido do Daniel em
+  // 29/10/2026): cada análise consome crédito pago da API da IA.
+  legislacao: ['ADMINISTRADOR'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;

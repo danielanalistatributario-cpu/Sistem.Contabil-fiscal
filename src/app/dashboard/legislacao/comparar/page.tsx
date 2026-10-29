@@ -59,11 +59,11 @@ export default function CompararLegislacaoPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Documento A — anterior / referência</p>
-            <SeletorPdf rotulo="PDF A" arquivo={a} onArquivo={setA} desabilitado={bloqueado} />
+            <SeletorPdf rotulo="PDF A" arquivo={a} onArquivo={setA} desabilitado={processando} />
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Documento B — novo / comparado</p>
-            <SeletorPdf rotulo="PDF B" arquivo={b} onArquivo={setB} desabilitado={bloqueado} />
+            <SeletorPdf rotulo="PDF B" arquivo={b} onArquivo={setB} desabilitado={processando} />
           </div>
         </div>
         {a && b && a.size + b.size > LIMITE_UPLOAD_PDF && !processando && (

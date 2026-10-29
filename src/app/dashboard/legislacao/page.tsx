@@ -93,7 +93,7 @@ export default function LegislacaoPage() {
             <h2 className="font-display font-semibold text-gray-800">Nova análise</h2>
           </div>
           {iaConfigurada === false && <AvisoIaNaoConfigurada />}
-          <SeletorPdf rotulo="PDF da legislação" arquivo={arquivo} onArquivo={setArquivo} desabilitado={processando || iaConfigurada === false} />
+          <SeletorPdf rotulo="PDF da legislação" arquivo={arquivo} onArquivo={setArquivo} desabilitado={processando} />
           {arquivo && arquivo.size > LIMITE_UPLOAD_PDF && !processando && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               PDF acima de 4 MB: o texto será extraído aqui no navegador e enviado página a página. Tabelas e imagens podem perder parte da estrutura — a análise indica isso em &quot;Limitações&quot;.
