@@ -212,7 +212,7 @@ export const COR_STATUS: Record<StatusAnalise, string> = {
   ARQUIVADA: 'bg-gray-100 text-gray-500',
 };
 
-export const ASSINATURA_PADRAO = { nome: 'Daniel Contador', cargo: 'Contador e Analista Tributário', setor: '' };
+export const ASSINATURA_PADRAO = { nome: 'Daniel', cargo: 'Contador', setor: '' };
 
 // ---------------------------------------------------------------------
 // JSON Schemas (structured outputs). Todo objeto com
