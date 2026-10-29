@@ -54,6 +54,8 @@ model Company {
   analiseFiscalProdutosClassificacao AnaliseFiscalProdutoClassificacao[]
   analiseFiscalFornecedoresIgnorados AnaliseFiscalFornecedorIgnorado[]
   situacoesNotasProtheus NotaFiscalSituacaoProtheus[]
+  analisesLegislacao LegislacaoAnalise[]
+  assinaturasLegislacao LegislacaoAssinatura[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -1035,4 +1037,57 @@ model AnaliseFiscalApuracaoIcmsLancamento {
   apuracao    AnaliseFiscalApuracaoIcms @relation(fields: [apuracaoId], references: [id], onDelete: Cascade)
 
   @@index([apuracaoId])
+}
+
+// Analisador de Legislação Fiscal e Tributária (29/10/2026). Cada linha é
+// uma análise de PDF (ou comparação de dois PDFs) feita pela IA (Claude).
+// O PDF em si NÃO é guardado — só o resultado estruturado em `resultado`
+// (identificação, resumo executivo, alterações, prazos, checklist, base
+// legal com página/trecho e o comunicado visual), uns 20–60KB por análise,
+// pra não pesar no limite de 512MB do Neon. As colunas soltas (titulo,
+// numero, tipoDocumento...) existem só pra listar/pesquisar o histórico
+// sem abrir o JSON.
+model LegislacaoAnalise {
+  id                String   @id @default(cuid())
+  companyId         String
+  userId            String?
+  userName          String?
+  modo              String   @default("ANALISE") // ANALISE | COMPARACAO
+  nomeArquivo       String
+  nomeArquivoB      String? // segundo PDF, só no modo COMPARACAO
+  tipoDocumento     String?
+  numero            String?
+  dataDocumento     String? // AAAA-MM-DD quando a IA identificou
+  orgao             String?
+  titulo            String
+  resumo            String?
+  status            String   @default("ANALISADA") // ANALISADA | EM_ADEQUACAO | CONCLUIDA | ARQUIVADA
+  resultado         Json
+  checklistMarcados Json? // índices dos itens do checklist já marcados como feitos
+  assinaturaId      String? // assinatura escolhida pro rodapé do comunicado
+  modelo            String? // modelo de IA usado
+  paginas           Int?
+  leituraTexto      Boolean  @default(false) // true = PDF grande, lido pelo texto extraído no navegador (sem imagens/tabelas)
+  tokensEntrada     Int?
+  tokensSaida       Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
+// Nome/cargo/setor que assinam o rodapé do comunicado visual. Sem nenhuma
+// cadastrada, o sistema usa "Daniel Garcia — Contador e Analista Tributário".
+model LegislacaoAssinatura {
+  id        String   @id @default(cuid())
+  companyId String
+  nome      String
+  cargo     String
+  setor     String?
+  padrao    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }

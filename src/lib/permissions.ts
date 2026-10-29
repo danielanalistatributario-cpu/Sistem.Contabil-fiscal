@@ -20,6 +20,7 @@ export const MODULE_PERMISSIONS = {
   // diferente do resto de "Configurar Análise Fiscal" (TES, CNPJs do grupo),
   // que continua só ADMINISTRADOR.
   analiseFiscalProdutos: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  legislacao: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;
