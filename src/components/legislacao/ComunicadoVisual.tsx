@@ -168,7 +168,7 @@ const ComunicadoVisual = forwardRef<HTMLDivElement, ComunicadoVisualProps>(funct
         <div style={{ flex: 1, background: C.laranja }} />
       </div>
       <div style={{ background: C.verdeEscuro, color: 'rgba(255,255,255,0.6)', fontSize: 12.5, padding: '10px 56px', display: 'flex', justifyContent: 'space-between' }}>
-        <span>Portal Fiscal e Contábil · Analisador de Legislação</span>
+        <span>Analista Tributário</span>
         <span>Emitido em {dataGeracao}</span>
       </div>
     </div>

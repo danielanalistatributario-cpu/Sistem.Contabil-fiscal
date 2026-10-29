@@ -184,7 +184,7 @@ export function gerarPdf(meta: { titulo: string; nomeArquivo: string; nomeArquiv
       doc.switchToPage(i);
       // Sem zerar a margem de baixo, escrever no rodapé cria página nova.
       doc.page.margins.bottom = 0;
-      doc.font('Helvetica').fontSize(7).fillColor(LARANJA).text(`Portal Fiscal e Contábil · Analisador de Legislação  —  página ${i + 1} de ${range.count}`, MARGEM, doc.page.height - MARGEM + 15, { width: largura, align: 'center', lineBreak: false });
+      doc.font('Helvetica').fontSize(7).fillColor(LARANJA).text(`Analista Tributário  —  página ${i + 1} de ${range.count}`, MARGEM, doc.page.height - MARGEM + 15, { width: largura, align: 'center', lineBreak: false });
     }
     doc.end();
   });
