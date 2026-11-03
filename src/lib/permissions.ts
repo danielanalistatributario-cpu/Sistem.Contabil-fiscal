@@ -23,6 +23,8 @@ export const MODULE_PERMISSIONS = {
   // Analisador de Legislação — só ADMINISTRADOR (pedido do Daniel em
   // 29/10/2026): cada análise consome crédito pago da API da IA.
   legislacao: ['ADMINISTRADOR'],
+  // Validador de XML por Nota Técnica — sem custo de IA, liberado como o SPED.
+  validadorXml: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;

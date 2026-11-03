@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, PackageSearch, ClipboardCheck, Search, Users, Settings, Scale,
+  LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, PackageSearch, ClipboardCheck, Search, Users, Settings, Scale, FileCheck2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from '@/lib/permissions';
@@ -38,6 +38,7 @@ const GROUPS: NavGroup[] = [
       { href: '/dashboard/auditor-rtc/classificacao', label: 'Pesquisa de Classificação Tributária', icon: Search, moduleKey: 'auditorRtc', accent: 'text-teal' },
       { href: '/dashboard/validacao-cadastro', label: 'Validação de Cadastro', icon: PackageSearch, moduleKey: 'validacaoCadastro', accent: 'text-ruby' },
       { href: '/dashboard/legislacao', label: 'Analisador de Legislação', icon: Scale, moduleKey: 'legislacao', accent: 'text-accent' },
+      { href: '/dashboard/validador-xml', label: 'Validador de XML (Nota Técnica)', icon: FileCheck2, moduleKey: 'validadorXml', accent: 'text-teal' },
     ],
   },
   {

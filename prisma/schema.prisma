@@ -56,6 +56,8 @@ model Company {
   situacoesNotasProtheus NotaFiscalSituacaoProtheus[]
   analisesLegislacao LegislacaoAnalise[]
   assinaturasLegislacao LegislacaoAssinatura[]
+  normasXml NormaXml[]
+  validacoesXml ValidacaoXml[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -1090,4 +1092,74 @@ model LegislacaoAssinatura {
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+}
+
+// Validador de XML por Nota Técnica: base de regras extraída da NT
+// (campos do leiaute + regras de validação) e histórico das validações.
+// O PDF da NT e o XML NÃO são guardados (limite do banco) — só as regras
+// extraídas e o resultado de cada validação.
+model NormaXml {
+  id            String   @id @default(cuid())
+  companyId     String
+  userId        String?
+  userName      String?
+  tipo          String   @default("NT")
+  numero        String // "NT 2026.008"
+  versao        String // "1.00"
+  titulo        String?
+  documentos    String // "NF-e/NFC-e"
+  modelos       String // "55,65"
+  arquivoNome   String?
+  paginas       Int?
+  homologacaoEm String? // AAAA-MM-DD
+  producaoEm    String?
+  situacao      String   @default("ATIVA") // ATIVA | INATIVA
+  marcos        Json // cronograma extraído
+  campos        Json // leiaute extraído
+  regras        Json // regras de validação (com a parte executável)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  validacoes    ValidacaoXml[]
+
+  @@unique([companyId, numero, versao])
+  @@index([companyId])
+}
+
+model ValidacaoXml {
+  id               String    @id @default(cuid())
+  companyId        String
+  normaId          String?
+  userId           String?
+  userName         String?
+  normaRotulo      String // "NT 2026.008 v1.00" (cópia, sobrevive à exclusão da norma)
+  arquivoNome      String
+  chave            String?
+  numeroNf         String?
+  serie            String?
+  modelo           String?
+  dataEmissao      String?
+  tpAmb            String?
+  emitenteDoc      String?
+  emitenteNome     String?
+  destinatarioDoc  String?
+  destinatarioNome String?
+  ignorouVigencia  Boolean   @default(false)
+  veredito         String // CONFORME | DIVERGENTE | SEM_REGRAS_APLICAVEIS | ERRO
+  conformidade     Int?
+  qtdConformes     Int       @default(0)
+  qtdAlertas       Int       @default(0)
+  qtdDivergencias  Int       @default(0)
+  qtdAusentes      Int       @default(0)
+  qtdIndevidos     Int       @default(0)
+  qtdNaoValidaveis Int       @default(0)
+  erro             String?
+  ocorrencias      Json // só o que não é conforme (limitado)
+  regras           Json? // resumo por regra
+  createdAt        DateTime  @default(now())
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  norma            NormaXml? @relation(fields: [normaId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([normaId])
 }
