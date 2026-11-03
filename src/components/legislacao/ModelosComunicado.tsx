@@ -1,10 +1,10 @@
 'use client';
 
 import { forwardRef } from 'react';
-import { CalendarClock, Users, ListChecks, Settings2, AlertTriangle, BookOpen, Sparkles, Hourglass, CheckSquare, Flag } from 'lucide-react';
+import { CalendarClock, Users, ListChecks, Settings2, AlertTriangle, BookOpen, Sparkles, Hourglass, CheckSquare, Flag, Newspaper } from 'lucide-react';
 import type { Comunicado, Marco } from '@/lib/legislacao/tipos';
 import { ROTULO_MARCO } from '@/lib/legislacao/tipos';
-import type { Assinatura } from '@/lib/legislacao/formatar';
+import { publicacaoDoComunicado, type Assinatura } from '@/lib/legislacao/formatar';
 import { diasAte } from '@/lib/legislacao/modelos';
 
 // Modelos alternativos do comunicado visual (o "Corporativo" está em
@@ -57,6 +57,20 @@ function Rodape({ c, assinatura, dataGeracao, corTexto, corDestaque, corFaixa, c
 
 const lista = (itens: string[]) => itens.filter((s) => s.trim());
 
+// Publicação do documento (ex: "Publicada em Outubro de 2026"), na cor de
+// cada modelo. Some quando o documento não informa — nada é inventado.
+export function Publicacao({ c, cor, borda, alinhar = 'left' }: { c: Comunicado; cor: string; borda: string; alinhar?: 'left' | 'right' | 'center' }) {
+  const p = publicacaoDoComunicado(c);
+  if (!p) return null;
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${borda}`, fontSize: 16, color: cor, textAlign: alinhar }}>
+      <Newspaper size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: '-2px' }} />
+      {p.rotulo}
+      <div style={{ fontWeight: 700, fontSize: 21, marginTop: 2 }}>{p.valor}</div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------
 // Linha do tempo — azul-petróleo/teal, datas em sequência no topo
 // ---------------------------------------------------------------------
@@ -93,6 +107,9 @@ export const ModeloLinhaDoTempo = forwardRef<HTMLDivElement, PropsModelo>(functi
         <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: K.teal }}>Atualização fiscal{tipoDocumento ? ` · ${tipoDocumento}` : ''}</div>
         <h1 style={{ fontFamily: fonteTitulo, fontWeight: 700, fontSize: 46, lineHeight: 1.1, margin: '14px 0 0' }}>{c.titulo}</h1>
         {c.subtitulo && <p style={{ fontSize: 19.5, lineHeight: 1.45, margin: '14px 0 0', color: 'rgba(255,255,255,0.8)' }}>{c.subtitulo}</p>}
+        <div style={{ maxWidth: 360 }}>
+          <Publicacao c={c} cor="rgba(255,255,255,0.75)" borda="rgba(255,255,255,0.25)" />
+        </div>
         {/* Linha do tempo */}
         <div style={{ position: 'relative', marginTop: 40, padding: '0 10px' }}>
           <div style={{ position: 'absolute', left: 30, right: 30, top: 21, height: 4, background: 'rgba(255,255,255,0.18)', borderRadius: 2 }} />
@@ -155,6 +172,7 @@ export const ModeloAlerta = forwardRef<HTMLDivElement, PropsModelo>(function Mod
           <div style={{ fontFamily: fonteTitulo, fontWeight: 800, fontSize: 30, color: K.ruby, marginTop: 8, lineHeight: 1.1 }}>{contagem}</div>
           <div style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, color: '#6B5457', marginTop: 10 }}>{c.dataDestaqueRotulo || 'Data'}</div>
           <div style={{ fontFamily: fonteTitulo, fontWeight: 700, fontSize: 28 }}>{c.dataDestaque}</div>
+          <Publicacao c={c} cor="#6B5457" borda="#E5D5D7" alinhar="center" />
         </div>
       </div>
       <div style={{ padding: '32px 56px 0' }}>
@@ -234,6 +252,7 @@ export const ModeloExecutivo = forwardRef<HTMLDivElement, PropsModelo>(function 
           <div style={{ flexShrink: 0, textAlign: 'right', borderLeft: `1px solid ${K.linha}`, paddingLeft: 30, alignSelf: 'center' }}>
             <div style={{ fontSize: 13, letterSpacing: 2, textTransform: 'uppercase', color: K.cinza }}>{c.dataDestaqueRotulo || 'Data'}</div>
             <div style={{ fontFamily: fonteTitulo, fontWeight: 700, fontSize: 40, color: K.verde, marginTop: 4 }}>{c.dataDestaque}</div>
+            <Publicacao c={c} cor={K.cinza} borda={K.linha} alinhar="right" />
           </div>
         )}
       </div>
@@ -295,6 +314,7 @@ export const ModeloMosaico = forwardRef<HTMLDivElement, PropsModelo>(function Mo
             <CalendarClock size={30} />
             <div style={{ fontSize: 14, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginTop: 12, opacity: 0.9 }}>{c.dataDestaqueRotulo || 'Data'}</div>
             <div style={{ fontFamily: fonteTitulo, fontWeight: 800, fontSize: c.dataDestaque.length > 10 ? 25 : 31, lineHeight: 1.1, marginTop: 4 }}>{c.dataDestaque}</div>
+            <Publicacao c={c} cor="rgba(255,255,255,0.95)" borda="rgba(255,255,255,0.45)" />
           </div>
         )}
       </div>

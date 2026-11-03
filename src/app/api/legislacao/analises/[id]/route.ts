@@ -39,6 +39,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       subtitulo: texto(c.subtitulo),
       dataDestaqueRotulo: texto(c.dataDestaqueRotulo),
       dataDestaque: texto(c.dataDestaque),
+      dataPublicacaoRotulo: texto(c.dataPublicacaoRotulo),
+      dataPublicacao: texto(c.dataPublicacao),
       oQueMudou: lista(c.oQueMudou),
       quemEAfetado: lista(c.quemEAfetado),
       oQueFazer: lista(c.oQueFazer),

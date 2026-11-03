@@ -119,6 +119,10 @@ export type Comunicado = {
   subtitulo: string;
   dataDestaqueRotulo: string; // ex: "Vigência a partir de"
   dataDestaque: string; // ex: "01/01/2026"
+  // Publicação do documento (opcional — análises antigas não têm; ver
+  // derivarPublicacao em formatar.ts). Ex: "Publicada em" / "Outubro de 2026".
+  dataPublicacaoRotulo?: string;
+  dataPublicacao?: string;
   oQueMudou: string[];
   quemEAfetado: string[];
   oQueFazer: string[];
@@ -138,6 +142,9 @@ export type ResultadoAnalise = {
     dataPublicacao: string; // AAAA-MM-DD
     dataVigencia: string; // AAAA-MM-DD
     ementa: string;
+    // Publicação em texto livre quando o documento só traz mês/ano (ex: NT
+    // com "Outubro de 2026" na capa). Só o resumo sem IA preenche.
+    publicacaoTexto?: string;
   };
   assuntoPrincipal: string;
   resumoTecnico: string;

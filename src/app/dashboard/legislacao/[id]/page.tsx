@@ -9,7 +9,7 @@ import {
 import AbaComunicado from '@/components/legislacao/AbaComunicado';
 import { Secao, ListaItensFonte, LinhaDoTempo, RefFonte, SeloNatureza, ListaComparacao } from '@/components/legislacao/Blocos';
 import { ROTULO_STATUS, STATUS_ANALISE, COR_STATUS, type ResultadoAnalise, type ResultadoComparacao, type Comunicado, type StatusAnalise, type ItemChecklist } from '@/lib/legislacao/tipos';
-import { fmtData, ehComparacao } from '@/lib/legislacao/formatar';
+import { fmtData, ehComparacao, comunicadoComPublicacao } from '@/lib/legislacao/formatar';
 import { modeloDaAnalise } from '@/lib/legislacao/modelos';
 
 type Analise = {
@@ -167,7 +167,7 @@ function Conteudo({ id }: { id: string }) {
       {aba === 'comunicado' && (
         <AbaComunicado
           analiseId={analise.id}
-          comunicado={r.comunicado}
+          comunicado={comunicadoComPublicacao(r.comunicado, 'identificacao' in r ? r.identificacao : null)}
           tipoDocumento={comparacao ? 'Atualização normativa' : analise.tipoDocumento || ''}
           assinaturaIdInicial={analise.assinaturaId}
           onComunicadoSalvo={(c: Comunicado) => setAnalise({ ...analise, resultado: { ...r, comunicado: c } as typeof r })}

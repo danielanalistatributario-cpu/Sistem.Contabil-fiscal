@@ -285,10 +285,10 @@ export default function AbaComunicado({
 
       {editando && (
         <div className="card-surface p-4 grid md:grid-cols-2 gap-3 text-sm">
-          {(['titulo', 'subtitulo', 'dataDestaqueRotulo', 'dataDestaque', 'fonte'] as const).map((k) => (
+          {(['titulo', 'subtitulo', 'dataDestaqueRotulo', 'dataDestaque', 'dataPublicacaoRotulo', 'dataPublicacao', 'fonte'] as const).map((k) => (
             <label key={k} className={k === 'subtitulo' || k === 'fonte' ? 'md:col-span-2' : ''}>
-              <span className="text-xs text-gray-500">{{ titulo: 'Título', subtitulo: 'Frase de apoio', dataDestaqueRotulo: 'Rótulo da data em destaque', dataDestaque: 'Data em destaque', fonte: 'Fonte' }[k]}</span>
-              <input value={rascunho[k]} onChange={(e) => setRascunho({ ...rascunho, [k]: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 mt-0.5" />
+              <span className="text-xs text-gray-500">{{ titulo: 'Título', subtitulo: 'Frase de apoio', dataDestaqueRotulo: 'Rótulo da data em destaque', dataDestaque: 'Data em destaque', dataPublicacaoRotulo: 'Rótulo da publicação (ex: Publicada em)', dataPublicacao: 'Data de publicação (deixe em branco para não mostrar)', fonte: 'Fonte' }[k]}</span>
+              <input value={rascunho[k] ?? ''} onChange={(e) => setRascunho({ ...rascunho, [k]: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 mt-0.5" />
             </label>
           ))}
           {SECOES_LISTA.map(({ chave, rotulo }) => (

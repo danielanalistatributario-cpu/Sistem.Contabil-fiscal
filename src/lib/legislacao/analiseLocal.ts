@@ -1,3 +1,4 @@
+import { derivarPublicacao } from './formatar';
 import type { ResultadoAnalise, TipoDocumento, Marco, TipoMarco, ItemFonte, Alteracao, Codigo, ItemChecklist, BaseLegal, Fonte, Risco, Providencia } from './tipos';
 
 // Resumo SEM IA do Analisador de Legislação: regras e expressões
@@ -763,6 +764,11 @@ export function analisarSemIa(nomeArquivo: string, paginas: string[]): Resultado
   if (vigente) atencao.unshift(`A regra já está valendo desde ${fmtBr(vigente.data)}: verifique se a empresa já está adequada`);
   if (totalChars < 300) atencao.push('PDF com pouco texto legível — confira o original');
 
+  // Publicação: NT que só traz "Outubro de 2026" na capa (sem Controle de
+  // Versões com data) usa esse mês/ano; o resto vem de derivarPublicacao.
+  const capaMesAno = (linhas[0] ?? []).find((l) => new RegExp(String.raw`^${NOME_MES}\s+de\s+\d{4}$`, 'i').test(l));
+  if (ehNt && !id.dataPublicacao && capaMesAno && (!id.dataDocumento || !/\d/.test(id.dataDocumento))) id.publicacaoTexto = capaMesAno;
+  const publicacao = derivarPublicacao(id);
   const dataDestaque = proximo ? fmtBr(proximo.data) : vigente ? fmtBr(vigente.data) : id.dataVigencia ? fmtBr(id.dataVigencia) : 'A definir';
   const comunicado = {
     titulo: // Em ato normativo o assunto vem da ementa, que já é o subtítulo: o título fica só o ato.
@@ -770,6 +776,7 @@ export function analisarSemIa(nomeArquivo: string, paginas: string[]): Resultado
     subtitulo: encurtar((id.ementa || resumoExecutivo.oQueMudou).replace(/^(Esta|A presente)\s+(Nota T[ée]cnica|NT)(\s+[\d.]+)?\s+/i, '').replace(/^Este documento tem como objetivo\s+/i, ''), 25),
     dataDestaqueRotulo: proximo ? `${rotuloTipo(proximo.tipo)} em` : vigente ? (vigente.tipo === 'producao' ? 'Em produção desde' : 'Em vigor desde') : id.dataVigencia ? 'Vigência a partir de' : 'Data de vigência',
     dataDestaque,
+    ...(publicacao ? { dataPublicacaoRotulo: publicacao.rotulo, dataPublicacao: publicacao.valor } : {}),
     oQueMudou: alteracoes.slice(0, 4).map((a) => linhaAlteracao(a, 18)),
     quemEAfetado: quem.slice(0, 5).map((q) => q.descricao),
     oQueFazer: checklist.slice(1, 7).map((c) => encurtar(c.acao, 15)),

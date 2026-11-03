@@ -5,7 +5,7 @@ import { CalendarClock, Users, ListChecks, Settings2, AlertTriangle, BookOpen, S
 import type { Comunicado, Marco } from '@/lib/legislacao/tipos';
 import type { Assinatura } from '@/lib/legislacao/formatar';
 import type { ModeloVisual } from '@/lib/legislacao/modelos';
-import { ModeloLinhaDoTempo, ModeloAlerta, ModeloExecutivo, ModeloMosaico } from './ModelosComunicado';
+import { ModeloLinhaDoTempo, ModeloAlerta, ModeloExecutivo, ModeloMosaico, Publicacao } from './ModelosComunicado';
 
 // Comunicado visual de uma página (infográfico corporativo) gerado a
 // partir da análise. Largura fixa de 1080px — o formato que melhor
@@ -71,6 +71,7 @@ const ModeloCorporativo = forwardRef<HTMLDivElement, ComunicadoVisualProps>(func
               <CalendarClock size={30} color="#fff" strokeWidth={2} />
               <div style={{ fontSize: 15, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginTop: 12, color: 'rgba(255,255,255,0.92)' }}>{c.dataDestaqueRotulo || 'Data importante'}</div>
               <div style={{ fontFamily: fonteTitulo, fontWeight: 700, fontSize: c.dataDestaque.length > 10 ? 30 : 40, lineHeight: 1.1, marginTop: 6 }}>{c.dataDestaque}</div>
+              <Publicacao c={c} cor="rgba(255,255,255,0.95)" borda="rgba(255,255,255,0.45)" />
             </div>
           )}
         </div>
