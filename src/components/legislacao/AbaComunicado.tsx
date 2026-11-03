@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Download, FileDown, MessageCircle, Mail, Pencil, Save, X, UserCog, Star, Trash2, Copy } from 'lucide-react';
+import { Download, FileDown, MessageCircle, Mail, Pencil, Save, X, UserCog, Star, Trash2, Copy, CalendarDays } from 'lucide-react';
 import ComunicadoVisual from './ComunicadoVisual';
 import { ASSINATURA_PADRAO, type Comunicado, type Marco } from '@/lib/legislacao/tipos';
 import { MODELOS_VISUAIS, type ModeloVisual } from '@/lib/legislacao/modelos';
@@ -16,6 +16,16 @@ const SECOES_LISTA: { chave: keyof Comunicado; rotulo: string }[] = [
   { chave: 'impactoErp', rotulo: 'Impacto no ERP (um item por linha)' },
   { chave: 'atencao', rotulo: 'Atenção (um item por linha)' },
 ];
+
+// "16/10/2026" → "2026-10-16" (valor do <input type="date">); qualquer outro formato ("Outubro de 2026") → "".
+function paraInputData(br: string | undefined): string {
+  const m = (br ?? '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+function deInputData(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+}
 
 function nomeArquivo(titulo: string, ext: string) {
   return `Comunicado - ${titulo}`.replace(/[\\/:*?"<>|]/g, '-').slice(0, 110) + ext;
@@ -61,6 +71,7 @@ export default function AbaComunicado({
   const [salvando, setSalvando] = useState(false);
   const [exportando, setExportando] = useState<string | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [salvandoPub, setSalvandoPub] = useState(false);
 
   const carregarAssinaturas = async () => {
     const res = await fetch('/api/legislacao/assinaturas');
@@ -94,6 +105,23 @@ export default function AbaComunicado({
   async function escolherModelo(m: ModeloVisual) {
     setModelo(m);
     await fetch(`/api/legislacao/analises/${analiseId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modeloVisual: m }) });
+  }
+
+  // Data de publicação informada na hora (dia/mês/ano): grava direto no
+  // comunicado, sem precisar abrir "Editar textos". Vazio = não mostra.
+  async function salvarPublicacao(iso: string) {
+    setSalvandoPub(true);
+    const valor = deInputData(iso);
+    const rotuloAtual = (comunicado.dataPublicacaoRotulo ?? '').trim();
+    const rotulo = valor ? (/DOU|Publicad/i.test(rotuloAtual) ? rotuloAtual : 'Publicada em') : '';
+    const res = await fetch(`/api/legislacao/analises/${analiseId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comunicado: { ...comunicado, dataPublicacaoRotulo: rotulo, dataPublicacao: valor } }),
+    });
+    setSalvandoPub(false);
+    if (res.ok) onComunicadoSalvo((await res.json()).analise.resultado.comunicado);
+    else alert('Não foi possível salvar a data de publicação.');
   }
 
   async function escolherAssinatura(id: string) {
@@ -220,6 +248,31 @@ export default function AbaComunicado({
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="card-surface p-4 flex flex-wrap items-center gap-3 text-sm">
+        <CalendarDays size={17} className="text-brand" />
+        <span className="text-gray-600">Data de publicação:</span>
+        <input
+          type="date"
+          value={paraInputData(comunicado.dataPublicacao)}
+          onChange={(e) => salvarPublicacao(e.target.value)}
+          disabled={salvandoPub || editando}
+          className="border border-gray-200 rounded-lg px-2 py-1.5 disabled:opacity-50"
+          title="Informe dia, mês e ano"
+        />
+        {comunicado.dataPublicacao && (
+          <button onClick={() => salvarPublicacao('')} disabled={salvandoPub || editando} className="text-xs text-gray-500 underline disabled:opacity-50">
+            Remover do comunicado
+          </button>
+        )}
+        <span className="text-xs text-gray-400">
+          {comunicado.dataPublicacao && !paraInputData(comunicado.dataPublicacao)
+            ? `No documento consta só "${comunicado.dataPublicacao}" — informe o dia para ficar completo.`
+            : comunicado.dataPublicacao
+              ? 'Aparece no comunicado, no PNG/PDF e nos textos copiados.'
+              : 'Escolha a data para ela aparecer no comunicado.'}
+        </span>
       </div>
 
       <div className="card-surface p-4 flex flex-wrap items-center gap-3 text-sm">
