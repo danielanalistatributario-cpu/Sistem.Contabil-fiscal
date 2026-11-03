@@ -40,7 +40,7 @@ export type RegraExec = {
 // Norma extraída do PDF
 // ---------------------------------------------------------------------
 
-export type CampoLeiaute = {
+export type CampoLayout = {
   seq: string; // "110.03"
   id: string; // "I11c"
   tag: string; // "vProdLiq" (ou "-x-" para sequência sem tag)
@@ -98,7 +98,7 @@ export type NormaExtraida = {
   homologacaoEm: string | null;
   producaoEm: string | null;
   marcos: MarcoCronograma[];
-  campos: CampoLeiaute[];
+  campos: CampoLayout[];
   regras: RegraNorma[];
   avisos: string[];
 };

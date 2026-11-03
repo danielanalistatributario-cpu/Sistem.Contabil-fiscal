@@ -1,5 +1,5 @@
 import type {
-  CampoLeiaute,
+  CampoLayout,
   Condicao,
   ContagensValidacao,
   Gravidade,
@@ -17,7 +17,7 @@ import { descreverRegraExec } from './interpretarRegra';
 // Motor de validação: confere UM xml de NF-e/NFC-e contra as regras
 // cadastradas de uma Nota Técnica. Só executa o que foi reconhecido na
 // extração (RegraNorma.exec) e as conferências de formato/tamanho/ocorrência
-// do leiaute da própria NT. O que não dá pra executar vira
+// do layout da própria NT. O que não dá pra executar vira
 // NAO_VALIDAVEL — nunca é "aprovado" nem "reprovado" por suposição.
 
 export type NormaParaValidar = {
@@ -26,7 +26,7 @@ export type NormaParaValidar = {
   modelos: string[];
   homologacaoEm: string | null;
   producaoEm: string | null;
-  campos: CampoLeiaute[];
+  campos: CampoLayout[];
   regras: RegraNorma[];
 };
 
@@ -38,7 +38,7 @@ export type OpcoesValidacao = {
 
 const MSG_NAO_VALIDAVEL = 'Não foi possível validar este item automaticamente com base no documento normativo cadastrado.';
 
-// Identificadores de grupo do leiaute da NF-e (MOC) usados só pra montar o
+// Identificadores de grupo do layout da NF-e (MOC) usados só pra montar o
 // caminho esperado de uma tag que está faltando.
 const GRUPOS_CONHECIDOS: Record<string, { tag: string; pai: string | null }> = {
   A01: { tag: 'infNFe', pai: null },
@@ -53,7 +53,7 @@ const GRUPOS_CONHECIDOS: Record<string, { tag: string; pai: string | null }> = {
   W01: { tag: 'ICMSTot', pai: 'TOTAL' },
 };
 
-function cadeiaDeTags(tag: string, campos: CampoLeiaute[]): string[] {
+function cadeiaDeTags(tag: string, campos: CampoLayout[]): string[] {
   const cadeia = [tag];
   const campo = campos.find((c) => c.tag === tag);
   let pai = campo?.pai ?? null;
@@ -72,7 +72,7 @@ function cadeiaDeTags(tag: string, campos: CampoLeiaute[]): string[] {
   return cadeia;
 }
 
-function caminhoEsperado(tag: string, campos: CampoLeiaute[], det: NoXml | null, prefixoInfNFe: string): string {
+function caminhoEsperado(tag: string, campos: CampoLayout[], det: NoXml | null, prefixoInfNFe: string): string {
   let cadeia = cadeiaDeTags(tag, campos);
   const i = cadeia.indexOf('infNFe');
   cadeia = i >= 0 ? cadeia.slice(i + 1) : cadeia.length === 1 ? ['…', ...cadeia] : cadeia;
@@ -84,7 +84,7 @@ function caminhoEsperado(tag: string, campos: CampoLeiaute[], det: NoXml | null,
   return [prefixoInfNFe, ...cadeia].join(' > ');
 }
 
-function tagPai(campo: CampoLeiaute, campos: CampoLeiaute[]): string | null {
+function tagPai(campo: CampoLayout, campos: CampoLayout[]): string | null {
   const cadeia = cadeiaDeTags(campo.tag, campos);
   return cadeia.length >= 2 ? cadeia[cadeia.length - 2] : null;
 }
@@ -143,7 +143,7 @@ type Instancia =
       orientacao: string;
     };
 
-function avaliarExec(exec: RegraExec, ctx: Ctx, campos: CampoLeiaute[], tolDefault: number): Instancia {
+function avaliarExec(exec: RegraExec, ctx: Ctx, campos: CampoLayout[], tolDefault: number): Instancia {
   const nItem = ctx.det ? parseInt(ctx.det.attrs.nItem ?? '', 10) || null : null;
   const ativas = exec.condicoes.map((c) => avaliarCond(c, ctx));
   const condOk = exec.condicoes.length === 0 ? true : exec.logica === 'OU' ? ativas.some(Boolean) : ativas.every(Boolean);
@@ -245,8 +245,8 @@ function avaliarExec(exec: RegraExec, ctx: Ctx, campos: CampoLeiaute[], tolDefau
   }
 }
 
-// Formato/tamanho do leiaute (Tipo + Tam.) de um valor já lido do XML.
-function conferirFormato(c: CampoLeiaute, valor: string): string | null {
+// Formato/tamanho do layout (Tipo + Tam.) de um valor já lido do XML.
+function conferirFormato(c: CampoLayout, valor: string): string | null {
   if (!c.tipo || !c.tamanho) return null;
   const t = c.tamanho;
   if (c.tipo === 'N') {
@@ -487,14 +487,14 @@ export function validarXml(norma: NormaParaValidar, arquivo: string, xmlTexto: s
     }
   }
 
-  // ---------------- leiaute (formato, tamanho, ocorrência) ----------------
-  const vigenteLeiaute = vigenteEm(norma.homologacaoEm, norma.producaoEm);
+  // ---------------- layout (formato, tamanho, ocorrência) ----------------
+  const vigenteLayout = vigenteEm(norma.homologacaoEm, norma.producaoEm);
   for (const c of norma.campos) {
     if (c.grupo || c.tag === '-x-' || !c.tipo) continue;
     const paiEsperado = tagPai(c, norma.campos);
     const elementos = acharTodos(infNFe, c.tag).filter((e) => !paiEsperado || e.pai?.nome === paiEsperado);
-    const chaveLeiaute = `leiaute:${c.id}`;
-    const refLeiaute = `${norma.numero} v${norma.versao} — leiaute item ${c.seq} (${c.id} ${c.tag}), p. ${c.pagina}`;
+    const chaveLayout = `layout:${c.id}`;
+    const refLayout = `${norma.numero} v${norma.versao} — layout item ${c.seq} (${c.id} ${c.tag}), p. ${c.pagina}`;
 
     for (const el of elementos) {
       const nItemEl = (() => {
@@ -504,7 +504,7 @@ export function validarXml(norma: NormaParaValidar, arquivo: string, xmlTexto: s
       const problema = el.texto !== '' ? conferirFormato(c, el.texto) : null;
       if (!problema) {
         contagens.conformes++;
-        registrar(chaveLeiaute, 'ALTO', true, true);
+        registrar(chaveLayout, 'ALTO', true, true);
         continue;
       }
       const montar = (situacao: SituacaoOcorrencia, orient: string): Ocorrencia => ({
@@ -512,8 +512,8 @@ export function validarXml(norma: NormaParaValidar, arquivo: string, xmlTexto: s
         nItem: nItemEl,
         localizacao: caminhoDe(el),
         regra: `${c.tag} (${c.id}): ${c.descricao} — tipo ${c.tipo}, tamanho ${c.tamanho}`,
-        chaveRegra: chaveLeiaute,
-        referencia: refLeiaute,
+        chaveRegra: chaveLayout,
+        referencia: refLayout,
         rejeicao: null,
         valorEncontrado: el.texto,
         valorEsperado: problema,
@@ -522,13 +522,13 @@ export function validarXml(norma: NormaParaValidar, arquivo: string, xmlTexto: s
         gravidade: situacao === 'NAO_EXIGIVEL' ? 'BAIXO' : 'ALTO',
         orientacao: orient,
       });
-      if (!vigenteLeiaute) {
+      if (!vigenteLayout) {
         contagens.alertas++;
-        ocorrencias.push(montar('NAO_EXIGIVEL', `Formato fora do leiaute da NT, mas ela ainda não vale para este XML (${rotuloInicio(norma.homologacaoEm, norma.producaoEm)}). Ajustar o preenchimento de <${c.tag}>.`));
+        ocorrencias.push(montar('NAO_EXIGIVEL', `Formato fora do layout da NT, mas ela ainda não vale para este XML (${rotuloInicio(norma.homologacaoEm, norma.producaoEm)}). Ajustar o preenchimento de <${c.tag}>.`));
       } else {
         contagens.divergencias++;
-        registrar(chaveLeiaute, 'ALTO', false, true);
-        ocorrencias.push(montar('DIVERGENTE', `Ajustar o preenchimento de <${c.tag}> ao formato do leiaute: ${problema}.`));
+        registrar(chaveLayout, 'ALTO', false, true);
+        ocorrencias.push(montar('DIVERGENTE', `Ajustar o preenchimento de <${c.tag}> ao formato do layout: ${problema}.`));
       }
     }
 
@@ -539,20 +539,20 @@ export function validarXml(norma: NormaParaValidar, arquivo: string, xmlTexto: s
       for (const lista of porPai.values()) {
         if (lista.length <= c.ocorMax) continue;
         contagens.divergencias++;
-        registrar(chaveLeiaute + ':ocor', 'ALTO', false, vigenteLeiaute);
+        registrar(chaveLayout + ':ocor', 'ALTO', false, vigenteLayout);
         ocorrencias.push({
           item: c.tag,
           nItem: null,
           localizacao: caminhoDe(lista[0]),
           regra: `${c.tag} (${c.id}) pode ocorrer no máximo ${c.ocorMax} vez(es) por ${lista[0].pai?.nome}`,
-          chaveRegra: chaveLeiaute,
-          referencia: refLeiaute,
+          chaveRegra: chaveLayout,
+          referencia: refLayout,
           rejeicao: null,
           valorEncontrado: `${lista.length} ocorrências`,
           valorEsperado: `No máximo ${c.ocorMax}`,
-          situacao: vigenteLeiaute ? 'DIVERGENTE' : 'NAO_EXIGIVEL',
-          situacaoSeVigente: vigenteLeiaute ? null : 'DIVERGENTE',
-          gravidade: vigenteLeiaute ? 'ALTO' : 'BAIXO',
+          situacao: vigenteLayout ? 'DIVERGENTE' : 'NAO_EXIGIVEL',
+          situacaoSeVigente: vigenteLayout ? null : 'DIVERGENTE',
+          gravidade: vigenteLayout ? 'ALTO' : 'BAIXO',
           orientacao: `Manter apenas ${c.ocorMax} ocorrência(s) de <${c.tag}>.`,
         });
       }

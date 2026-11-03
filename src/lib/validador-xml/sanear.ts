@@ -1,4 +1,4 @@
-import type { CampoLeiaute, MarcoCronograma, RegraNorma, NormaExtraida } from './tipos';
+import type { CampoLayout, MarcoCronograma, RegraNorma, NormaExtraida } from './tipos';
 
 // A norma vem do navegador (o PDF é lido lá) — antes de gravar e antes de
 // executar no servidor, mantém só os campos esperados, com tipos e
@@ -88,7 +88,7 @@ export function saneRegra(r: unknown): RegraNorma | null {
   };
 }
 
-export function saneCampo(c: unknown): CampoLeiaute | null {
+export function saneCampo(c: unknown): CampoLayout | null {
   const o = (c ?? {}) as Record<string, unknown>;
   const tag = txt(o.tag, 60);
   if (!tag || !(TAG.test(tag) || tag === '-x-')) return null;
@@ -131,7 +131,7 @@ export function saneNorma(n: unknown): NormaExtraida | { erro: string } {
   if (!Array.isArray(o.regras) || !Array.isArray(o.campos)) return { erro: 'Norma sem regras/campos.' };
   if (o.regras.length > MAX_REGRAS || o.campos.length > MAX_CAMPOS) return { erro: 'Norma grande demais.' };
   const regras = o.regras.map(saneRegra).filter((r): r is RegraNorma => !!r);
-  const campos = o.campos.map(saneCampo).filter((c): c is CampoLeiaute => !!c);
+  const campos = o.campos.map(saneCampo).filter((c): c is CampoLayout => !!c);
   return {
     tipo: o.tipo === 'OUTRA' ? 'OUTRA' : 'NT',
     numero,

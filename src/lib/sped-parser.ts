@@ -1,4 +1,4 @@
-// Parser generico de SPED Fiscal — suporta os dois leiautes de EFD que
+// Parser generico de SPED Fiscal — suporta os dois layouts de EFD que
 // compartilham os registros de documento/item (C100/C170) e cadastro
 // (0150/0200): EFD ICMS/IPI e EFD Contribuições (PIS/COFINS). São
 // arquivos/obrigações diferentes, mas usam o mesmo formato de linha
@@ -13,7 +13,7 @@ export type TipoSped = 'icms_ipi' | 'contribuicoes' | 'desconhecido';
 // tipos — EFD Contribuições tem 2 campos a mais (TIPO_ESCRIT,
 // IND_SIT_ESP/NUM_REC_ANTERIOR) antes de DT_INI, deslocando o resto.
 // Confirmado campo a campo contra um arquivo real de cada tipo.
-// C100/C170/0150/0200 são idênticos nos dois leiautes (registros de
+// C100/C170/0150/0200 são idênticos nos dois layouts (registros de
 // Bloco 0/C compartilhados entre todo EFD) — não precisam de tratamento
 // especial.
 //
@@ -52,7 +52,7 @@ export type SpedLine = {
 
 // Tabela "Código da Situação do Documento" (COD_SIT, campo 6 do C100) —
 // idêntica na EFD ICMS/IPI e na EFD Contribuições (confirmado contra a
-// documentação de ambos os leiautes). A partir de 01/2023 (Ajuste SINIEF
+// documentação de ambos os layouts). A partir de 01/2023 (Ajuste SINIEF
 // 34/2021 e 38/2021), os códigos 04 (denegado) e 05 (inutilizado)
 // deixaram de ser obrigatórios na escrituração — continuam suportados
 // aqui pra arquivos de competência anterior ou empresas que ainda
@@ -198,7 +198,7 @@ export function parseSpedFiscal(conteudo: string): SpedSummary {
     linhas.push({ registro, bloco, campos: campos.slice(1), linhaOriginal: idx + 1, operacao, situacaoDocumento });
 
     // 9999 é sempre o registro de encerramento do arquivo digital (último
-    // registro válido, em qualquer leiaute de EFD). Alguns arquivos trazem
+    // registro válido, em qualquer layout de EFD). Alguns arquivos trazem
     // um bloco de assinatura digital (binário) colado depois dele — sem
     // parar aqui, esse lixo binário vira "registros"/"blocos" fantasma no
     // resumo (achado real testando um EFD Contribuições do usuário).

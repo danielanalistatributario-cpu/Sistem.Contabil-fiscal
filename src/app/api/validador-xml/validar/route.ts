@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { sessaoValidadorXml } from '@/lib/validador-xml/servidor';
 import { saneRegra, saneCampo } from '@/lib/validador-xml/sanear';
 import { validarXml, type NormaParaValidar } from '@/lib/validador-xml/motor';
-import type { CampoLeiaute, RegraNorma, ResultadoValidacao } from '@/lib/validador-xml/tipos';
+import type { CampoLayout, RegraNorma, ResultadoValidacao } from '@/lib/validador-xml/tipos';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     modelos: norma.modelos ? norma.modelos.split(',').filter(Boolean) : [],
     homologacaoEm: norma.homologacaoEm,
     producaoEm: norma.producaoEm,
-    campos: (norma.campos as unknown[]).map(saneCampo).filter((c): c is CampoLeiaute => !!c),
+    campos: (norma.campos as unknown[]).map(saneCampo).filter((c): c is CampoLayout => !!c),
     regras: (norma.regras as unknown[]).map(saneRegra).filter((r): r is RegraNorma => !!r),
   };
   const ignorarVigencia = body?.ignorarVigencia === true;

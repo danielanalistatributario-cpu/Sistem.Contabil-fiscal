@@ -135,7 +135,7 @@ export type RelatorioNFeRow = {
 
 export function buildRelatorioNFeRows(spedText: string): RelatorioNFeRow[] {
   const linhas = spedText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  // Só o registro 0000 difere de campo entre os dois leiautes de EFD
+  // Só o registro 0000 difere de campo entre os dois layouts de EFD
   // suportados — ver detectarTipoSped em sped-parser.ts.
   const tipoSped = detectarTipoSped(spedText);
 

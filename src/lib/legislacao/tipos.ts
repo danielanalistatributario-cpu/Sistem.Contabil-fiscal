@@ -33,7 +33,7 @@ export const TIPOS_DOCUMENTO = [
   'Portaria',
   'Resolução',
   'Solução de Consulta',
-  'Manual / Leiaute',
+  'Manual / Layout',
   'Outro',
 ] as const;
 export type TipoDocumento = (typeof TIPOS_DOCUMENTO)[number];
@@ -319,7 +319,7 @@ export const SCHEMA_ANALISE: S = obj({
   linhaDoTempo: arr(MARCO, 'Todas as datas relevantes do documento, em ordem cronológica.'),
   impactos: obj({
     fiscalTributario: arr(ITEM_FONTE, 'Impactos fiscais e tributários (até 8).'),
-    erp: arr(ITEM_FONTE, 'Impactos no ERP/sistema: parametrização, cadastros, regras, leiaute (até 8).'),
+    erp: arr(ITEM_FONTE, 'Impactos no ERP/sistema: parametrização, cadastros, regras, layout (até 8).'),
     documentosFiscais: arr(ITEM_FONTE, 'Impactos na emissão de NF-e, NFC-e, NFS-e, CT-e, MDF-e (até 8). [] se não houver.'),
     obrigacoesAcessorias: arr(ITEM_FONTE, 'Impactos em SPED Fiscal, EFD-Contribuições, EFD-Reinf, DCTFWeb etc. (até 6). [] se não houver.'),
   }),

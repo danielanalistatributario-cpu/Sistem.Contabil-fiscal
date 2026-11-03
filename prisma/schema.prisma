@@ -1095,7 +1095,7 @@ model LegislacaoAssinatura {
 }
 
 // Validador de XML por Nota Técnica: base de regras extraída da NT
-// (campos do leiaute + regras de validação) e histórico das validações.
+// (campos do layout + regras de validação) e histórico das validações.
 // O PDF da NT e o XML NÃO são guardados (limite do banco) — só as regras
 // extraídas e o resultado de cada validação.
 model NormaXml {
@@ -1115,7 +1115,7 @@ model NormaXml {
   producaoEm    String?
   situacao      String   @default("ATIVA") // ATIVA | INATIVA
   marcos        Json // cronograma extraído
-  campos        Json // leiaute extraído
+  campos        Json // layout extraído
   regras        Json // regras de validação (com a parte executável)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

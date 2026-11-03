@@ -82,7 +82,7 @@ function dividirFrases(p: string): string[] {
 // "1.00 ..." é linha da tabela de versões, não título.
 const RE_TITULO = /^(\d{1,2}(?:\.\d{1,2}){0,3})\.?\s+([A-ZÀ-Ú][^.:;]{2,90})$/;
 const RE_TITULO_SOLTO = /^(Introdu[çc][ãa]o|Resumo|Objetivo|Vis[ãa]o Geral|Considera[çc][õo]es( Gerais| Iniciais)?|Conclus[ãa]o|Contexto)$/i;
-// Linha de tabela de leiaute ("30 C01 emit Identificação do emitente",
+// Linha de tabela de layout ("30 C01 emit Identificação do emitente",
 // "F02 CNPJ CNPJ CE F01 C 1-1") também começa com número + maiúscula.
 const ehTitulo = (l: string) =>
   RE_TITULO_SOLTO.test(l) ||
@@ -223,7 +223,7 @@ function identificar(nome: string, linhas: string[][], frases: Frase[]): Ident {
       const capa = (linhas[0] ?? []).filter((l) => !/Nota Fiscal Eletr|^Projeto$|Nota T[ée]cnica|^Vers[ãa]o|^\d{4}$|^NT\s|^(janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/i.test(l));
       r.assuntoCurto = capa.join(' ').replace(/\s+-\s*$/, '').slice(0, 110);
     }
-    if (!r.assuntoCurto) r.assuntoCurto = (linhas[1] ?? []).find((l) => /Reforma|CNPJ|DANFE|Leiaute|Evento/i.test(l)) ?? '';
+    if (!r.assuntoCurto) r.assuntoCurto = (linhas[1] ?? []).find((l) => /Reforma|CNPJ|DANFE|Leiaute|Layout|Evento/i.test(l)) ?? '';
     r.titulo = `NT ${r.numero}${r.versao ? ` v${r.versao}` : ''}${r.assuntoCurto ? ` — ${r.assuntoCurto}` : ''}`;
   } else {
     for (const [re, tipo, orgao] of atos) {
@@ -366,10 +366,10 @@ function acharCodigos(frases: Frase[], prioridade: Set<string>): Codigo[] {
     // Campo do XML citado como “tag - Descrição” (Ajustes SINIEF).
     const reCampo = /campo\s*[“"]\s*([a-zA-Z][A-Za-z0-9]{2,})\s*-\s*([^”"]{3,80})[”"](?:[^“"]{0,30}(?:c[óo]digo|texto)\s*[“"]([^”"]{1,60})[”"])?/gi;
     while ((m = reCampo.exec(s))) add('Campo/Grupo XML', m[1], m[3] ? `${m[2].trim()} = ${m[3].trim()}` : m[2].trim(), f, 80);
-    // Campo com ID do leiaute: "cIndOp, B25d", "vCBS – W56", "(ISUFemit, C22)".
+    // Campo com ID do layout: "cIndOp, B25d", "vCBS – W56", "(ISUFemit, C22)".
     const reTag = /\b([a-z][a-zA-Z0-9]{2,})\s*(?:,|–|-|\()\s*([A-Z]{1,3}\d{1,3}[a-z]?)\b/g;
     while ((m = reTag.exec(s))) if (/[A-Z]/.test(m[1])) add('Campo/Grupo XML', `${m[1]} (${m[2]})`, encurtar(s, 12), f, 70);
-    // Tabela de leiaute de NT: "ID Campo" ("BA02 refNFe", "C02 CNPJ" não — precisa ter minúscula).
+    // Tabela de layout de NT: "ID Campo" ("BA02 refNFe", "C02 CNPJ" não — precisa ter minúscula).
     const reIdTag = /\b([A-Z]{1,3}\d{2,3}[a-z]?)\s+((?=[A-Za-z0-9]*[a-z])[a-zA-Z][a-z]*[A-Z][A-Za-z0-9]*)\b/g;
     while ((m = reIdTag.exec(s))) add('Campo/Grupo XML', `${m[2]} (${m[1]})`, encurtar(s, 12), f, 60);
     const reGrupo = /\bgrupo\s+([a-z][A-Za-z0-9]{3,})\b/gi;
@@ -401,9 +401,9 @@ function pontuar(f: Frase, re: RegExp, bonus?: RegExp): number {
   if (/\b(Obrig|Facult)\.?\s*\d{3,4}\b|(\s-){3}|\.xsd\b|Schema XML:/.test(s)) return 0;
   const hits = (s.match(new RegExp(re.source, 'gi')) || []).length;
   if (!hits) return 0;
-  // Linhas de tabela de leiaute (muitos tokens curtos) valem pouco.
+  // Linhas de tabela de layout (muitos tokens curtos) valem pouco.
   const tokensCurtos = s.split(' ').filter((w) => w.length <= 2).length / s.split(' ').length;
-  // Linhas de tabela de leiaute de NT ("Campo impresso Tag (XML) — ID", vários IDs W56/UB14).
+  // Linhas de tabela de layout de NT ("Campo impresso Tag (XML) — ID", vários IDs W56/UB14).
   const ids = (s.match(/\b[A-Z]{1,3}\d{1,3}[a-z]?\b/g) || []).length;
   const tabela = /Tag \(XML\)|Campo impresso|# ID Campo|Ele Pai Tipo/.test(s) || ids > 2 ? 80 : 0;
   return hits * 10 + (bonus && bonus.test(s) ? 8 : 0) - tokensCurtos * 20 - tabela + (/[a-zà-ú]{4,}/.test(s) ? 2 : 0);
@@ -426,7 +426,7 @@ function melhores(frases: Frase[], re: RegExp, n: number, bonus?: RegExp, exclui
     .map((x) => x.f);
 }
 
-const RE_ALTERACAO = /fica(m)?\s+(alterad|acrescid|inclu[íi]d|revogad|criad|inserid|exclu[íi]d|institu[íi]d)|passa(m)?\s+a\s+(vigorar|ser|ter|conter|apresentar|exigir)|[ée]\s+(inserid|criad|inclu[íi]d)|altera(m)?\s|acrescenta|revoga|nov[oa]s?\s+(campo|grupo|regra|evento|bloco|tipo|c[óo]digo|leiaute|layout)|cria(r|m)?\s|inclus[ãa]o|exclus[ãa]o|altera[çc][ãa]o|incorpora|passa(m)?\s+a\s+(exibir|constar|contar|apresentar)/;
+const RE_ALTERACAO = /fica(m)?\s+(alterad|acrescid|inclu[íi]d|revogad|criad|inserid|exclu[íi]d|institu[íi]d)|passa(m)?\s+a\s+(vigorar|ser|ter|conter|apresentar|exigir)|[ée]\s+(inserid|criad|inclu[íi]d)|altera(m)?\s|acrescenta|revoga|nov[oa]s?\s+(campo|grupo|regra|evento|bloco|tipo|c[óo]digo|layout|layout)|cria(r|m)?\s|inclus[ãa]o|exclus[ãa]o|altera[çc][ãa]o|incorpora|passa(m)?\s+a\s+(exibir|constar|contar|apresentar)/;
 const RE_OBRIGACAO = /\bdever[áã]o?\b|\bdeve(m)?\b|\bemitir[áã]o?\b|obrigat[óo]ri|fica(m)?\s+obrigad|[ée]\s+vedad|n[ãa]o\s+poder[áã]|\bexigid|\bescriturad/;
 const RE_AFETADOS = /contribuinte|emitente|empresa|estabelecimento|optante|fabricante|importador|destinat[áa]rio|remetente|adquirente|transportador|desenvolvedor|fornecedor|substituto/;
 const RE_ERP = /schema|leiaute|layout|\bcampo|\btag\b|\bgrupo\s|regra(s)?\s+de\s+valida|web\s*service|evento|XML|sistema|parametriz|DANFE|QR\s*Code|certificado/;
@@ -613,7 +613,7 @@ export function analisarSemIa(nomeArquivo: string, paginas: string[]): Resultado
     const secoes = new Map<string, Frase>();
     for (const f of frases) {
       if (!f.titulo || secoes.has(f.titulo) || !/^Item \d{1,2}(\.\d{1,2})?$/.test(f.dispositivo)) continue;
-      if (/^(Resumo|Introdu|Vis[ãa]o Geral|Objetivo|Diretrizes|Sum[áa]rio|Controle|Hist[óo]rico|Regras de Valida|Leiaute|Modelos? de refer|Esquema|Fluxo)/i.test(f.titulo)) continue;
+      if (/^(Resumo|Introdu|Vis[ãa]o Geral|Objetivo|Diretrizes|Sum[áa]rio|Controle|Hist[óo]rico|Regras de Valida|Leiaute|Layout|Modelos? de refer|Esquema|Fluxo)/i.test(f.titulo)) continue;
       secoes.set(f.titulo, f);
     }
     for (const [titulo, f] of secoes) {
@@ -687,7 +687,7 @@ export function analisarSemIa(nomeArquivo: string, paginas: string[]): Resultado
   const temEstorno = frases.find((f) => /estorno/i.test(f.texto));
 
   addCheck(`Ler ${artigo} ${docRef || 'documento'} e confirmar o que se aplica às operações da empresa`, 'Fiscal', '', fonteVazia);
-  if (temSchema) addCheck(`Pedir ao fornecedor do ERP a atualização do leiaute (${docRef})`, 'TI / ERP', prazoTxt, fonteDe(temSchema));
+  if (temSchema) addCheck(`Pedir ao fornecedor do ERP a atualização do layout (${docRef})`, 'TI / ERP', prazoTxt, fonteDe(temSchema));
   if (temCampo) addCheck(`Conferir o preenchimento dos campos citados no XML (${codigos.filter((c) => c.tipo === 'Campo/Grupo XML').slice(0, 4).map((c) => c.codigo.split(' ')[0]).join(', ')})`, 'Fiscal', prazoTxt, temCampo.fonte);
   if (temRegra) addCheck(`Testar em homologação as regras de validação alteradas (${codigos.filter((c) => c.tipo === 'Regra de validação').slice(0, 5).map((c) => c.codigo).join(', ')})`, 'TI / ERP', prazoTxt, temRegra.fonte);
   if (temCfop) addCheck(`Revisar TES/regras fiscais com os CFOP citados (${codigos.filter((c) => c.tipo === 'CFOP').map((c) => c.codigo).join(', ')})`, 'Fiscal', '', temCfop.fonte);
@@ -696,7 +696,7 @@ export function analisarSemIa(nomeArquivo: string, paginas: string[]): Resultado
   if (temNcm) addCheck('Revisar o NCM dos produtos citados no documento', 'Cadastro', '', temNcm.fonte);
   if (temEstorno) addCheck('Definir o procedimento de estorno do crédito na escrituração', 'Contabilidade', '', fonteDe(temEstorno));
   if (temEvento) addCheck('Verificar se o ERP envia/recebe os eventos citados', 'TI / ERP', prazoTxt, fonteDe(temEvento));
-  if (temDanfe) addCheck('Imprimir DANFE de teste e conferir o novo leiaute', 'Faturamento', prazoTxt, fonteDe(temDanfe));
+  if (temDanfe) addCheck('Imprimir DANFE de teste e conferir o novo layout', 'Faturamento', prazoTxt, fonteDe(temDanfe));
   if (temEscrit) addCheck('Validar reflexos na escrituração (SPED/EFD)', 'Fiscal', '', temEscrit.fonte);
   addCheck('Comunicar os setores envolvidos (fiscal, faturamento, TI)', 'Gestão', '', fonteVazia);
   if (temSchema || temRegra) addCheck('Emitir notas de teste em homologação e validar o XML', 'TI / ERP', marcos.find((m) => m.tipo === 'homologacao' && m.data >= hoje)?.data ? fmtBr(marcos.find((m) => m.tipo === 'homologacao' && m.data >= hoje)!.data) : '', fonteVazia);
@@ -748,7 +748,7 @@ export function analisarSemIa(nomeArquivo: string, paginas: string[]): Resultado
     quemSeraAfetado: quem.length ? quem.map((q) => q.descricao).join('; ') : 'Não identificado automaticamente.',
     oQuePrecisamosFazer: checklist.slice(1, 5).map((c) => c.acao).join('; ') || 'Ver checklist.',
     qualOPrazo: proximo ? `${fmtBr(proximo.data)} (${rotuloTipo(proximo.tipo).toLowerCase()})` : vigente ? `Prazo já vencido: ${fmtBr(vigente.data)} — a regra já está valendo.` : 'Sem prazo identificado no documento.',
-    impactoNoErp: impErp.length ? `O documento cita ${[temSchema && 'leiaute/schema', temCampo && 'campos do XML', temRegra && 'regras de validação', temEvento && 'eventos', temDanfe && 'DANFE'].filter(Boolean).join(', ') || 'mudanças de sistema'}: o ERP/emissor precisa ser atualizado e testado.` : 'Nenhum impacto direto de sistema identificado automaticamente.',
+    impactoNoErp: impErp.length ? `O documento cita ${[temSchema && 'layout/schema', temCampo && 'campos do XML', temRegra && 'regras de validação', temEvento && 'eventos', temDanfe && 'DANFE'].filter(Boolean).join(', ') || 'mudanças de sistema'}: o ERP/emissor precisa ser atualizado e testado.` : 'Nenhum impacto direto de sistema identificado automaticamente.',
   };
 
   const resumoTecnico = [id.ementa, ...alteracoes.slice(0, 4).map((a) => `• ${encurtar(a.descricao, 40)}`), ...obrigacoes.slice(0, 2).map((o) => `• ${o.descricao}`)].filter(Boolean).join('\n');
@@ -780,7 +780,7 @@ export function analisarSemIa(nomeArquivo: string, paginas: string[]): Resultado
     oQueMudou: alteracoes.slice(0, 4).map((a) => linhaAlteracao(a, 18)),
     quemEAfetado: quem.slice(0, 5).map((q) => q.descricao),
     oQueFazer: checklist.slice(1, 7).map((c) => encurtar(c.acao, 15)),
-    impactoErp: [temSchema && 'Atualizar leiaute/schema do XML no ERP', temRegra && 'Testar as regras de validação alteradas', temCampo && 'Conferir os novos campos do XML', temEvento && 'Conferir envio dos eventos', temDanfe && 'Atualizar o layout do DANFE'].filter((x): x is string => Boolean(x)).slice(0, 4),
+    impactoErp: [temSchema && 'Atualizar layout/schema do XML no ERP', temRegra && 'Testar as regras de validação alteradas', temCampo && 'Conferir os novos campos do XML', temEvento && 'Conferir envio dos eventos', temDanfe && 'Atualizar o layout do DANFE'].filter((x): x is string => Boolean(x)).slice(0, 4),
     atencao,
     fonte: [docRef, id.orgao, id.dataDocumento ? fmtBr(id.dataDocumento) : ''].filter(Boolean).join(' — '),
   };

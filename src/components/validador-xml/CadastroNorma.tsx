@@ -110,7 +110,7 @@ export default function CadastroNorma({ onCadastrada }: { onCadastrada: (id: str
       const pags = await extrairTextoPdf(arquivo, (a, t) => setLendo(`Lendo a Nota Técnica… página ${a} de ${t}`));
       setPaginas(pags.length);
       const n = extrairNorma(pags);
-      if (n.regras.length === 0 && n.campos.length === 0) throw new Error('Não encontrei regras de validação nem tabela de leiaute neste PDF. Ele é mesmo uma Nota Técnica de NF-e/NFC-e?');
+      if (n.regras.length === 0 && n.campos.length === 0) throw new Error('Não encontrei regras de validação nem tabela de layout neste PDF. Ele é mesmo uma Nota Técnica de NF-e/NFC-e?');
       setNorma(n);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao ler o PDF.');
@@ -186,7 +186,7 @@ export default function CadastroNorma({ onCadastrada }: { onCadastrada: (id: str
           <h2 className="font-display font-semibold text-gray-800">Cadastrar Nota Técnica</h2>
         </div>
         <p className="text-xs text-gray-500">
-          Anexe o PDF da NT (ex: NT 2026.008). O sistema lê as tabelas de leiaute, as regras de validação (com os códigos de rejeição) e o cronograma de vigência — tudo direto
+          Anexe o PDF da NT (ex: NT 2026.008). O sistema lê as tabelas de layout, as regras de validação (com os códigos de rejeição) e o cronograma de vigência — tudo direto
           do documento. Nada é inventado: o que não for possível interpretar fica &quot;só catalogado&quot; e aparece nos relatórios como não validável.
         </p>
         <SeletorPdf rotulo="PDF da Nota Técnica" arquivo={arquivo} onArquivo={(f) => { setArquivo(f); setNorma(null); }} desabilitado={!!lendo} />
@@ -228,7 +228,7 @@ export default function CadastroNorma({ onCadastrada }: { onCadastrada: (id: str
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               <div className="rounded-lg border border-green-100 bg-green-50 py-2"><p className="text-xl font-bold text-green-800">{exec}</p><p className="text-[10px] uppercase text-green-700">conferidas automaticamente</p></div>
               <div className="rounded-lg border border-amber-100 bg-amber-50 py-2"><p className="text-xl font-bold text-amber-800">{catalogadas}</p><p className="text-[10px] uppercase text-amber-700">só catalogadas</p></div>
-              <div className="rounded-lg border border-gray-100 bg-gray-50 py-2"><p className="text-xl font-bold text-gray-700">{norma.campos.length}</p><p className="text-[10px] uppercase text-gray-500">campos do leiaute</p></div>
+              <div className="rounded-lg border border-gray-100 bg-gray-50 py-2"><p className="text-xl font-bold text-gray-700">{norma.campos.length}</p><p className="text-[10px] uppercase text-gray-500">campos do layout</p></div>
               <div className="rounded-lg border border-gray-100 bg-gray-50 py-2"><p className="text-xl font-bold text-gray-700">{norma.marcos.length}</p><p className="text-[10px] uppercase text-gray-500">marcos de cronograma</p></div>
             </div>
 
@@ -254,7 +254,7 @@ export default function CadastroNorma({ onCadastrada }: { onCadastrada: (id: str
             {norma.campos.length > 0 && (
               <div>
                 <button onClick={() => setMostrarCampos(!mostrarCampos)} className="text-xs text-brand underline">
-                  {mostrarCampos ? 'Ocultar' : 'Ver'} campos do leiaute ({norma.campos.length}) — formato, tamanho e ocorrência são conferidos
+                  {mostrarCampos ? 'Ocultar' : 'Ver'} campos do layout ({norma.campos.length}) — formato, tamanho e ocorrência são conferidos
                 </button>
                 {mostrarCampos && (
                   <div className="overflow-x-auto mt-2 border border-gray-100 rounded-lg">

@@ -1,11 +1,11 @@
-import type { CampoLeiaute, Gravidade, MarcoCronograma, NormaExtraida, RegraNorma } from './tipos';
+import type { CampoLayout, Gravidade, MarcoCronograma, NormaExtraida, RegraNorma } from './tipos';
 import { interpretarRegra } from './interpretarRegra';
 
 // Lê o texto de uma Nota Técnica (página a página, como sai de
 // extrairTextoPdf) e monta a base de regras. Puro — roda no navegador e
-// nos scripts de teste. Calibrado com NT 2026.008 (regras e leiaute).
+// nos scripts de teste. Calibrado com NT 2026.008 (regras e layout).
 //
-// O que sai daqui vem do próprio documento: leiaute (tabela "ID, Campo,
+// O que sai daqui vem do próprio documento: layout (tabela "ID, Campo,
 // Ele, Pai, Tipo, Ocor., Tam."), regras de validação (ID da regra, modelo,
 // texto, rejeição, mensagem) e o "Histórico de Alterações / Cronograma"
 // (datas de homologação/produção e quais regras foram incluídas,
@@ -113,14 +113,14 @@ function lerCronograma(linhas: Linha[]): MarcoCronograma[] {
 }
 
 // ---------------------------------------------------------------------
-// Leiaute
+// Layout
 // ---------------------------------------------------------------------
 
 const INICIO_CAMPO = new RegExp(`^(\\d+[a-z]?(?:\\.\\d+)?)\\s+(${ID_CAMPO})\\s+(\\S+)\\s+(.*)$`);
 const INICIO_REGRA = new RegExp(`^(${ID_CAMPO}-\\d+)\\s+((?:\\d{2}(?:\\/\\d{2})*))\\s*(.*)$`);
 
-function lerLeiaute(linhas: Linha[]): CampoLeiaute[] {
-  const campos: CampoLeiaute[] = [];
+function lerLayout(linhas: Linha[]): CampoLayout[] {
+  const campos: CampoLayout[] = [];
   let atual: { seq: string; id: string; tag: string; resto: string[]; p: number } | null = null;
 
   const fechar = () => {
@@ -303,8 +303,8 @@ export function extrairNorma(paginas: string[]): NormaExtraida {
   const { documentos, modelos } = detectarDocumentos(paginas.slice(0, 6).join('\n'));
   const marcos = lerCronograma(linhas);
   if (marcos.length === 0) avisos.push('Tabela "Histórico de Alterações / Cronograma" não encontrada — sem datas de vigência.');
-  const campos = lerLeiaute(linhas);
-  if (campos.length === 0) avisos.push('Nenhuma tabela de leiaute (campos) encontrada neste documento.');
+  const campos = lerLayout(linhas);
+  if (campos.length === 0) avisos.push('Nenhuma tabela de layout (campos) encontrada neste documento.');
   const regras = lerRegras(linhas, marcos, modelos);
   if (regras.length === 0) avisos.push('Nenhuma regra de validação encontrada neste documento.');
 

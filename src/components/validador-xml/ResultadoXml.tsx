@@ -22,6 +22,9 @@ const COR_GRAVIDADE: Record<string, string> = {
   BAIXO: 'bg-gray-100 text-gray-600',
 };
 
+// Validações gravadas antes de 03/11/2026 trazem "leiaute" nas referências; o termo usado é "layout".
+const termo = (t: string) => t.replace(/leiaute/gi, (m) => (m[0] === 'L' ? 'Layout' : 'layout'));
+
 function fmtDoc(d: string | null) {
   if (!d) return '—';
   const n = d.replace(/\D/g, '');
@@ -71,17 +74,17 @@ function CartaoOcorrencia({ o }: { o: Ocorrencia }) {
         <Campo rotulo="Localização">
           <code className="text-[11px]">{o.localizacao}</code>
         </Campo>
-        <Campo rotulo="Regra da Nota Técnica">{o.regra}</Campo>
-        <Campo rotulo="Referência">{o.referencia}</Campo>
+        <Campo rotulo="Regra da Nota Técnica">{termo(o.regra)}</Campo>
+        <Campo rotulo="Referência">{termo(o.referencia)}</Campo>
         {(o.valorEncontrado !== null || o.valorEsperado !== null) && (
           <>
             <Campo rotulo="Valor encontrado">{o.valorEncontrado ?? '—'}</Campo>
-            <Campo rotulo="Valor esperado">{o.valorEsperado ?? '—'}</Campo>
+            <Campo rotulo="Valor esperado">{o.valorEsperado ? termo(o.valorEsperado) : '—'}</Campo>
           </>
         )}
       </div>
       <p className="text-xs text-gray-700 mt-2 bg-gray-50 rounded px-2 py-1.5">
-        <strong>Orientação:</strong> {o.orientacao}
+        <strong>Orientação:</strong> {termo(o.orientacao)}
       </p>
     </div>
   );
