@@ -353,8 +353,12 @@ const ruleValorContabil: RuleDef = {
 function ruleCalculoImposto(campo: 'Icms' | 'Pis' | 'Cofins', label: string): RuleDef {
   return {
     id: `generico_calculo_${campo.toLowerCase()}`,
-    descricao: `Confere se Valor de ${label} = Base de Cálculo × Alíquota informada. Não roda quando a Base de Cálculo é zero (indica que o imposto foi calculado sobre outra base não capturada no relatório, como ICMS-ST).`,
+    descricao: `Confere se Valor de ${label} = Base de Cálculo × Alíquota informada. Não roda quando a Base de Cálculo é zero (indica que o imposto foi calculado sobre outra base não capturada no relatório, como ICMS-ST).${campo === 'Icms' ? ' Em Entrada, as TES 218 e 318 ficam de fora (sem conferência de ICMS).' : ''}`,
     check: (ctx) => {
+      // TES 218/318 (devolução, tudo isento) de Entrada: sem conferência de
+      // ICMS — pedido do Daniel em 05/11/2026 (ver também a regra dessas TES
+      // em analise-fiscal-tes-registry.ts). PIS/COFINS continuam conferidos.
+      if (campo === 'Icms' && ctx.direcao === 'entrada' && (ctx.linha.tes === '218' || ctx.linha.tes === '318')) return null;
       const linha = ctx.linha as unknown as Record<string, number | null>;
       const base = linha[`base${campo}`];
       const aliq = linha[`aliquota${campo}`];

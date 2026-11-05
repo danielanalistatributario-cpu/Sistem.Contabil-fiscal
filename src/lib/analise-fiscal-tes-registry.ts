@@ -639,7 +639,12 @@ const TES_RULE_GROUPS: TesRuleGroup[] = [
   // (evidência real: sempre 19%), PIS/COFINS isentos (evidência real:
   // 100% zerados)
   { codigos: ['217', '317'], grupo: 'Devolução — ICMS tributado, PIS/COFINS isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'TRIBUTADA', naturezaOperacaoPisCofins: 'ISENTA', rules: [ruleIcmsAliquotaInternaFixa(), ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
-  { codigos: ['218', '318'], grupo: 'Devolução — tudo isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', naturezaOperacaoPisCofins: 'ISENTA', rules: RULES_TUDO_ISENTO },
+  // TES 218/318: SEM conferência de ICMS (pedido do Daniel em 05/11/2026) —
+  // nelas entram devoluções de fornecedores isentos de ICMS (ex: COMERCIAL
+  // NORTE), e o sistema não deve apontar o valor de ICMS. PIS e COFINS
+  // continuam conferidos (o Base×Alíquota genérico de ICMS também pula
+  // essas TES, ver analise-fiscal-generic-rules.ts).
+  { codigos: ['218', '318'], grupo: 'Devolução — tudo isento', chaveNf: 'obrigatoria', permiteProdutos: true, naturezaOperacao: 'ISENTA', naturezaOperacaoPisCofins: 'ISENTA', rules: [ruleValorZero('Pis', 'PIS'), ruleValorZero('Cofins', 'COFINS')] },
   // TES 219/319: amostra real muito pequena (1 e 6 linhas) pra confiar
   // numa regra — o pouco que apareceu contraria o nome do grupo ("tudo
   // tributado": ICMS veio isento, só PIS/COFINS tributados), então fica
