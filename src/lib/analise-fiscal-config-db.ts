@@ -5,7 +5,7 @@
 // rótulo) e a lista de CNPJs do grupo viram dado de banco, por empresa.
 
 import { prisma } from './db';
-import { TES_METADATA, type TesMetadata, type ChaveNfPolicy, type NaturezaOperacao, type ClassificacaoProduto } from './analise-fiscal-tes-registry';
+import { TES_METADATA, extrairCodigoFornecedor, type TesMetadata, type ChaveNfPolicy, type NaturezaOperacao, type ClassificacaoProduto } from './analise-fiscal-tes-registry';
 import { TES_METADATA_SAIDA_DEFAULT } from './analise-fiscal-saida-tes-registry';
 
 // Códigos de TES de Entrada (0xx-3xx) e Saída (9xx) nunca colidem
@@ -205,5 +205,8 @@ export async function carregarFornecedoresIgnorados(
     where: { companyId, empresaGrupoId: empresaGrupoId ?? null },
     select: { codigoFornecedor: true },
   });
-  return new Set(linhas.map((l) => l.codigoFornecedor));
+  // Passa pela mesma extração da apuração: cadastros gravados antes da
+  // correção do código com letras (ex: "YDOSSM-01 - COMERCIAL NORTE LTDA",
+  // célula colada inteira) passam a valer como "YDOSSM-01".
+  return new Set(linhas.map((l) => extrairCodigoFornecedor(l.codigoFornecedor) || l.codigoFornecedor));
 }

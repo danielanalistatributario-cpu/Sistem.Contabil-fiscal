@@ -130,7 +130,10 @@ export function extrairCodigoProduto(produtoDescricao: string): string {
 // formato com loja primeiro; cai pra dígitos simples se não bater (layout
 // sem sufixo de loja).
 export function extrairCodigoFornecedor(fornecedor: string): string {
-  const match = (fornecedor || '').trim().match(/^(\d+-\d+|\d+)/);
+  // O código do Protheus pode ter letras ("YDOSSM-01 - COMERCIAL NORTE
+  // LTDA") — com só dígitos, esses fornecedores nunca batiam e a lista de
+  // ignorados não valia pra eles (achado real, 05/11/2026).
+  const match = (fornecedor || '').trim().match(/^([A-Za-z0-9]+-\d+|\d+)/);
   return match ? match[1] : '';
 }
 
