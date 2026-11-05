@@ -47,6 +47,8 @@ type ApuracaoDB = {
   itens: DifalItemDB[];
 };
 
+const fmtPctAliq = (fracao: number) => `${(fracao * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+
 function fmtBRL(n: number | null | undefined) {
   return (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
@@ -190,7 +192,7 @@ function DifalPageInner() {
         i.aliqInterestadual !== null ? `${(i.aliqInterestadual * 100).toFixed(0)}%` : '',
         i.valorOrigem ?? 0,
         i.baseIcms ?? 0,
-        `${(apuracao.aliquotaInterna * 100).toFixed(0)}%`,
+        `${fmtPctAliq(apuracao.aliquotaInterna)}`,
         i.icmsDestino ?? 0,
         i.valorDifal ?? 0,
       ]);
@@ -207,7 +209,7 @@ function DifalPageInner() {
     const tituloInfo = [
       ['Detalhamento de Classificação de Receita'],
       [`Período: ${apuracao.periodo}   Receita: 1141 - Diferencial de Alíquota`],
-      [`UF destino: ${apuracao.ufDestino}   Alíquota interna: ${(apuracao.aliquotaInterna * 100).toFixed(0)}%`],
+      [`UF destino: ${apuracao.ufDestino}   Alíquota interna: ${fmtPctAliq(apuracao.aliquotaInterna)}`],
       [],
     ];
 
@@ -332,7 +334,7 @@ function DifalPageInner() {
       {apuracao && (
         <>
           <p className="text-xs text-gray-400">
-            Período {apuracao.periodo} · UF destino {apuracao.ufDestino} ({(apuracao.aliquotaInterna * 100).toFixed(0)}%) ·
+            Período {apuracao.periodo} · UF destino {apuracao.ufDestino} ({fmtPctAliq(apuracao.aliquotaInterna)}) ·
             processado em {new Date(apuracao.processedAt).toLocaleString('pt-BR')}
           </p>
 
@@ -484,7 +486,7 @@ function DifalPageInner() {
                                 <p className="font-medium">{fmtBRL(i.baseIcms)}</p>
                               </div>
                               <div>
-                                <p className="text-gray-400">ICMS {apuracao.ufDestino} ({(apuracao.aliquotaInterna * 100).toFixed(0)}%)</p>
+                                <p className="text-gray-400">ICMS {apuracao.ufDestino} ({fmtPctAliq(apuracao.aliquotaInterna)})</p>
                                 <p className="font-medium">{fmtBRL(i.icmsDestino)}</p>
                               </div>
                             </div>

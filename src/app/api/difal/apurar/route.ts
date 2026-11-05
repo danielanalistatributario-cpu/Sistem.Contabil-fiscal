@@ -21,8 +21,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Nenhum item recebido para processar.' }, { status: 400 });
   }
 
-  const company = await prisma.company.findUnique({ where: { id: session.currentCompanyId } });
-  if (!company) return NextResponse.json({ error: 'Empresa não encontrada.' }, { status: 404 });
+  const tenant = await prisma.company.findUnique({ where: { id: session.currentCompanyId } });
+  if (!tenant) return NextResponse.json({ error: 'Empresa não encontrada.' }, { status: 404 });
+
+  // UF de destino e alíquota interna da FILIAL escolhida no topo da tela
+  // (cada filial pode estar em um estado: Macapá AP 18%, Recife PE 20,5%...);
+  // sem filial selecionada, ou filial sem esses dados, vale o cadastro da
+  // empresa — mesmo critério da Análise Fiscal (config-runtime).
+  const filial = session.currentEmpresaGrupoId
+    ? await prisma.analiseFiscalCnpjGrupo.findFirst({
+        where: { id: session.currentEmpresaGrupoId, companyId: session.currentCompanyId },
+        select: { uf: true, aliquotaInterna: true },
+      })
+    : null;
+  const company = {
+    ufDestino: filial?.uf || tenant.ufDestino,
+    aliquotaInterna: filial?.aliquotaInterna ?? tenant.aliquotaInterna,
+  };
 
   const itens: ItemEntrada[] = itensRaw.map((i) => ({
     ...i,

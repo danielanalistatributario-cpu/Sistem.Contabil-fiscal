@@ -20,11 +20,17 @@ export const CFOP_DIFAL_PREFIXOS = ['2551', '2556'];
 // as demais UFs usam 12%.
 const UF_ALIQUOTA_7 = new Set(['MG', 'PR', 'RS', 'RJ', 'SC', 'SP']);
 
-// Alíquota fixa para operações com mercadoria importada (Resolução do Senado
-// 13/2012), aplicada quando a "Origem" do produto (CST, 1º dígito) indica
-// procedência estrangeira.
+// Alíquota fixa de 4% nas operações interestaduais com mercadoria importada
+// (Resolução do Senado 13/2012; Ajuste SINIEF 19/2012), pela "Origem" do
+// produto (1º dígito do CST):
+//   1 = estrangeira, importação direta · 2 = estrangeira, adquirida no mercado
+//   interno · 3 = nacional com Conteúdo de Importação > 40% (e ≤ 70%) ·
+//   8 = nacional com Conteúdo de Importação > 70%.
+// As origens 6 e 7 (estrangeira SEM similar nacional, lista CAMEX) ficam FORA
+// do 4% — usam 7%/12% pela UF de origem. Corrigido em 05/11/2026: antes o
+// código tratava 6/7 como 4% e deixava 3/8 de fora.
 const ALIQUOTA_IMPORTADO = 0.04;
-const CODIGOS_ORIGEM_IMPORTADO = ['1', '2', '6', '7'];
+const CODIGOS_ORIGEM_IMPORTADO = ['1', '2', '3', '8'];
 
 export function cfopGeraDifal(cfop: string): boolean {
   const codigo = (cfop.match(/\d+/) || [''])[0];
@@ -43,7 +49,7 @@ export function determinarAliquotaInterestadual(
   ufOrigem: string
 ): ResultadoAliquotaInterestadual | null {
   if (CODIGOS_ORIGEM_IMPORTADO.includes(origemCodigo)) {
-    return { aliquota: ALIQUOTA_IMPORTADO, motivo: 'Mercadoria importada (Origem ' + origemCodigo + ') — 4%' };
+    return { aliquota: ALIQUOTA_IMPORTADO, motivo: 'Mercadoria importada / conteúdo de importação > 40% (Origem ' + origemCodigo + ') — 4%' };
   }
   const uf = ufOrigem.trim().toUpperCase();
   if (!uf) return null;
