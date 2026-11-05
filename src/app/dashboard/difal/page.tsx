@@ -7,6 +7,7 @@ import { History } from 'lucide-react';
 import { ImportHero } from '@/components/ImportHero';
 import * as XLSX from 'xlsx';
 import { lerRelatorioNFe } from '@/lib/nfe-report-reader';
+import { cfopGeraDifal } from '@/lib/difal-rules';
 
 type DifalItemDB = {
   id: string;
@@ -93,6 +94,10 @@ function DifalPageInner() {
     setErro(null);
     setLoading(true);
 
+    // Duas etapas separadas, pra a mensagem de erro dizer o que de fato falhou
+    // (antes, qualquer falha — inclusive a resposta do servidor — virava
+    // "não foi possível ler o arquivo").
+    let leitura: ReturnType<typeof lerRelatorioNFe>;
     try {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
@@ -102,32 +107,50 @@ function DifalPageInner() {
         defval: null,
       }) as unknown[][];
 
-      const leitura = lerRelatorioNFe(aoa);
-      if (leitura.erro) {
-        setErro(leitura.erro);
-        setLoading(false);
-        return;
-      }
+      leitura = lerRelatorioNFe(aoa);
+    } catch (err) {
+      setLoading(false);
+      setErro('Não foi possível ler o arquivo. Verifique se é um .xlsx válido no layout esperado.');
+      console.error(err);
+      return;
+    }
+    if (leitura.erro) {
+      setErro(leitura.erro);
+      setLoading(false);
+      return;
+    }
 
+    // Só os itens com CFOP de DIFAL (2551/2556) vão pro servidor: o relatório
+    // do mês tem ~10 mil linhas (4,5 MB em JSON, no limite do que a Vercel
+    // aceita — o envio falhava com 413 e aparecia como "não foi possível
+    // ler o arquivo"), e o servidor descartava tudo que não fosse DIFAL.
+    const itensDifal = leitura.itens.filter((i) => cfopGeraDifal(i.cfop));
+    if (itensDifal.length === 0) {
+      setLoading(false);
+      setErro(`Nenhum item com CFOP de DIFAL (2551 - Ativo Imobilizado ou 2556 - Uso e Consumo) foi encontrado nas ${leitura.totalLinhas.toLocaleString('pt-BR')} linhas do arquivo.`);
+      return;
+    }
+
+    try {
       const res = await fetch('/api/difal/apurar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           periodo,
-          itens: leitura.itens.map((i) => ({ ...i, dataEmissao: i.dataEmissao ? i.dataEmissao.toISOString() : null })),
+          itens: itensDifal.map((i) => ({ ...i, dataEmissao: i.dataEmissao ? i.dataEmissao.toISOString() : null })),
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       setLoading(false);
 
       if (!res.ok) {
-        setErro(data.error || 'Falha ao processar.');
+        setErro(data?.error || `O servidor não aceitou o envio (erro ${res.status}). Tente novamente.`);
         return;
       }
       setApuracao(data.apuracao);
     } catch (err) {
       setLoading(false);
-      setErro('Não foi possível ler o arquivo. Verifique se é um .xlsx válido no layout esperado.');
+      setErro('Não foi possível enviar os dados ao servidor. Verifique a conexão e tente novamente.');
       console.error(err);
     }
   }
