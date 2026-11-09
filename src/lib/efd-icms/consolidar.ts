@@ -20,7 +20,26 @@ export type ConjuntoValidado = {
 
 const semMascara = (s: string) => (s || '').replace(/\D/g, '');
 
-export function validarConjunto(arquivos: ArquivoEfd[]): ConjuntoValidado {
+// Empresa + exercício: cada combinação é uma análise. Quando o usuário carrega
+// vários exercícios (ex.: 2016 e 2017) de uma vez, ele escolhe qual analisar.
+export type GrupoAnalise = { chave: string; nome: string; cnpj: string; ie: string; ano: string; arquivos: number };
+
+const chaveGrupo = (a: ArquivoEfd) => `${semMascara(a.cabecalho.cnpj)}|${semMascara(a.cabecalho.ie)}|${a.ym.slice(0, 4)}`;
+
+export function listarGrupos(arquivos: ArquivoEfd[]): GrupoAnalise[] {
+  const m = new Map<string, GrupoAnalise>();
+  for (const a of arquivos) {
+    if (a.alertas.some((x) => x.nivel === 'erro') || !a.ym) continue;
+    const k = chaveGrupo(a);
+    const g = m.get(k) ?? { chave: k, nome: a.cabecalho.nome, cnpj: a.cabecalho.cnpj, ie: a.cabecalho.ie, ano: a.ym.slice(0, 4), arquivos: 0 };
+    g.arquivos++;
+    m.set(k, g);
+  }
+  // mais arquivos primeiro; empate → exercício mais antigo
+  return [...m.values()].sort((a, b) => b.arquivos - a.arquivos || a.ano.localeCompare(b.ano) || a.nome.localeCompare(b.nome));
+}
+
+export function validarConjunto(arquivos: ArquivoEfd[], grupoEscolhido?: string | null): ConjuntoValidado {
   const alertas: Alerta[] = [];
   const descartados: Descartado[] = [];
 
@@ -33,23 +52,24 @@ export function validarConjunto(arquivos: ArquivoEfd[]): ConjuntoValidado {
     return true;
   });
 
-  // empresa e exercício de referência: o do arquivo mais antigo
+  // empresa e exercício analisados: o escolhido pelo usuário; senão o grupo com mais arquivos
   const ordenados = [...candidatos].sort((a, b) => a.ym.localeCompare(b.ym) || a.nomeArquivo.localeCompare(b.nomeArquivo));
-  const ref = ordenados[0];
-  if (!ref) {
+  const grupos = listarGrupos(ordenados);
+  const alvo = grupos.find((g) => g.chave === grupoEscolhido) ?? grupos[0];
+  const ref = alvo ? ordenados.find((a) => chaveGrupo(a) === alvo.chave) : undefined;
+  if (!ref || !alvo) {
     return { usados: [], descartados, alertas, empresa: null, ano: null, mesesPresentes: [], mesesAusentes: [] };
   }
-  const cnpjRef = semMascara(ref.cabecalho.cnpj);
-  const ieRef = semMascara(ref.cabecalho.ie);
-  const ano = ref.ym.slice(0, 4);
+  const ano = alvo.ano;
 
   const mesmos: ArquivoEfd[] = [];
   for (const a of ordenados) {
-    if (semMascara(a.cabecalho.cnpj) !== cnpjRef || semMascara(a.cabecalho.ie) !== ieRef) {
-      descartados.push({ arquivo: a, motivo: `Empresa diferente (${a.cabecalho.nome} — CNPJ ${a.cabecalho.cnpj}, IE ${a.cabecalho.ie}): não é misturada com ${ref.cabecalho.nome}.` });
-    } else if (a.ym.slice(0, 4) !== ano) {
-      descartados.push({ arquivo: a, motivo: `Exercício diferente (${a.ym.slice(0, 4)}): o conjunto é de ${ano}.` });
-    } else mesmos.push(a);
+    if (chaveGrupo(a) === alvo.chave) mesmos.push(a);
+    else if (semMascara(a.cabecalho.cnpj) !== semMascara(ref.cabecalho.cnpj) || semMascara(a.cabecalho.ie) !== semMascara(ref.cabecalho.ie)) {
+      descartados.push({ arquivo: a, motivo: `Outra empresa (${a.cabecalho.nome} — CNPJ ${a.cabecalho.cnpj}, IE ${a.cabecalho.ie}): empresas não são misturadas — escolha qual analisar em "Analisar".` });
+    } else {
+      descartados.push({ arquivo: a, motivo: `Outro exercício (${a.ym.slice(0, 4)}): a análise atual é de ${ano} — escolha o exercício em "Analisar".` });
+    }
   }
 
   // mês repetido: fica o arquivo substituto (COD_FIN 1); empate → o primeiro

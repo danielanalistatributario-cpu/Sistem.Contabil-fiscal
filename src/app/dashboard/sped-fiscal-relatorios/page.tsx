@@ -5,7 +5,7 @@ import { ImportHero } from '@/components/ImportHero';
 import Importacao, { MAX_ARQUIVOS } from '@/components/sped-fiscal/Importacao';
 import Painel, { type Analise } from '@/components/sped-fiscal/Painel';
 import { lerEfdIcms } from '@/lib/efd-icms/parser';
-import { marcarDuplicados, montarResumoMensal, validarConjunto } from '@/lib/efd-icms/consolidar';
+import { listarGrupos, marcarDuplicados, montarResumoMensal, validarConjunto } from '@/lib/efd-icms/consolidar';
 import type { ArquivoEfd, ResumoMensal } from '@/lib/efd-icms/tipos';
 
 const esperar = () => new Promise<void>((r) => setTimeout(r, 0));
@@ -18,7 +18,9 @@ export default function SpedFiscalRelatoriosPage() {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState<string | null>(null);
 
-  const conjunto = useMemo(() => validarConjunto(arquivos), [arquivos]);
+  const [grupoEscolhido, setGrupoEscolhido] = useState<string | null>(null);
+  const grupos = useMemo(() => listarGrupos(arquivos), [arquivos]);
+  const conjunto = useMemo(() => validarConjunto(arquivos, grupoEscolhido), [arquivos, grupoEscolhido]);
 
   async function adicionar(files: File[]) {
     setErro(null);
@@ -28,7 +30,7 @@ export default function SpedFiscalRelatoriosPage() {
     for (const f of txt) {
       if (arquivos.some((a) => a.nomeArquivo === f.name && a.tamanho === f.size) || novos.some((a) => a.nomeArquivo === f.name)) continue;
       if (arquivos.length + novos.length >= MAX_ARQUIVOS) {
-        setErro(`Máximo de ${MAX_ARQUIVOS} arquivos (janeiro a dezembro). Remova algum para adicionar outro.`);
+        setErro(`Já há ${MAX_ARQUIVOS} arquivos carregados (limite para proteger o navegador). Use "Limpar todos os arquivos" ou remova alguns para adicionar outros.`);
         break;
       }
       setLendo(`Lendo ${f.name}…`);
@@ -97,6 +99,14 @@ export default function SpedFiscalRelatoriosPage() {
         <Importacao
           arquivos={arquivos}
           conjunto={conjunto}
+          grupos={grupos}
+          grupoEscolhido={grupoEscolhido}
+          onEscolherGrupo={setGrupoEscolhido}
+          onLimpar={() => {
+            setArquivos([]);
+            setGrupoEscolhido(null);
+            setErro(null);
+          }}
           lendo={lendo}
           erro={erro}
           onAdicionar={adicionar}

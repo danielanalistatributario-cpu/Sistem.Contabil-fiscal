@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileUp, X, Trash2, FolderOpen, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import type { ArquivoEfd, ResumoMensal } from '@/lib/efd-icms/tipos';
-import type { ConjuntoValidado } from '@/lib/efd-icms/consolidar';
+import type { ConjuntoValidado, GrupoAnalise } from '@/lib/efd-icms/consolidar';
 import { brl, fmtCnpj, rotuloMes } from '@/lib/efd-icms/rotulos';
 
-export const MAX_ARQUIVOS = 12;
+// até 12 arquivos por exercício; vários exercícios/empresas podem ficar carregados
+// ao mesmo tempo (o usuário escolhe qual analisar) — limite total só pra proteger a memória do navegador
+export const MAX_ARQUIVOS = 48;
+export const MAX_POR_EXERCICIO = 12;
 
 type GrupoSalvo = {
   cnpj: string;
@@ -36,6 +39,10 @@ export function ListaAlertas({ alertas }: { alertas: { nivel: 'erro' | 'aviso' |
 export default function Importacao({
   arquivos,
   conjunto,
+  grupos,
+  grupoEscolhido,
+  onEscolherGrupo,
+  onLimpar,
   lendo,
   erro,
   onAdicionar,
@@ -45,6 +52,10 @@ export default function Importacao({
 }: {
   arquivos: ArquivoEfd[];
   conjunto: ConjuntoValidado;
+  grupos: GrupoAnalise[];
+  grupoEscolhido: string | null;
+  onEscolherGrupo: (chave: string) => void;
+  onLimpar: () => void;
   lendo: string | null;
   erro: string | null;
   onAdicionar: (files: File[]) => void;
@@ -84,7 +95,7 @@ export default function Importacao({
       <div className="card-surface p-5 space-y-4">
         <h2 className="font-display font-semibold text-gray-800">Importar arquivos SPED Fiscal (EFD ICMS/IPI)</h2>
         <p className="text-xs text-gray-500">
-          Um arquivo = análise do mês. Até {MAX_ARQUIVOS} arquivos (janeiro a dezembro) = análise anual consolidada. O período, a empresa, o CNPJ e a inscrição estadual são lidos do próprio
+          Um arquivo = análise do mês. Até {MAX_POR_EXERCICIO} arquivos (janeiro a dezembro) do mesmo exercício = análise anual consolidada. Pode carregar mais de um exercício (ou empresa) e escolher qual analisar. O período, a empresa, o CNPJ e a inscrição estadual são lidos do próprio
           arquivo. Os arquivos são lidos aqui no navegador e <strong>não são enviados nem guardados</strong>.
         </p>
         <div
@@ -178,6 +189,22 @@ export default function Importacao({
               </table>
             </div>
 
+            {grupos.length > 1 && (
+              <div className="flex flex-wrap items-center gap-3 border border-brand/20 bg-brand/[0.04] rounded-lg px-4 py-3">
+                <label className="text-sm font-medium text-gray-700" htmlFor="grupo-analise">
+                  Analisar:
+                </label>
+                <select id="grupo-analise" value={grupoEscolhido ?? grupos[0].chave} onChange={(e) => onEscolherGrupo(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+                  {grupos.map((g) => (
+                    <option key={g.chave} value={g.chave}>
+                      {g.nome} — exercício {g.ano} ({g.arquivos} arquivo{g.arquivos === 1 ? '' : 's'})
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-gray-500">Há arquivos de mais de um exercício/empresa carregados: cada análise usa um só.</span>
+              </div>
+            )}
+
             <ListaAlertas alertas={[...conjunto.alertas, ...arquivos.flatMap((a) => a.alertas.filter((x) => x.nivel !== 'erro').map((x) => ({ ...x, mensagem: `${a.ym ? rotuloMes(a.ym) : a.nomeArquivo}: ${x.mensagem}` })))]} />
 
             <div className="flex flex-wrap items-center gap-3">
@@ -191,6 +218,10 @@ export default function Importacao({
               <span className="text-xs text-gray-400">
                 {conjunto.empresa ? `${conjunto.empresa.nome} — CNPJ ${fmtCnpj(conjunto.empresa.cnpj)} — exercício ${conjunto.ano}` : ''}
               </span>
+              <span className="flex-1" />
+              <button onClick={onLimpar} className="text-xs text-gray-500 underline hover:text-red-600">
+                Limpar todos os arquivos
+              </button>
             </div>
           </>
         )}
