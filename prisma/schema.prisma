@@ -58,6 +58,7 @@ model Company {
   assinaturasLegislacao LegislacaoAssinatura[]
   normasXml NormaXml[]
   validacoesXml ValidacaoXml[]
+  spedFiscalResumos SpedFiscalResumo[]
 }
 
 // Vinculo N:N entre usuario e empresa, com papel (role) especifico por empresa.
@@ -1162,4 +1163,28 @@ model ValidacaoXml {
 
   @@index([companyId, createdAt])
   @@index([normaId])
+}
+
+// Relatórios do SPED Fiscal (EFD ICMS/IPI): só o RESUMO mensal (poucos KB)
+// fica guardado, pra reabrir a análise sem reimportar o arquivo. Os arquivos
+// e as listas de documentos NÃO são gravados (limite do banco).
+model SpedFiscalResumo {
+  id          String   @id @default(cuid())
+  companyId   String
+  userId      String?
+  userName    String?
+  cnpj        String // só dígitos
+  ie          String
+  empresaNome String
+  uf          String?
+  ym          String // AAAAMM
+  codFin      String?
+  nomeArquivo String
+  resumo      Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, cnpj, ie, ym])
+  @@index([companyId, cnpj, ym])
 }

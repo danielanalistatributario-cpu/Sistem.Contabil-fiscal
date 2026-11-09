@@ -25,6 +25,8 @@ export const MODULE_PERMISSIONS = {
   legislacao: ['ADMINISTRADOR'],
   // Validador de XML por Nota Técnica — sem custo de IA, liberado como o SPED.
   validadorXml: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
+  // Relatórios do SPED Fiscal (EFD ICMS/IPI) — mesmos perfis do Auditor SPED.
+  spedFiscalRelatorios: ['ADMINISTRADOR', 'GESTOR', 'ANALISTA', 'USUARIO'],
   users: ['ADMINISTRADOR', 'GESTOR'],
   companyConfig: ['ADMINISTRADOR'],
 } satisfies Record<string, Role[]>;

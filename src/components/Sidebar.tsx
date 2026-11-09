@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, PackageSearch, ClipboardCheck, Search, Users, Settings, Scale, FileCheck2,
+  LayoutDashboard, FileSpreadsheet, Calculator, Percent, BookOpenCheck, Landmark, ShieldCheck, PackageSearch, ClipboardCheck, Search, Users, Settings, Scale, FileCheck2, FileBarChart2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Role } from '@/lib/permissions';
@@ -30,6 +30,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: '/dashboard/analise-fiscal', label: 'Análise e Apuração Fiscal', icon: ClipboardCheck, moduleKey: 'analiseFiscal', accent: 'text-accent' },
       { href: '/dashboard/sped', label: 'Auditor SPED Fiscal ICMS/PIS/COFINS', icon: FileSpreadsheet, moduleKey: 'sped', accent: 'text-lime' },
+      { href: '/dashboard/sped-fiscal-relatorios', label: 'Relatórios SPED Fiscal (EFD ICMS/IPI)', icon: FileBarChart2, moduleKey: 'spedFiscalRelatorios', accent: 'text-lime' },
       { href: '/dashboard/icms', label: 'ICMS Antecipado Especial', icon: Calculator, moduleKey: 'icms', accent: 'text-accent' },
       { href: '/dashboard/difal', label: 'DIFAL', icon: Percent, moduleKey: 'difal', accent: 'text-teal' },
       { href: '/dashboard/conciliacao', label: 'Conciliação Contábil', icon: BookOpenCheck, moduleKey: 'conciliacao', accent: 'text-pink' },
