@@ -45,6 +45,7 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
   const registros: Record<string, number> = {};
   const declarados: Record<string, number> = {};
   const participantes = new Map<string, { nome: string; doc: string; uf: string }>();
+  const produtos = new Map<string, string>(); // 0200: COD_ITEM → DESCR_ITEM (strings compartilhadas entre os itens)
   const docs: DocEfd[] = [];
   const ajustes: ArquivoEfd['apuracao']['ajustes'] = [];
   const obrigacoes: ArquivoEfd['apuracao']['obrigacoes'] = [];
@@ -94,6 +95,16 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
           uf: c[8] ? UF_POR_PREFIXO_IBGE[c[8].slice(0, 2)] || '' : '',
         });
         break;
+      case '0200':
+        produtos.set(c[2] ?? '', (c[3] ?? '').trim());
+        break;
+      case 'C170': {
+        // NUM_ITEM|COD_ITEM|DESCR_COMPL|QTD|UNID|VL_ITEM|VL_DESC|IND_MOV|CST_ICMS|CFOP|COD_NAT|VL_BC_ICMS|ALIQ_ICMS|...
+        if (!atual || atual.reg !== 'C100') break;
+        const cod = c[3] ?? '';
+        atual.itens.push({ cod, descr: (c[4] ?? '').trim(), cst: c[10] ?? '', cfop: c[11] ?? '', aliq: num(c[14]) });
+        break;
+      }
       case 'C100': {
         // IND_OPER|IND_EMIT|COD_PART|COD_MOD|COD_SIT|SER|NUM_DOC|CHV_NFE|DT_DOC|DT_E_S|VL_DOC|IND_PGTO|VL_DESC|VL_ABAT_NT|VL_MERC|IND_FRT|VL_FRT|VL_SEG|VL_OUT_DA|VL_BC_ICMS|VL_ICMS|VL_BC_ICMS_ST|VL_ICMS_ST|VL_IPI
         atual = {
@@ -125,6 +136,7 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
           vlIcmsSt: num(c[24]),
           vlIpi: num(c[25]),
           linhas: [],
+          itens: [],
         };
         docs.push(atual);
         break;
@@ -160,6 +172,7 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
           vlIcmsSt: 0,
           vlIpi: 0,
           linhas: [],
+          itens: [],
         };
         docs.push(atual);
         break;
@@ -198,7 +211,7 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
       }
       case 'E111': {
         const cod = c[2] ?? '';
-        ajustes.push({ cod, descr: (c[3] ?? '').trim(), valor: num(c[4]), categoria: CATEGORIA_AJUSTE[cod[2]] ?? 'Não classificado pelo código' });
+        ajustes.push({ cod, descr: (c[3] ?? '').trim(), valor: num(c[4]), categoria: CATEGORIA_AJUSTE[cod[3]] ?? 'Não classificado pelo código' });
         break;
       }
       case 'E116':
@@ -229,6 +242,8 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
   let semParticipante = 0;
   for (const d of docs) {
     d.ym = ym;
+    // nome do produto: o do cadastro (0200); sem ele, a descrição do próprio item; sem as duas, o código
+    for (const it of d.itens) it.descr = produtos.get(it.cod) || it.descr || it.cod;
     const p = participantes.get(d.codPart);
     if (p) {
       d.partNome = p.nome;

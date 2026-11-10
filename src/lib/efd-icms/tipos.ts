@@ -19,6 +19,10 @@ export type LinhaAnalitica = {
   vlIpi: number;
 };
 
+// Item da nota (C170): só o que identifica o produto e o liga à linha analítica
+// (C190) do mesmo CST + CFOP + alíquota.
+export type ItemEfd = { cod: string; descr: string; cst: string; cfop: string; aliq: number };
+
 export type DocEfd = {
   id: number;
   ym: string; // AAAAMM do ARQUIVO (período da escrituração) em que o documento está
@@ -49,6 +53,7 @@ export type DocEfd = {
   vlIcmsSt: number;
   vlIpi: number;
   linhas: LinhaAnalitica[];
+  itens: ItemEfd[]; // C170 (vazio em CT-e e em notas sem detalhamento por item)
   // preenchido na consolidação: o documento já apareceu em outro arquivo
   duplicadoDe?: string;
 };

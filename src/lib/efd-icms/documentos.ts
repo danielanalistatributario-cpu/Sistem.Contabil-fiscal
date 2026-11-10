@@ -38,7 +38,19 @@ export type LinhaDoc = {
   vlOutDa: number;
   vlDesc: number;
   vlDoc: number;
+  // produtos (C170) do CST/CFOP/alíquota desta linha, sem repetir — vazio em CT-e
+  produtos: string;
 };
+
+const LIMITE_CELULA = 30000; // o Excel aceita no máximo 32.767 caracteres por célula
+
+// Junta os nomes dos produtos sem repetir, na ordem em que aparecem na nota.
+function juntarProdutos(itens: { descr: string }[]): string {
+  const vistos = new Set<string>();
+  for (const it of itens) if (it.descr) vistos.add(it.descr);
+  const txt = [...vistos].join('; ');
+  return txt.length > LIMITE_CELULA ? txt.slice(0, LIMITE_CELULA) + '…' : txt;
+}
 
 export function linhasDeDocumentos(docs: DocEfd[], oper: Oper): LinhaDoc[] {
   const out: LinhaDoc[] = [];
@@ -61,10 +73,21 @@ export function linhasDeDocumentos(docs: DocEfd[], oper: Oper): LinhaDoc[] {
     };
     const doc = { vlMerc: d.vlMerc, vlFrt: d.vlFrt, vlSeg: d.vlSeg, vlOutDa: d.vlOutDa, vlDesc: d.vlDesc, vlDoc: d.vlDoc };
     if (d.linhas.length === 0) {
-      out.push({ ...base, cfop: '', cst: '', aliq: null, vlOpr: 0, vlBc: 0, vlIcms: 0, vlBcSt: 0, vlIcmsSt: 0, vlRedBc: 0, vlIpi: 0, primeira: true, ...doc });
+      out.push({ ...base, cfop: '', cst: '', aliq: null, vlOpr: 0, vlBc: 0, vlIcms: 0, vlBcSt: 0, vlIcmsSt: 0, vlRedBc: 0, vlIpi: 0, primeira: true, ...doc, produtos: juntarProdutos(d.itens) });
       continue;
     }
-    d.linhas.forEach((l, i) => out.push({ ...base, cfop: l.cfop, cst: l.cst, aliq: l.aliq, vlOpr: l.vlOpr, vlBc: l.vlBc, vlIcms: l.vlIcms, vlBcSt: l.vlBcSt, vlIcmsSt: l.vlIcmsSt, vlRedBc: l.vlRedBc, vlIpi: l.vlIpi, primeira: i === 0, ...doc }));
+    // O C190 é o agrupamento dos itens (C170) por CST + CFOP + alíquota: cada item
+    // vai para a linha do seu grupo. Item sem linha correspondente (arquivo fora
+    // do padrão) vai para a primeira linha, para o produto não sumir.
+    const chave = (cst: string, cfop: string, aliq: number) => `${cst}|${cfop}|${Math.round(aliq * 10000)}`;
+    const porLinha = d.linhas.map(() => [] as typeof d.itens);
+    const indice = new Map<string, number>();
+    d.linhas.forEach((l, i) => {
+      const k = chave(l.cst, l.cfop, l.aliq);
+      if (!indice.has(k)) indice.set(k, i);
+    });
+    for (const it of d.itens) porLinha[indice.get(chave(it.cst, it.cfop, it.aliq)) ?? 0].push(it);
+    d.linhas.forEach((l, i) => out.push({ ...base, cfop: l.cfop, cst: l.cst, aliq: l.aliq, vlOpr: l.vlOpr, vlBc: l.vlBc, vlIcms: l.vlIcms, vlBcSt: l.vlBcSt, vlIcmsSt: l.vlIcmsSt, vlRedBc: l.vlRedBc, vlIpi: l.vlIpi, primeira: i === 0, ...doc, produtos: juntarProdutos(porLinha[i]) }));
   }
   return out;
 }
@@ -77,6 +100,7 @@ export type FiltroDocs = {
   modelo?: string;
   participante?: string; // parte do nome ou do CNPJ/CPF
   numero?: string;
+  produto?: string; // parte do nome do produto
 };
 
 const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -85,6 +109,7 @@ export function filtrarLinhas(linhas: LinhaDoc[], f: FiltroDocs): LinhaDoc[] {
   const part = norm(f.participante ?? '').trim();
   const partDig = (f.participante ?? '').replace(/\D/g, '');
   const numero = (f.numero ?? '').trim();
+  const prod = norm(f.produto ?? '').trim();
   const filtradas = linhas.filter((l) => {
     if (f.ym && l.ym !== f.ym) return false;
     if (f.cfop && l.cfop !== f.cfop) return false;
@@ -93,6 +118,7 @@ export function filtrarLinhas(linhas: LinhaDoc[], f: FiltroDocs): LinhaDoc[] {
     if (f.modelo && l.codMod !== f.modelo) return false;
     if (part && !(norm(l.partNome).includes(part) || (partDig.length >= 3 && l.partDoc.replace(/\D/g, '').includes(partDig)))) return false;
     if (numero && !l.numero.replace(/^0+/, '').includes(numero.replace(/^0+/, ''))) return false;
+    if (prod && !norm(l.produtos).includes(prod)) return false;
     return true;
   });
   // os valores do documento voltam a aparecer uma vez só (na 1ª linha que sobrou)

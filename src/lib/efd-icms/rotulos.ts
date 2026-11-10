@@ -80,7 +80,11 @@ export const ROTULOS_E110: { campo: string; rotulo: string }[] = [
   { campo: 'debEsp', rotulo: 'VALORES RECOLHIDOS OU A RECOLHER, EXTRA-APURAÇÃO' },
 ];
 
-// 3º caractere do código do ajuste (tabela 5.1.1 do Guia Prático da EFD)
+// Tipo do ajuste = 4º caractere do código (tabela 5.1.1 do Guia Prático da EFD:
+// 1º-2º = UF · 3º = tipo de apuração (0 = ICMS próprio) · 4º = tipo do ajuste).
+// Corrigido em 09/11/2026: antes lia o 3º caractere e tratava o crédito
+// SP020718 (R$ 30,90 em 06/2018) como débito. Confirmado contra o E110 dos
+// SPEDs de 2018 (E111 de débito + E111 de crédito = campos do E110).
 export const CATEGORIA_AJUSTE: Record<string, string> = {
   '0': 'Outros débitos',
   '1': 'Estorno de créditos',

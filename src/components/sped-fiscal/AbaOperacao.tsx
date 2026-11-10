@@ -197,6 +197,10 @@ export default function AbaOperacao({
               <span className="block text-gray-500 mb-0.5">Nº do documento</span>
               <input value={f.numero ?? ''} onChange={(e) => atualizar({ numero: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1.5 w-32" />
             </label>
+            <label>
+              <span className="block text-gray-500 mb-0.5">Produto (parte do nome)</span>
+              <input value={f.produto ?? ''} onChange={(e) => atualizar({ produto: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1.5 w-48" />
+            </label>
           </>
         )}
         {temFiltro && (
@@ -288,6 +292,7 @@ export default function AbaOperacao({
                   <Cabecalho>Sit.</Cabecalho>
                   <Cabecalho>{oper === 'E' ? 'Fornecedor' : 'Cliente'}</Cabecalho>
                   <Cabecalho>CNPJ/CPF</Cabecalho>
+                  <Cabecalho>Produtos</Cabecalho>
                   <Cabecalho>CFOP</Cabecalho>
                   <Cabecalho>CST</Cabecalho>
                   <Cabecalho r>Alíq.</Cabecalho>
@@ -315,6 +320,9 @@ export default function AbaOperacao({
                     <td className="px-2 py-1" title={SITUACAO_DOC[l.sit]}>{l.primeira ? l.sit : ''}</td>
                     <td className="px-2 py-1 max-w-[200px] truncate" title={l.partNome}>{l.primeira ? l.partNome : ''}</td>
                     <td className="px-2 py-1 whitespace-nowrap">{l.primeira ? fmtCnpj(l.partDoc) : ''}</td>
+                    <td className="px-2 py-1 max-w-[280px] truncate" title={l.produtos}>
+                      {l.produtos}
+                    </td>
                     <td className="px-2 py-1 font-mono">{l.cfop}</td>
                     <td className="px-2 py-1 font-mono">{l.cst}</td>
                     <td className="px-2 py-1 text-right">{l.aliq === null ? '' : brl(l.aliq)}</td>
@@ -332,7 +340,7 @@ export default function AbaOperacao({
                 ))}
                 {filtradas.length === 0 && (
                   <tr>
-                    <td colSpan={22} className="px-3 py-6 text-center text-gray-400">
+                    <td colSpan={23} className="px-3 py-6 text-center text-gray-400">
                       Nenhum documento neste período/filtro.
                     </td>
                   </tr>
@@ -340,7 +348,7 @@ export default function AbaOperacao({
               </tbody>
               <tfoot className="bg-brand/[0.06] font-semibold">
                 <tr className="border-t-2 border-brand/30">
-                  <td className="px-2 py-2" colSpan={visao === 'ANO' ? 12 : 11}>
+                  <td className="px-2 py-2" colSpan={visao === 'ANO' ? 13 : 12}>
                     TOTAL — {totaisDocs.docs.toLocaleString('pt-BR')} documento(s) · {filtradas.length.toLocaleString('pt-BR')} linha(s)
                   </td>
                   <td className="px-2 py-2 text-right">{brl(totaisDocs.vlOpr)}</td>
@@ -368,7 +376,7 @@ export default function AbaOperacao({
               Próxima ›
             </button>
             <span className="text-gray-400">
-              Os valores do documento (produtos, frete, despesas, seguro, desconto e valor contábil) saem uma vez por nota; CST/CFOP/alíquota, base e ICMS são do registro analítico (linhas em cinza = continuação da mesma nota).
+              Os valores do documento (produtos, frete, despesas, seguro, desconto e valor contábil) saem uma vez por nota; CST/CFOP/alíquota, base e ICMS são do registro analítico (linhas em cinza = continuação da mesma nota). A coluna Produtos lista os itens da nota que pertencem ao CST/CFOP daquela linha (em CT-e não há produtos).
             </span>
           </div>
         </>
