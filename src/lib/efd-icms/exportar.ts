@@ -1,6 +1,7 @@
 import type { ApuracaoE110, LinhaResumo, ResumoMensal, TotaisResumo } from './tipos';
 import type { ConsolidadoAno } from './consolidar';
 import type { LinhaDoc, TotaisDocs } from './documentos';
+import { ROTULO_PARECER, pareceOutorgado, type LinhaDemonstrativo, type NotaSuporte, type ResumoDemonstrativo } from './credito20';
 import { MODELO_DOC, ROTULOS_E110, SITUACAO_DOC, brl, fmtCnpj, fmtDataBr, rotuloMes, rotuloMesCurto } from './rotulos';
 
 // Exportações (Excel e PDF), tudo no navegador. Cabeçalho com razão social,
@@ -562,4 +563,161 @@ export function tabelaPdfEvolucao(resumos: ResumoMensal[]): TabelaPdf {
     linhas: resumos.map((r) => [rotuloMes(r.ym), String(r.entradas.totais.docs), v(r.entradas.totais.vlOpr), String(r.saidas.totais.docs), v(r.saidas.totais.vlOpr), v(r.apuracao.e110?.vlTotCreditos), v(r.apuracao.e110?.vlTotDebitos), v(r.apuracao.e110?.vlIcmsRecolher), v(r.apuracao.e110?.vlSldCredorTransportar)]),
     totais: ['TOTAL', String(soma((r) => r.entradas.totais.docs)), v(soma((r) => r.entradas.totais.vlOpr)), String(soma((r) => r.saidas.totais.docs)), v(soma((r) => r.saidas.totais.vlOpr)), v(soma((r) => r.apuracao.e110?.vlTotCreditos ?? 0)), v(soma((r) => r.apuracao.e110?.vlTotDebitos ?? 0)), v(soma((r) => r.apuracao.e110?.vlIcmsRecolher ?? 0)), ''],
   };
+}
+
+// ---------------------------------------------------------------------
+// Demonstrativo: crédito outorgado de 20% × créditos usados na apuração
+// ---------------------------------------------------------------------
+
+const pctTxt = (n: number | null) => (n === null ? '' : n);
+
+function colsDemonstrativo(): ColExcel[] {
+  return [
+    { titulo: 'Mês', largura: 12, valor: (l: LinhaDemonstrativo) => rotuloMes(l.ym) },
+    { titulo: 'Débito das saídas (E110)', largura: 16, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.debito },
+    { titulo: 'Créditos de entradas (E110)', largura: 16, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.creditosEntradas },
+    { titulo: 'Ajustes a crédito (E111)', largura: 16, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.ajCreditos },
+    { titulo: 'Estornos de débitos', largura: 14, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.estornosDeb },
+    { titulo: 'Crédito utilizado no mês', largura: 16, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.creditoUtilizado },
+    { titulo: '% do débito', largura: 10, valor: (l: LinhaDemonstrativo) => pctTxt(l.pctDebito === null ? null : Math.round(l.pctDebito * 1000) / 10) },
+    { titulo: 'Crédito de 20% (20% do débito)', largura: 16, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.credito20 },
+    { titulo: 'Diferença (crédito − 20%)', largura: 16, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.difCredito20 },
+    { titulo: 'Ajustes a débito', largura: 14, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.outrosDebitos },
+    { titulo: 'Estornos de créditos', largura: 14, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.estornosCred },
+    { titulo: 'Saldo credor anterior', largura: 15, tipo: 'valor', valor: (l: LinhaDemonstrativo) => l.saldoAnterior },
+    { titulo: 'Resultado (devedor + / credor −)', largura: 16, tipo: 'valor', valor: (l: LinhaDemonstrativo) => l.resultado },
+    { titulo: 'ICMS a recolher', largura: 14, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.icmsRecolher },
+    { titulo: 'Saldo credor a transportar', largura: 16, tipo: 'valor', valor: (l: LinhaDemonstrativo) => l.saldoTransportar },
+    { titulo: 'Diesel comprado (litros)', largura: 14, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.diesel?.litros ?? null },
+    { titulo: 'ICMS destacado nas compras de diesel', largura: 16, tipo: 'valor', total: true, valor: (l: LinhaDemonstrativo) => l.diesel?.vlIcms ?? null },
+    { titulo: 'ICMS por litro de diesel', largura: 12, tipo: 'valor', valor: (l: LinhaDemonstrativo) => l.icmsPorLitro },
+    { titulo: 'Crédito utilizado por litro', largura: 12, tipo: 'valor', valor: (l: LinhaDemonstrativo) => l.creditoPorLitro },
+    { titulo: 'Movimento de DIFAL (E310)', largura: 12, valor: (l: LinhaDemonstrativo) => (l.difalMovimento ? 'Sim' : 'Não') },
+    { titulo: 'Ajustes a crédito (código)', largura: 22, valor: (l: LinhaDemonstrativo) => l.ajustesCredito.map((a) => a.cod).join(', ') },
+    { titulo: 'Situação', largura: 28, valor: (l: LinhaDemonstrativo) => ROTULO_PARECER[l.parecer] },
+    { titulo: 'Demonstração', largura: 90, valor: (l: LinhaDemonstrativo) => l.parecerTexto },
+    { titulo: 'Alerta', largura: 70, valor: (l: LinhaDemonstrativo) => l.alerta ?? '' },
+  ];
+}
+
+const COLS_NOTAS_CREDITO: ColExcel[] = [
+  { titulo: 'Mês', largura: 10, valor: (n: NotaSuporte) => rotuloMesCurto(n.ym) },
+  { titulo: 'Data emissão', largura: 12, valor: (n: NotaSuporte) => fmtDataBr(n.dtDoc) },
+  { titulo: 'Nº da nota', largura: 13, valor: (n: NotaSuporte) => n.numero },
+  { titulo: 'Série', largura: 7, valor: (n: NotaSuporte) => n.serie },
+  { titulo: 'Modelo', largura: 8, valor: (n: NotaSuporte) => n.codMod },
+  { titulo: 'Fornecedor', largura: 38, valor: (n: NotaSuporte) => n.partNome },
+  { titulo: 'CNPJ/CPF', largura: 19, valor: (n: NotaSuporte) => fmtCnpj(n.partDoc) },
+  { titulo: 'Descrição dos produtos', largura: 60, valor: (n: NotaSuporte) => n.produtos },
+  { titulo: 'Valor contábil', largura: 15, tipo: 'valor', total: true, valor: (n: NotaSuporte) => n.vlDoc },
+  { titulo: 'Base de cálculo ICMS', largura: 16, tipo: 'valor', total: true, valor: (n: NotaSuporte) => n.vlBc },
+  { titulo: 'Valor ICMS', largura: 14, tipo: 'valor', total: true, valor: (n: NotaSuporte) => n.vlIcms },
+  { titulo: 'Diesel (litros)', largura: 13, tipo: 'valor', total: true, valor: (n: NotaSuporte) => (n.temDiesel ? n.litrosDiesel : null) },
+  { titulo: 'ICMS dos itens de diesel', largura: 15, tipo: 'valor', total: true, valor: (n: NotaSuporte) => (n.temDiesel ? n.icmsDiesel : null) },
+];
+
+type AjusteDemo = { ym: string; cod: string; descr: string; valor: number; categoria: string };
+
+export async function excelCredito(args: { linhas: LinhaDemonstrativo[]; notas: NotaSuporte[] | null; notasRotulo: string; meta: MetaRelatorio; nomeBase: string }) {
+  const { linhas, notas, notasRotulo, meta, nomeBase } = args;
+  const { wb } = await novoWorkbook();
+  const m = (t: string) => ({ ...meta, titulo: t });
+  tabelaExcel(wb.addWorksheet('Demonstrativo mensal'), m(`${meta.titulo} — Crédito outorgado de 20% × créditos usados`), colsDemonstrativo(), linhas);
+  const ajustes: AjusteDemo[] = linhas.flatMap((l) => [...l.ajustesCredito, ...l.ajustesOutros].map((a) => ({ ym: l.ym, ...a })));
+  tabelaExcel(
+    wb.addWorksheet('Ajustes (E111)'),
+    m(`${meta.titulo} — Ajustes da apuração (E111)`),
+    [
+      { titulo: 'Mês', largura: 12, valor: (a: AjusteDemo) => rotuloMesCurto(a.ym) },
+      { titulo: 'Código do ajuste', largura: 16, valor: (a: AjusteDemo) => a.cod },
+      { titulo: 'Tipo (pelo código)', largura: 26, valor: (a: AjusteDemo) => a.categoria },
+      { titulo: 'Descrição', largura: 80, valor: (a: AjusteDemo) => a.descr },
+      { titulo: 'Valor', largura: 16, tipo: 'valor', total: true, valor: (a: AjusteDemo) => a.valor },
+      { titulo: 'Código/descrição de crédito outorgado?', largura: 22, valor: (a: AjusteDemo) => (pareceOutorgado(a) ? 'Sim' : 'Não') },
+    ],
+    ajustes
+  );
+  if (notas) tabelaExcel(wb.addWorksheet('Notas de suporte'), m(`${meta.titulo} — Notas de entrada: ${notasRotulo}`), COLS_NOTAS_CREDITO, notas);
+  baixar(await wb.xlsx.writeBuffer(), `${nomeSeguro(nomeBase)}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
+export async function pdfCredito(args: { linhas: LinhaDemonstrativo[]; resumo: ResumoDemonstrativo; notas: NotaSuporte[] | null; notasRotulo: string; meta: MetaRelatorio; nomeBase: string }) {
+  const { linhas, resumo, notas, notasRotulo, meta, nomeBase } = args;
+  const soma = (f: (l: LinhaDemonstrativo) => number) => v(linhas.reduce((s, l) => s + f(l), 0));
+  const tabelas: TabelaPdf[] = [
+    {
+      titulo: 'Demonstrativo mensal — crédito utilizado × 20% do débito',
+      fonte: 6.2,
+      colunas: [
+        { t: 'Mês', w: 13 },
+        { t: 'Débito saídas', w: 13, a: 'r' },
+        { t: 'Créd. entradas', w: 13, a: 'r' },
+        { t: 'Aj. crédito', w: 11, a: 'r' },
+        { t: 'Estorno déb.', w: 11, a: 'r' },
+        { t: 'Crédito utilizado', w: 13, a: 'r' },
+        { t: '% débito', w: 8, a: 'r' },
+        { t: '20% débito', w: 12, a: 'r' },
+        { t: 'Diferença', w: 12, a: 'r' },
+        { t: 'Diesel (L)', w: 11, a: 'r' },
+        { t: 'ICMS/L', w: 8, a: 'r' },
+        { t: 'Créd./L', w: 8, a: 'r' },
+        { t: 'ICMS a recolher', w: 12, a: 'r' },
+        { t: 'Situação', w: 30 },
+      ],
+      linhas: linhas.map((l) => [
+        rotuloMesCurto(l.ym),
+        v(l.debito),
+        v(l.creditosEntradas),
+        v(l.ajCreditos),
+        v(l.estornosDeb),
+        v(l.creditoUtilizado),
+        l.pctDebito === null ? '—' : `${(l.pctDebito * 100).toFixed(1).replace('.', ',')}%`,
+        v(l.credito20),
+        v(l.difCredito20),
+        l.diesel ? l.diesel.litros.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—',
+        l.icmsPorLitro === null ? '—' : v(l.icmsPorLitro),
+        l.creditoPorLitro === null ? '—' : v(l.creditoPorLitro),
+        v(l.icmsRecolher),
+        ROTULO_PARECER[l.parecer],
+      ]),
+      totais: ['TOTAL', soma((l) => l.debito), soma((l) => l.creditosEntradas), soma((l) => l.ajCreditos), soma((l) => l.estornosDeb), soma((l) => l.creditoUtilizado), '', soma((l) => l.credito20), soma((l) => l.difCredito20), '', '', '', soma((l) => l.icmsRecolher), ''],
+    },
+    {
+      titulo: 'Demonstração mês a mês',
+      fonte: 6.2,
+      colunas: [{ t: 'Mês', w: 13 }, { t: 'Demonstração', w: 180 }],
+      linhas: linhas.map((l) => [rotuloMesCurto(l.ym), l.parecerTexto + (l.alerta ? ` ALERTA: ${l.alerta}` : '')]),
+    },
+  ];
+  const ajustes = linhas.flatMap((l) => [...l.ajustesCredito, ...l.ajustesOutros].map((a) => ({ ym: l.ym, ...a })));
+  if (ajustes.length > 0)
+    tabelas.push({
+      titulo: 'Ajustes da apuração (E111)',
+      fonte: 6.5,
+      colunas: [{ t: 'Mês', w: 12 }, { t: 'Código', w: 16 }, { t: 'Tipo (pelo código)', w: 26 }, { t: 'Descrição', w: 100 }, { t: 'Valor', w: 18, a: 'r' }],
+      linhas: ajustes.map((a) => [rotuloMesCurto(a.ym), a.cod, a.categoria, a.descr, v(a.valor)]),
+    });
+  if (notas && notas.length > 0)
+    tabelas.push({
+      titulo: `Notas de entrada — ${notasRotulo}`,
+      fonte: 6,
+      colunas: [
+        { t: 'Mês', w: 9 },
+        { t: 'Emissão', w: 12 },
+        { t: 'Nº nota', w: 13 },
+        { t: 'Fornecedor', w: 34 },
+        { t: 'Descrição dos produtos', w: 52 },
+        { t: 'Valor contábil', w: 14, a: 'r' },
+        { t: 'Base ICMS', w: 14, a: 'r' },
+        { t: 'Valor ICMS', w: 12, a: 'r' },
+        { t: 'Diesel (L)', w: 11, a: 'r' },
+      ],
+      linhas: notas.map((n) => [rotuloMesCurto(n.ym), fmtDataBr(n.dtDoc), n.numero, n.partNome, n.produtos, v(n.vlDoc), v(n.vlBc), v(n.vlIcms), n.temDiesel ? n.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '']),
+      totais: ['TOTAL', '', `${notas.length} nota(s)`, '', '', v(notas.reduce((s, n) => s + n.vlDoc, 0)), v(notas.reduce((s, n) => s + n.vlBc, 0)), v(notas.reduce((s, n) => s + n.vlIcms, 0)), ''],
+    });
+  await gerarPdf({ ...meta, titulo: `${meta.titulo} — Crédito outorgado de 20% × créditos usados` }, tabelas, nomeBase, [
+    `Meses analisados: ${resumo.meses} · apuração normal: ${resumo.normais} · compatíveis com crédito de 20%: ${resumo.compativeis20} · sem crédito: ${resumo.semCredito}.`,
+    'Crédito utilizado = créditos por entradas + ajustes a crédito + estornos de débitos (E110); 20% do débito = 20% de "saídas e prestações com débito do imposto". Valores direto do E110/E111 e dos itens (C170) do SPED — nada é estimado.',
+    'A situação de cada mês é uma comparação numérica objetiva, não uma conclusão jurídica sobre o regime do contribuinte. DIFAL (E310) é apenas sinalizado; seus valores não são interpretados.',
+  ]);
 }

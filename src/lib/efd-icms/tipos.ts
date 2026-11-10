@@ -21,7 +21,7 @@ export type LinhaAnalitica = {
 
 // Item da nota (C170): só o que identifica o produto e o liga à linha analítica
 // (C190) do mesmo CST + CFOP + alíquota.
-export type ItemEfd = { cod: string; descr: string; cst: string; cfop: string; aliq: number };
+export type ItemEfd = { cod: string; descr: string; cst: string; cfop: string; aliq: number; qtd: number; unid: string; vlItem: number; vlBc: number; vlIcms: number };
 
 export type DocEfd = {
   id: number;
@@ -83,6 +83,20 @@ export type ApuracaoMes = {
   e110: ApuracaoE110 | null;
   ajustes: AjusteApuracao[];
   obrigacoes: ObrigacaoRecolher[];
+  // há algum valor diferente de zero na apuração do DIFAL (E310) — só sinalizado;
+  // o leiaute do E310 muda de versão e seus campos não são interpretados aqui
+  difalMovimento?: boolean;
+};
+
+// Métricas do diesel comprado no mês (itens C170 cuja descrição contém "diesel"),
+// usadas no demonstrativo do crédito outorgado de 20%.
+export type CreditoMes = {
+  docsComDiesel: number;
+  litros: number; // só itens com unidade L/LT
+  vlItem: number;
+  vlBc: number;
+  vlIcms: number; // ICMS destacado nos itens de diesel
+  itensSemLitros: number; // itens de diesel em outra unidade (não entram nos litros)
 };
 
 export type Alerta = { nivel: 'erro' | 'aviso' | 'info'; codigo: string; mensagem: string };
@@ -174,4 +188,5 @@ export type ResumoMensal = {
   apuracao: ApuracaoMes;
   conferencia: Conferencia;
   alertas: Alerta[];
+  credito?: CreditoMes; // ausente em resumos salvos antes do demonstrativo de crédito
 };

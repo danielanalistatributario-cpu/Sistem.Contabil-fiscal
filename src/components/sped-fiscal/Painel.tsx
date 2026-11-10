@@ -10,16 +10,18 @@ import { brl, fmtCnpj, rotuloMes, rotuloMesCurto } from '@/lib/efd-icms/rotulos'
 import { excelCompleto, type MetaRelatorio } from '@/lib/efd-icms/exportar';
 import AbaOperacao from './AbaOperacao';
 import AbaApuracao from './AbaApuracao';
+import AbaCredito from './AbaCredito';
 import { ListaAlertas } from './Importacao';
 
 export type Analise = { resumos: ResumoMensal[]; arquivos: ArquivoEfd[] | null; conjunto: ConjuntoValidado | null };
 
-type Aba = 'painel' | 'entradas' | 'saidas' | 'apuracao' | 'conferencia';
+type Aba = 'painel' | 'entradas' | 'saidas' | 'apuracao' | 'credito' | 'conferencia';
 const ABAS: { id: Aba; rotulo: string }[] = [
   { id: 'painel', rotulo: 'Painel' },
   { id: 'entradas', rotulo: 'Entradas' },
   { id: 'saidas', rotulo: 'Saídas' },
   { id: 'apuracao', rotulo: 'Apuração do ICMS' },
+  { id: 'credito', rotulo: 'Crédito 20% × créditos' },
   { id: 'conferencia', rotulo: 'Conferência' },
 ];
 
@@ -142,6 +144,7 @@ export default function Painel({
       {aba === 'entradas' && <AbaOperacao oper="E" resumos={resVisao} consolidado={consol.entradas} arquivos={arquivos} visao={visao} meta={meta} />}
       {aba === 'saidas' && <AbaOperacao oper="S" resumos={resVisao} consolidado={consol.saidas} arquivos={arquivos} visao={visao} meta={meta} />}
       {aba === 'apuracao' && <AbaApuracao resumos={resVisao} consolidado={consol} meta={meta} visao={visao} />}
+      {aba === 'credito' && <AbaCredito resumos={resVisao} arquivos={usadosVisao} visao={visao} meta={meta} />}
       {aba === 'conferencia' && <Conferencia resumos={resVisao} conjunto={analise.conjunto} />}
     </div>
   );

@@ -1,5 +1,6 @@
 import type { Alerta, ApuracaoE110, ApuracaoMes, ArquivoEfd, Conferencia, DocEfd, LinhaResumo, Oper, ResumoMensal, TopParticipante, TotaisResumo } from './tipos';
 import { SIT_SEM_VALOR, rotuloMes } from './rotulos';
+import { metricasDiesel } from './credito20';
 
 // ---------------------------------------------------------------------
 // 1) Escolha dos arquivos que entram (mesma empresa, mesmo exercício, sem
@@ -299,6 +300,7 @@ export function montarResumoMensal(arq: ArquivoEfd): ResumoMensal {
     apuracao: arq.apuracao,
     conferencia: conf,
     alertas,
+    credito: metricasDiesel(arq),
   };
 }
 

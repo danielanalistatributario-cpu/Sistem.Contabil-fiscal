@@ -50,6 +50,7 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
   const ajustes: ArquivoEfd['apuracao']['ajustes'] = [];
   const obrigacoes: ArquivoEfd['apuracao']['obrigacoes'] = [];
   let e110: ApuracaoE110 | null = null;
+  let difalMovimento = false;
   let cab: CabecalhoEfd | null = null;
   let atual: DocEfd | null = null;
   let linhasLidas = 0;
@@ -102,7 +103,7 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
         // NUM_ITEM|COD_ITEM|DESCR_COMPL|QTD|UNID|VL_ITEM|VL_DESC|IND_MOV|CST_ICMS|CFOP|COD_NAT|VL_BC_ICMS|ALIQ_ICMS|...
         if (!atual || atual.reg !== 'C100') break;
         const cod = c[3] ?? '';
-        atual.itens.push({ cod, descr: (c[4] ?? '').trim(), cst: c[10] ?? '', cfop: c[11] ?? '', aliq: num(c[14]) });
+        atual.itens.push({ cod, descr: (c[4] ?? '').trim(), cst: c[10] ?? '', cfop: c[11] ?? '', aliq: num(c[14]), qtd: num(c[5]), unid: (c[6] ?? '').trim(), vlItem: num(c[7]), vlBc: num(c[13]), vlIcms: num(c[15]) });
         break;
       }
       case 'C100': {
@@ -209,6 +210,10 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
         };
         break;
       }
+      case 'E310':
+        // só sinaliza movimento (qualquer valor ≠ 0 depois do IND_MOV_DIFAL)
+        for (let i = 3; i < c.length; i++) if (num(c[i]) !== 0) difalMovimento = true;
+        break;
       case 'E111': {
         const cod = c[2] ?? '';
         ajustes.push({ cod, descr: (c[3] ?? '').trim(), valor: num(c[4]), categoria: CATEGORIA_AJUSTE[cod[3]] ?? 'Não classificado pelo código' });
@@ -275,6 +280,13 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
       mensagem: `O arquivo tem registros de documentos/analíticos que esta versão ainda não lê (${naoProcessados.map((r) => `${r}: ${registros[r]}`).join(', ')}). Os relatórios NÃO incluem esses valores.`,
     });
   }
+  if (registros['E112'] || registros['E113']) {
+    alertas.push({
+      nivel: 'aviso',
+      codigo: 'AJUSTES_COM_DOCUMENTOS',
+      mensagem: `O arquivo tem documentos vinculados aos ajustes da apuração (E112: ${registros['E112'] ?? 0}, E113: ${registros['E113'] ?? 0}). Esta versão ainda não lê esses registros — os ajustes aparecem só com código, descrição e valor.`,
+    });
+  }
   if (!e110) alertas.push({ nivel: 'aviso', codigo: 'SEM_E110', mensagem: 'O arquivo não tem apuração do ICMS (registro E110).' });
   if (docs.length === 0) alertas.push({ nivel: 'info', codigo: 'SEM_DOCS', mensagem: 'O arquivo não tem documentos nos registros C100/D100.' });
 
@@ -284,7 +296,7 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
     cabecalho: cab,
     ym,
     docs,
-    apuracao: { e110, ajustes, obrigacoes },
+    apuracao: { e110, ajustes, obrigacoes, difalMovimento },
     registros,
     declarados,
     linhasLidas,
