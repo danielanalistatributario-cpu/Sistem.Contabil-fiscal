@@ -40,7 +40,41 @@ function dataIso(v: string | undefined): string | null {
 // meses fariam documentos diferentes parecerem o mesmo nas listas e totais.
 let contadorGlobalDocs = 0;
 
-export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
+// signingTime (OID 1.2.840.113549.1.9.5) dentro do PKCS#7 que fica depois do |9999|.
+// Retorna ISO UTC ou null. `bytes` = o arquivo cru (o texto decodificado em windows-1252
+// tem o mesmo tamanho em caracteres, então o mesmo deslocamento serve).
+const OID_SIGNING_TIME = [0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x09, 0x05];
+
+export function extrairAssinatura(bytes: Uint8Array, inicio: number): string | null {
+  const fimBusca = bytes.length - OID_SIGNING_TIME.length - 6;
+  for (let i = Math.max(0, inicio); i < fimBusca; i++) {
+    if (bytes[i] !== 0x06) continue;
+    let ok = true;
+    for (let k = 1; k < OID_SIGNING_TIME.length; k++) {
+      if (bytes[i + k] !== OID_SIGNING_TIME[k]) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) continue;
+    // depois do OID: SET (0x31 len) e então UTCTime (0x17 len) ou GeneralizedTime (0x18 len)
+    for (let j = i + OID_SIGNING_TIME.length; j < i + OID_SIGNING_TIME.length + 6; j++) {
+      const tag = bytes[j];
+      if (tag !== 0x17 && tag !== 0x18) continue;
+      const len = bytes[j + 1];
+      let t = '';
+      for (let k = 0; k < len; k++) t += String.fromCharCode(bytes[j + 2 + k]);
+      const m = tag === 0x17 ? /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?Z$/.exec(t) : /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?Z$/.exec(t);
+      if (!m) return null;
+      const ano = tag === 0x17 ? (parseInt(m[1], 10) >= 50 ? 1900 : 2000) + parseInt(m[1], 10) : parseInt(m[1], 10);
+      return `${ano}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] ?? '00'}Z`;
+    }
+    return null;
+  }
+  return null;
+}
+
+export function lerEfdIcms(texto: string, nomeArquivo: string, bytes?: Uint8Array): ArquivoEfd {
   const alertas: Alerta[] = [];
   const registros: Record<string, number> = {};
   const declarados: Record<string, number> = {};
@@ -293,6 +327,11 @@ export function lerEfdIcms(texto: string, nomeArquivo: string): ArquivoEfd {
   return {
     nomeArquivo,
     tamanho: texto.length,
+    assinadoEm: bytes ? extrairAssinatura(bytes, Math.max(0, texto.lastIndexOf('|9999|'))) : null,
+    versaoNome: (() => {
+      const m = /-(\d)-([0-9A-Fa-f]{40})-SPED-EFD/i.exec(nomeArquivo);
+      return m ? { codFin: m[1], hash: m[2].toUpperCase() } : null;
+    })(),
     cabecalho: cab,
     ym,
     docs,

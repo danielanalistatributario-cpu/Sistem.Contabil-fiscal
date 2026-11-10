@@ -37,8 +37,9 @@ export default function SpedFiscalRelatoriosPage() {
       await esperar();
       try {
         // o SPED é gravado em Windows-1252 (acentos); depois do |9999| vem a assinatura digital em binário
-        const texto = new TextDecoder('windows-1252').decode(await f.arrayBuffer());
-        const arq = lerEfdIcms(texto, f.name);
+        const buffer = await f.arrayBuffer();
+        const texto = new TextDecoder('windows-1252').decode(buffer);
+        const arq = lerEfdIcms(texto, f.name, new Uint8Array(buffer));
         arq.tamanho = f.size;
         novos.push(arq);
       } catch {

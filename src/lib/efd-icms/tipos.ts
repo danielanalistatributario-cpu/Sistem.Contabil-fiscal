@@ -88,15 +88,15 @@ export type ApuracaoMes = {
   difalMovimento?: boolean;
 };
 
-// Métricas do diesel comprado no mês (itens C170 cuja descrição contém "diesel"),
+// Métricas do combustível comprado no mês (itens C170 com CFOP 1653/2653),
 // usadas no demonstrativo do crédito outorgado de 20%.
 export type CreditoMes = {
-  docsComDiesel: number;
+  docsComCombustivel: number;
   litros: number; // só itens com unidade L/LT
   vlItem: number;
   vlBc: number;
-  vlIcms: number; // ICMS destacado nos itens de diesel
-  itensSemLitros: number; // itens de diesel em outra unidade (não entram nos litros)
+  vlIcms: number; // ICMS destacado nos itens de combustível
+  itensOutraUnidade: number; // itens de combustível em outra unidade (não entram nos litros)
 };
 
 export type Alerta = { nivel: 'erro' | 'aviso' | 'info'; codigo: string; mensagem: string };
@@ -127,6 +127,11 @@ export type ArquivoEfd = {
   linhasLidas: number;
   total9999: number | null;
   alertas: Alerta[];
+  // data/hora da assinatura digital do arquivo (signingTime do PKCS#7 que vem depois
+  // do |9999|), em ISO UTC — é o que diz qual versão (original/retificadora) é a mais recente
+  assinadoEm: string | null;
+  // versão no nome do arquivo: finalidade (0 original / 1 retificadora) e início do hash
+  versaoNome: { codFin: string; hash: string } | null;
 };
 
 // ---------------------------------------------------------------------

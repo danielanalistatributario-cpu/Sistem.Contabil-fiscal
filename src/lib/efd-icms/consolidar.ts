@@ -1,6 +1,6 @@
 import type { Alerta, ApuracaoE110, ApuracaoMes, ArquivoEfd, Conferencia, DocEfd, LinhaResumo, Oper, ResumoMensal, TopParticipante, TotaisResumo } from './tipos';
 import { SIT_SEM_VALOR, rotuloMes } from './rotulos';
-import { metricasDiesel } from './credito20';
+import { metricasCombustivel } from './credito20';
 
 // ---------------------------------------------------------------------
 // 1) Escolha dos arquivos que entram (mesma empresa, mesmo exercício, sem
@@ -73,7 +73,8 @@ export function validarConjunto(arquivos: ArquivoEfd[], grupoEscolhido?: string 
     }
   }
 
-  // mês repetido: fica o arquivo substituto (COD_FIN 1); empate → o primeiro
+  // mês repetido: fica a versão MAIS RECENTE pela data de assinatura digital (é o que define
+  // qual retificadora vale); sem data de assinatura, o arquivo substituto (COD_FIN 1); empate → o primeiro
   const porMes = new Map<string, ArquivoEfd[]>();
   for (const a of mesmos) porMes.set(a.ym, [...(porMes.get(a.ym) ?? []), a]);
   const usados: ArquivoEfd[] = [];
@@ -82,13 +83,26 @@ export function validarConjunto(arquivos: ArquivoEfd[], grupoEscolhido?: string 
       usados.push(lista[0]);
       continue;
     }
-    const escolhido = lista.find((x) => x.cabecalho.codFin === '1') ?? lista[0];
+    const classificadas = [...lista].sort(
+      (a, b) =>
+        (b.assinadoEm ?? '').localeCompare(a.assinadoEm ?? '') ||
+        Number(b.cabecalho.codFin === '1') - Number(a.cabecalho.codFin === '1') ||
+        a.nomeArquivo.localeCompare(b.nomeArquivo)
+    );
+    const escolhido = classificadas[0];
     usados.push(escolhido);
+    const dataAss = (a: ArquivoEfd) => (a.assinadoEm ? new Date(a.assinadoEm).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'sem data de assinatura');
+    const nomeVersao = (a: ArquivoEfd) => (a.versaoNome ? `${a.versaoNome.codFin === '1' ? 'retificadora' : 'original'} ${a.versaoNome.hash.slice(0, 6)}` : a.nomeArquivo);
+    const criterio = classificadas.every((x) => x.assinadoEm) ? 'a assinatura mais recente' : 'o arquivo substituto';
     for (const outro of lista) {
       if (outro === escolhido) continue;
-      descartados.push({ arquivo: outro, motivo: `Mês repetido (${rotuloMes(ym)}): foi mantido "${escolhido.nomeArquivo}"${escolhido.cabecalho.codFin === '1' ? ' (arquivo substituto)' : ''}.` });
+      descartados.push({ arquivo: outro, motivo: `Mês repetido (${rotuloMes(ym)}): foi mantida a versão ${nomeVersao(escolhido)} (assinada em ${dataAss(escolhido)}); esta é ${nomeVersao(outro)} (${dataAss(outro)}).` });
     }
-    alertas.push({ nivel: 'aviso', codigo: 'MES_REPETIDO', mensagem: `${rotuloMes(ym)} foi enviado ${lista.length} vezes — usei "${escolhido.nomeArquivo}" e descartei o(s) outro(s).` });
+    alertas.push({
+      nivel: 'aviso',
+      codigo: 'MES_REPETIDO',
+      mensagem: `${rotuloMes(ym)} foi enviado ${lista.length} vezes — usei a versão ${nomeVersao(escolhido)} (assinada em ${dataAss(escolhido)}, critério: ${criterio}) e descartei as outras.`,
+    });
   }
   usados.sort((a, b) => a.ym.localeCompare(b.ym));
 
@@ -300,7 +314,7 @@ export function montarResumoMensal(arq: ArquivoEfd): ResumoMensal {
     apuracao: arq.apuracao,
     conferencia: conf,
     alertas,
-    credito: metricasDiesel(arq),
+    credito: metricasCombustivel(arq),
   };
 }
 

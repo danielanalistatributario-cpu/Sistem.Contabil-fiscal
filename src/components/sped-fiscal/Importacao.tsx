@@ -162,6 +162,12 @@ export default function Importacao({
                           <td className="px-3 py-1.5 whitespace-nowrap">{a.cabecalho.ie}</td>
                           <td className="px-3 py-1.5 whitespace-nowrap">
                             {a.cabecalho.codVer} · {a.cabecalho.codFin === '1' ? 'substituto' : 'original'}
+                            {a.assinadoEm && (
+                              <span className="block text-[10px] text-gray-400" title={`Assinado digitalmente em ${new Date(a.assinadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}${a.versaoNome ? ' · código ' + a.versaoNome.hash.slice(0, 8) : ''}`}>
+                                assinado em {new Date(a.assinadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                                {a.versaoNome ? ' · ' + a.versaoNome.hash.slice(0, 6) : ''}
+                              </span>
+                            )}
                           </td>
                           <td className="px-3 py-1.5 text-right">{ent}</td>
                           <td className="px-3 py-1.5 text-right">{sai}</td>

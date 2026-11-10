@@ -17,7 +17,7 @@ const COR_PARECER: Record<ParecerMes, string> = {
 };
 
 const MODOS: { id: ModoNotas; rotulo: string; ajuda: string }[] = [
-  { id: 'diesel', rotulo: 'Notas com diesel', ajuda: 'notas de entrada com algum item cuja descrição contém "diesel"' },
+  { id: 'combustivel', rotulo: 'Notas com combustível', ajuda: 'notas de entrada com algum item de CFOP 1653/2653 (combustível para consumo)' },
   { id: 'credito', rotulo: 'Notas com ICMS creditado', ajuda: 'notas de entrada com ICMS nos registros analíticos (C190)' },
   { id: 'todas', rotulo: 'Todas as notas de entrada', ajuda: 'todas as notas de entrada com valor' },
 ];
@@ -27,14 +27,14 @@ function Cabecalho({ children, r }: { children: React.ReactNode; r?: boolean }) 
 }
 
 export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos: ResumoMensal[]; arquivos: ArquivoEfd[] | null; visao: string; meta: MetaRelatorio }) {
-  const [modo, setModo] = useState<ModoNotas>('diesel');
+  const [modo, setModo] = useState<ModoNotas>('combustivel');
   const [mesNotas, setMesNotas] = useState<string>('');
   const [pagina, setPagina] = useState(0);
   const [gerando, setGerando] = useState<string | null>(null);
 
   const linhas = useMemo(() => resumos.map(linhaDemonstrativo), [resumos]);
   const resumo = useMemo(() => resumirDemonstrativo(linhas), [linhas]);
-  const semMetricasDiesel = resumos.some((r) => !r.credito);
+  const semMetricasCombustivel = resumos.some((r) => !r.credito);
 
   const mesEfetivo = resumos.length === 1 ? resumos[0].ym : mesNotas;
   const notas = useMemo(() => (arquivos ? notasDeSuporte(arquivos, mesEfetivo || null, modo) : null), [arquivos, mesEfetivo, modo]);
@@ -102,9 +102,9 @@ export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos
         </div>
       </div>
 
-      {semMetricasDiesel && (
+      {semMetricasCombustivel && (
         <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          Alguns meses vieram de resumos salvos antes deste relatório e não têm as métricas de diesel (litros e ICMS por litro). Importe o arquivo SPED desses meses de novo para preenchê-las.
+          Alguns meses vieram de resumos salvos antes deste relatório e não têm as métricas de combustível (litros e ICMS por litro). Importe o arquivo SPED desses meses de novo para preenchê-las.
         </p>
       )}
 
@@ -115,15 +115,17 @@ export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos
               <Cabecalho>Mês</Cabecalho>
               <Cabecalho r>Débito das saídas</Cabecalho>
               <Cabecalho r>Créditos de entradas</Cabecalho>
-              <Cabecalho r>Ajustes a crédito</Cabecalho>
-              <Cabecalho r>Estornos de débitos</Cabecalho>
-              <Cabecalho r>Crédito utilizado</Cabecalho>
+              <Cabecalho r>Ajuste principal (E111)</Cabecalho>
+              <Cabecalho r>Crédito principal</Cabecalho>
               <Cabecalho r>% do débito</Cabecalho>
               <Cabecalho r>20% do débito</Cabecalho>
               <Cabecalho r>Diferença</Cabecalho>
-              <Cabecalho r>Diesel (litros)</Cabecalho>
+              <Cabecalho r>Crédito DIFAL</Cabecalho>
+              <Cabecalho r>Estornos de débitos</Cabecalho>
+              <Cabecalho r>Crédito utilizado</Cabecalho>
+              <Cabecalho r>Combustível (litros)</Cabecalho>
               <Cabecalho r>ICMS / litro</Cabecalho>
-              <Cabecalho r>Crédito / litro</Cabecalho>
+              <Cabecalho r>Crédito principal / litro</Cabecalho>
               <Cabecalho r>ICMS a recolher</Cabecalho>
               <Cabecalho>Situação</Cabecalho>
             </tr>
@@ -134,13 +136,15 @@ export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos
                 <td className="px-3 py-1.5 whitespace-nowrap font-medium">{rotuloMesCurto(l.ym)}</td>
                 <td className="px-3 py-1.5 text-right">{brl(l.debito)}</td>
                 <td className="px-3 py-1.5 text-right">{brl(l.creditosEntradas)}</td>
-                <td className="px-3 py-1.5 text-right">{brl(l.ajCreditos)}</td>
-                <td className="px-3 py-1.5 text-right">{brl(l.estornosDeb)}</td>
-                <td className="px-3 py-1.5 text-right font-semibold">{brl(l.creditoUtilizado)}</td>
-                <td className="px-3 py-1.5 text-right">{l.pctDebito === null ? '—' : `${(l.pctDebito * 100).toFixed(1).replace('.', ',')}%`}</td>
+                <td className="px-3 py-1.5 text-right">{brl(l.ajustePrincipal)}</td>
+                <td className="px-3 py-1.5 text-right font-semibold">{brl(l.creditoPrincipal)}</td>
+                <td className="px-3 py-1.5 text-right">{l.pctPrincipal === null ? '—' : `${(l.pctPrincipal * 100).toFixed(1).replace('.', ',')}%`}</td>
                 <td className="px-3 py-1.5 text-right">{brl(l.credito20)}</td>
                 <td className={`px-3 py-1.5 text-right ${l.difCredito20 > 0.01 ? 'text-red-700' : l.difCredito20 < -0.01 ? 'text-gray-500' : 'text-green-700'}`}>{brl(l.difCredito20)}</td>
-                <td className="px-3 py-1.5 text-right">{l.diesel ? l.diesel.litros.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—'}</td>
+                <td className="px-3 py-1.5 text-right">{brl(l.creditoDifal)}</td>
+                <td className="px-3 py-1.5 text-right">{brl(l.estornosDeb)}</td>
+                <td className="px-3 py-1.5 text-right">{brl(l.creditoUtilizado)}</td>
+                <td className="px-3 py-1.5 text-right">{l.combustivel ? l.combustivel.litros.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—'}</td>
                 <td className="px-3 py-1.5 text-right">{l.icmsPorLitro === null ? '—' : brl(l.icmsPorLitro)}</td>
                 <td className="px-3 py-1.5 text-right">{l.creditoPorLitro === null ? '—' : brl(l.creditoPorLitro)}</td>
                 <td className="px-3 py-1.5 text-right">{brl(l.icmsRecolher)}</td>
@@ -154,8 +158,8 @@ export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos
         </table>
       </div>
       <p className="text-[11px] text-gray-500">
-        Crédito utilizado = créditos de entradas + ajustes a crédito + estornos de débitos (E110). 20% do débito = 20% de &quot;saídas e prestações com débito do imposto&quot;. ICMS/litro = ICMS destacado nos itens de diesel ÷ litros
-        (itens em L/LT). &quot;DIFAL&quot; indica movimento no registro E310 (apuração separada; os valores não são interpretados aqui).
+        Crédito principal = créditos por entradas (E110) + ajuste a crédito lançado em E111 que não é DIFAL. Crédito DIFAL = ajustes de DIFAL (ex.: SP020718) e ajustes por documento. Crédito utilizado = créditos de entradas + total de ajustes a crédito + estornos de débitos.
+        20% do débito = 20% de &quot;saídas e prestações com débito do imposto&quot;. Combustível = itens de entrada com CFOP 1653/2653; litros somam só itens em L/LT/LTS (itens em KG, UN etc. ficam de fora); ICMS/litro = ICMS destacado nesses itens ÷ litros. &quot;DIFAL&quot; indica movimento no registro E310 (apuração separada; os valores não são interpretados aqui).
       </p>
 
       <div className="space-y-2">
@@ -259,8 +263,8 @@ export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos
                     <Cabecalho r>Valor contábil</Cabecalho>
                     <Cabecalho r>Base ICMS</Cabecalho>
                     <Cabecalho r>Valor ICMS</Cabecalho>
-                    <Cabecalho r>Diesel (L)</Cabecalho>
-                    <Cabecalho r>ICMS do diesel</Cabecalho>
+                    <Cabecalho r>Combustível (L)</Cabecalho>
+                    <Cabecalho r>ICMS do combustível</Cabecalho>
                   </tr>
                 </thead>
                 <tbody>
@@ -279,8 +283,8 @@ export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos
                       <td className="px-2 py-1 text-right">{brl(n.vlDoc)}</td>
                       <td className="px-2 py-1 text-right">{brl(n.vlBc)}</td>
                       <td className="px-2 py-1 text-right">{brl(n.vlIcms)}</td>
-                      <td className="px-2 py-1 text-right">{n.temDiesel ? n.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : ''}</td>
-                      <td className="px-2 py-1 text-right">{n.temDiesel ? brl(n.icmsDiesel) : ''}</td>
+                      <td className="px-2 py-1 text-right">{n.temCombustivel ? n.litros.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : ''}</td>
+                      <td className="px-2 py-1 text-right">{n.temCombustivel ? brl(n.icmsCombustivel) : ''}</td>
                     </tr>
                   ))}
                   {notas.length === 0 && (
@@ -300,7 +304,7 @@ export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos
                     <td className="px-2 py-2 text-right">{brl(totNotas.vlBc)}</td>
                     <td className="px-2 py-2 text-right">{brl(totNotas.vlIcms)}</td>
                     <td className="px-2 py-2 text-right">{totNotas.litros.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td>
-                    <td className="px-2 py-2 text-right">{brl(totNotas.icmsDiesel)}</td>
+                    <td className="px-2 py-2 text-right">{brl(totNotas.icmsCombustivel)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -316,7 +320,7 @@ export default function AbaCredito({ resumos, arquivos, visao, meta }: { resumos
                 Próxima ›
               </button>
               <span className="text-gray-400">
-                {MODOS.find((m) => m.id === modo)!.ajuda}. Valor contábil, base e ICMS são da nota (soma dos registros analíticos); &quot;Diesel&quot; e &quot;ICMS do diesel&quot; vêm só dos itens de diesel.
+                {MODOS.find((m) => m.id === modo)!.ajuda}. Valor contábil, base e ICMS são da nota (soma dos registros analíticos); &quot;Combustível&quot; e &quot;ICMS do combustível&quot; vêm só dos itens de CFOP 1653/2653.
               </span>
             </div>
           </>
