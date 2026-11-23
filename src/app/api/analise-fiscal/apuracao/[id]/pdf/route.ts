@@ -3,7 +3,7 @@ import PDFDocument from 'pdfkit';
 import { prisma } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
-import { agregarIcmsPorCfop, somaIcms, calcularResumoApuracao, type RegistroIcms, type CategoriaLancamento, type LancamentoManual } from '@/lib/analise-fiscal-icms-apuracao';
+import { carregarFontesApuracao, calcularResumoApuracao, type RegistroIcms, type CategoriaLancamento, type LancamentoManual } from '@/lib/analise-fiscal-icms-apuracao';
 
 const MARGEM = 40;
 const LARGURA_UTIL = 595 - MARGEM * 2; // A4 retrato
@@ -96,14 +96,10 @@ async function gerarPdf(apuracao: {
   empresaAnalisadaUf: string | null;
   entradaApuracaoId: string | null;
   saidaApuracaoId: string | null;
+  spedOrigem: unknown;
   lancamentos: { categoria: string; descricao: string; valor: number }[];
 }): Promise<Buffer> {
-  const [registroEntradas, registroSaidas, porEntradasComCredito, porSaidasComDebito] = await Promise.all([
-    apuracao.entradaApuracaoId ? agregarIcmsPorCfop(apuracao.entradaApuracaoId, 'entrada') : null,
-    apuracao.saidaApuracaoId ? agregarIcmsPorCfop(apuracao.saidaApuracaoId, 'saida') : null,
-    apuracao.entradaApuracaoId ? somaIcms(apuracao.entradaApuracaoId, 'entrada') : 0,
-    apuracao.saidaApuracaoId ? somaIcms(apuracao.saidaApuracaoId, 'saida') : 0,
-  ]);
+  const { registroEntradas, registroSaidas, porEntradasComCredito, porSaidasComDebito, origemSped } = await carregarFontesApuracao(apuracao);
 
   const lancamentos: LancamentoManual[] = apuracao.lancamentos.map((l) => ({
     categoria: l.categoria as CategoriaLancamento,
@@ -136,6 +132,9 @@ async function gerarPdf(apuracao: {
     doc.text(
       `Insc. Est.: ${apuracao.company.inscricaoEstadual || '—'}   CNPJ: ${apuracao.company.cnpj}   Período: ${apuracao.periodo}`
     );
+    if (origemSped) {
+      doc.text(`Origem: SPED Fiscal (EFD ICMS/IPI) — ${origemSped.resumo.nomeArquivo}`);
+    }
     doc.fillColor('#000');
     doc.moveDown(1);
 

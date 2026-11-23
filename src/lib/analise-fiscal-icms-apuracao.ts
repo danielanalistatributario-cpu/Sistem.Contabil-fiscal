@@ -7,6 +7,7 @@
 // (ver AnaliseFiscalApuracaoIcms no schema).
 
 import { prisma } from './db';
+import { dadosApuracaoSped, type OrigemSped } from './efd-icms/para-apuracao';
 
 export type Direcao = 'entrada' | 'saida';
 
@@ -107,6 +108,33 @@ export async function somaIcms(apuracaoId: string, direcao: Direcao): Promise<nu
   return resultado._sum.valorIcms || 0;
 }
 
+// De onde vêm as tabelas por CFOP e os itens 001/005 de uma Apuração Fiscal: do SPED Fiscal importado
+// (spedOrigem) ou das análises de Entradas/Saídas vinculadas.
+export async function carregarFontesApuracao(apuracao: {
+  entradaApuracaoId: string | null;
+  saidaApuracaoId: string | null;
+  spedOrigem: unknown;
+}): Promise<{
+  registroEntradas: RegistroIcms | null;
+  registroSaidas: RegistroIcms | null;
+  porSaidasComDebito: number;
+  porEntradasComCredito: number;
+  origemSped: OrigemSped | null;
+}> {
+  const origemSped = (apuracao.spedOrigem as OrigemSped | null) ?? null;
+  if (origemSped) {
+    const d = dadosApuracaoSped(origemSped);
+    return { registroEntradas: d.registroEntradas, registroSaidas: d.registroSaidas, porSaidasComDebito: d.porSaidasComDebito, porEntradasComCredito: d.porEntradasComCredito, origemSped };
+  }
+  const [registroEntradas, registroSaidas, porEntradasComCredito, porSaidasComDebito] = await Promise.all([
+    apuracao.entradaApuracaoId ? agregarIcmsPorCfop(apuracao.entradaApuracaoId, 'entrada') : null,
+    apuracao.saidaApuracaoId ? agregarIcmsPorCfop(apuracao.saidaApuracaoId, 'saida') : null,
+    apuracao.entradaApuracaoId ? somaIcms(apuracao.entradaApuracaoId, 'entrada') : 0,
+    apuracao.saidaApuracaoId ? somaIcms(apuracao.saidaApuracaoId, 'saida') : 0,
+  ]);
+  return { registroEntradas, registroSaidas, porSaidasComDebito, porEntradasComCredito, origemSped: null };
+}
+
 export type CategoriaLancamento = 'OUTROS_DEBITOS' | 'ESTORNO_CREDITOS' | 'OUTROS_CREDITOS' | 'ESTORNO_DEBITOS' | 'DEDUCOES';
 
 export type LancamentoManual = {
@@ -204,10 +232,16 @@ export async function montarResumoCompleto(apuracaoIcmsId: string): Promise<Resu
   });
   if (!apuracao) return null;
 
-  const [porSaidasComDebito, porEntradasComCredito] = await Promise.all([
-    apuracao.saidaApuracaoId ? somaIcms(apuracao.saidaApuracaoId, 'saida') : Promise.resolve(0),
-    apuracao.entradaApuracaoId ? somaIcms(apuracao.entradaApuracaoId, 'entrada') : Promise.resolve(0),
-  ]);
+  const origemSped = (apuracao.spedOrigem as OrigemSped | null) ?? null;
+  const [porSaidasComDebito, porEntradasComCredito] = origemSped
+    ? (() => {
+        const d = dadosApuracaoSped(origemSped);
+        return [d.porSaidasComDebito, d.porEntradasComCredito];
+      })()
+    : await Promise.all([
+        apuracao.saidaApuracaoId ? somaIcms(apuracao.saidaApuracaoId, 'saida') : Promise.resolve(0),
+        apuracao.entradaApuracaoId ? somaIcms(apuracao.entradaApuracaoId, 'entrada') : Promise.resolve(0),
+      ]);
 
   return calcularResumoApuracao({
     porSaidasComDebito,

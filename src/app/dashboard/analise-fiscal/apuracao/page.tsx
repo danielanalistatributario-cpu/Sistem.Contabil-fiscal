@@ -5,6 +5,8 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, History, Settings, BookOpenText } from 'lucide-react';
 import { canAccess, canAccessAnaliseFiscalConfig, type Role } from '@/lib/permissions';
+import ImportarSpedApuracao from '@/components/analise-fiscal/ImportarSpedApuracao';
+import type { OrigemSped } from '@/lib/efd-icms/para-apuracao';
 
 type Candidato = { id: string; periodo: string | null; fileName: string | null; processedAt: string; totalLinhas: number };
 
@@ -31,9 +33,21 @@ type Resumo = {
   saldoDevedor: number; deducoes: number; impostoARecolher: number; saldoCredorTransportar: number;
 };
 
+type SpedOrigemInfo = {
+  nomeArquivo: string;
+  codFin: string;
+  codVer: string;
+  assinadoEm: string | null;
+  hash: string | null;
+  temE110: boolean;
+  alertas: string[];
+  conferencia: { itens: { item: string; calculado: number; declarado: number; ok: boolean }[]; avisos: string[] };
+};
+
 type Detalhe = {
   id: string;
   periodo: string;
+  spedOrigem: SpedOrigemInfo | null;
   empresaAnalisadaNome: string | null;
   empresaAnalisadaCnpj: string | null;
   empresaAnalisadaUf: string | null;
@@ -78,6 +92,10 @@ function ApuracaoFiscalInner() {
   // Filial ativa é lida do seletor "Filial" no topo da aplicação (Topbar).
   const [currentEmpresaGrupoId, setCurrentEmpresaGrupoId] = useState<string | null>(null);
   const [temEmpresasGrupo, setTemEmpresasGrupo] = useState(false);
+  const [empresasGrupo, setEmpresasGrupo] = useState<{ id: string; nome: string; cnpj: string }[]>([]);
+  // origem dos dados da apuração: análises de Entradas/Saídas já validadas ou arquivo SPED Fiscal
+  const [origem, setOrigem] = useState<'analises' | 'sped'>('analises');
+  const [gerandoSped, setGerandoSped] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [candidatosEntrada, setCandidatosEntrada] = useState<Candidato[] | null>(null);
@@ -112,6 +130,7 @@ function ApuracaoFiscalInner() {
       if (res.ok) {
         const data = await res.json();
         setTemEmpresasGrupo((data.empresasGrupo || []).length > 0);
+        setEmpresasGrupo(data.empresasGrupo || []);
       }
     })();
   }, []);
@@ -197,6 +216,27 @@ function ApuracaoFiscalInner() {
     router.replace(`/dashboard/analise-fiscal/apuracao?apuracaoId=${data.id}`);
   }
 
+  async function handleGerarSped(origemSped: OrigemSped) {
+    setErro(null);
+    if (temEmpresasGrupo && !currentEmpresaGrupoId) {
+      setErro('Selecione a filial no topo da tela antes de continuar.');
+      return;
+    }
+    setGerandoSped(true);
+    const res = await fetch('/api/analise-fiscal/apuracao/sped', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origem: origemSped }),
+    });
+    const data = await res.json().catch(() => null);
+    setGerandoSped(false);
+    if (!res.ok) {
+      setErro(data?.error || 'Falha ao gerar a apuração a partir do SPED.');
+      return;
+    }
+    router.replace(`/dashboard/analise-fiscal/apuracao?apuracaoId=${data.id}`);
+  }
+
   function handleNovaApuracao() {
     setDetalhe(null);
     setDataBase('');
@@ -248,6 +288,8 @@ function ApuracaoFiscalInner() {
     setMsgSalvo('Salvo — totais recalculados.');
     setTimeout(() => setMsgSalvo(null), 3000);
   }
+
+  const filialAtiva = empresasGrupo.find((e) => e.id === currentEmpresaGrupoId) ?? null;
 
   const houveMudanca = useMemo(() => {
     if (!detalhe) return false;
@@ -316,6 +358,34 @@ function ApuracaoFiscalInner() {
       {!detalhe && !carregandoDetalhe && (
         <div className="card-surface p-5 space-y-4">
           <h2 className="font-display font-semibold text-brand text-sm">Parâmetros da apuração</h2>
+          <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+            <button
+              onClick={() => setOrigem('analises')}
+              className={`px-4 py-1.5 ${origem === 'analises' ? 'bg-brand text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Análises de Entradas e Saídas
+            </button>
+            <button
+              onClick={() => setOrigem('sped')}
+              className={`px-4 py-1.5 ${origem === 'sped' ? 'bg-brand text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Importar SPED Fiscal
+            </button>
+          </div>
+          {origem === 'sped' && (
+            <>
+              {temEmpresasGrupo && <p className="text-xs text-gray-500">A filial é a selecionada no topo da tela; o arquivo precisa ser do mesmo CNPJ.</p>}
+              {temEmpresasGrupo && !currentEmpresaGrupoId && <p className="text-xs text-gray-400">Selecione a filial no topo da tela pra liberar a geração.</p>}
+              <ImportarSpedApuracao
+                filialNome={filialAtiva?.nome ?? null}
+                filialCnpj={filialAtiva?.cnpj ?? null}
+                gerando={gerandoSped || (temEmpresasGrupo && !currentEmpresaGrupoId)}
+                onGerar={handleGerarSped}
+              />
+            </>
+          )}
+          {origem === 'analises' && (
+          <>
           <p className="text-xs text-gray-500">
             Mesma lógica da tela "Pergunte" do Protheus — escolha a Data Base antes de buscar os dados.
             {temEmpresasGrupo && ' A filial é a selecionada no topo da tela.'}
@@ -415,6 +485,8 @@ function ApuracaoFiscalInner() {
               </div>
             </div>
           )}
+          </>
+          )}
         </div>
       )}
 
@@ -423,6 +495,13 @@ function ApuracaoFiscalInner() {
       {detalhe && (
         <>
           <div className="card-surface p-4 text-xs text-gray-500 flex flex-wrap gap-x-6 gap-y-1">
+            {detalhe.spedOrigem ? (
+              <span>
+                📄 SPED Fiscal: {detalhe.spedOrigem.nomeArquivo} ({detalhe.spedOrigem.codFin === '1' ? 'retificadora' : 'original'}
+                {detalhe.spedOrigem.assinadoEm ? `, assinada em ${new Date(detalhe.spedOrigem.assinadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : ''})
+              </span>
+            ) : (
+            <>
             <span>
               📥 Entradas:{' '}
               {detalhe.entradaApuracao ? (
@@ -439,10 +518,14 @@ function ApuracaoFiscalInner() {
                 </Link>
               ) : 'sem vínculo'}
             </span>
+            </>
+            )}
             <a href={`/api/analise-fiscal/apuracao/${detalhe.id}/pdf`} target="_blank" rel="noopener noreferrer" className="ml-auto text-accent underline">
               Exportar PDF (Livro Fiscal)
             </a>
           </div>
+
+          {detalhe.spedOrigem && <PainelConferenciaSped info={detalhe.spedOrigem} />}
 
           {detalhe.registroEntradas && <TabelaCfop titulo="Entradas — ICMS por CFOP" registro={detalhe.registroEntradas} />}
           {detalhe.registroSaidas && <TabelaCfop titulo="Saídas — ICMS por CFOP" registro={detalhe.registroSaidas} />}
@@ -515,6 +598,50 @@ function ApuracaoFiscalInner() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Conferência da apuração gerada do SPED com o que o próprio arquivo declara (E110) + avisos do arquivo.
+function PainelConferenciaSped({ info }: { info: SpedOrigemInfo }) {
+  const divergentes = info.conferencia.itens.filter((i) => !i.ok);
+  return (
+    <div className="card-surface p-4 space-y-2 text-xs">
+      {info.temE110 ? (
+        divergentes.length === 0 ? (
+          <p className="text-teal font-medium">
+            ✔ Conferido com o E110 do arquivo: débitos, créditos, saldo devedor, imposto a recolher e saldo credor a transportar batem com o declarado.
+          </p>
+        ) : (
+          <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 space-y-1">
+            <p className="font-medium">Diferenças em relação ao E110 declarado no arquivo:</p>
+            <ul className="list-disc pl-5">
+              {divergentes.map((i) => (
+                <li key={i.item}>
+                  {i.item}: calculado {fmt(i.calculado)} · declarado {fmt(i.declarado)}
+                </li>
+              ))}
+            </ul>
+            <p className="text-amber-700">Se você editou lançamentos ou o saldo anterior, é esperado que o resumo se afaste do arquivo.</p>
+          </div>
+        )
+      ) : (
+        <p className="text-amber-800">O arquivo não tem a apuração do ICMS (E110): itens 001 e 005 usam o ICMS dos registros analíticos.</p>
+      )}
+      {info.alertas.length > 0 && (
+        <details className="text-gray-600">
+          <summary className="cursor-pointer text-gray-500">{info.alertas.length} aviso(s) do arquivo</summary>
+          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+            {info.alertas.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <p className="text-gray-400">
+        Tabelas por CFOP: Valores Contábeis = valor da operação (C190/D190); Base de Cálculo e ICMS direto do registro; Isentas/NT = operações com CST 30/40/41; Outras = valor da operação − base − isentas.
+        Todos os CFOPs do arquivo entram (sem a lista de exclusões usada nas análises do Protheus).
+      </p>
     </div>
   );
 }

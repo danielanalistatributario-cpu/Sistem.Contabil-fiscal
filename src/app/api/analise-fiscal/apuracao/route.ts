@@ -26,13 +26,15 @@ export async function GET() {
       empresaAnalisadaNome: true,
       empresaAnalisadaCnpj: true,
       empresaAnalisadaUf: true,
+      spedOrigem: true,
     },
   });
 
   const comSaldo = await Promise.all(
     apuracoes.map(async (a) => {
       const resumo = await montarResumoCompleto(a.id);
-      return { ...a, resumo };
+      const { spedOrigem, ...resto } = a;
+      return { ...resto, viaSped: !!spedOrigem, resumo };
     })
   );
 

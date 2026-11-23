@@ -3,12 +3,12 @@ import { prisma } from '@/lib/db';
 import { getSession, logActivity } from '@/lib/auth';
 import { canAccess } from '@/lib/permissions';
 import {
-  agregarIcmsPorCfop,
-  somaIcms,
+  carregarFontesApuracao,
   calcularResumoApuracao,
   type CategoriaLancamento,
   type LancamentoManual,
 } from '@/lib/analise-fiscal-icms-apuracao';
+import { conferirComE110 } from '@/lib/efd-icms/para-apuracao';
 
 async function carregarApuracao(id: string, companyId: string) {
   const apuracao = await prisma.analiseFiscalApuracaoIcms.findUnique({
@@ -25,12 +25,7 @@ async function carregarApuracao(id: string, companyId: string) {
 }
 
 async function montarDetalhe(apuracao: NonNullable<Awaited<ReturnType<typeof carregarApuracao>>>) {
-  const [registroEntradas, registroSaidas, porEntradasComCredito, porSaidasComDebito] = await Promise.all([
-    apuracao.entradaApuracaoId ? agregarIcmsPorCfop(apuracao.entradaApuracaoId, 'entrada') : null,
-    apuracao.saidaApuracaoId ? agregarIcmsPorCfop(apuracao.saidaApuracaoId, 'saida') : null,
-    apuracao.entradaApuracaoId ? somaIcms(apuracao.entradaApuracaoId, 'entrada') : 0,
-    apuracao.saidaApuracaoId ? somaIcms(apuracao.saidaApuracaoId, 'saida') : 0,
-  ]);
+  const { registroEntradas, registroSaidas, porEntradasComCredito, porSaidasComDebito, origemSped } = await carregarFontesApuracao(apuracao);
 
   const lancamentos: LancamentoManual[] = apuracao.lancamentos.map((l) => ({
     id: l.id,
@@ -47,9 +42,26 @@ async function montarDetalhe(apuracao: NonNullable<Awaited<ReturnType<typeof car
     saldoCredorAnterior: apuracao.saldoCredorAnterior,
   });
 
+  const spedOrigem = origemSped
+    ? {
+        nomeArquivo: origemSped.resumo.nomeArquivo,
+        codFin: origemSped.resumo.codFin,
+        codVer: origemSped.resumo.codVer,
+        assinadoEm: origemSped.assinadoEm,
+        hash: origemSped.hash,
+        temE110: !!origemSped.resumo.apuracao.e110,
+        alertas: origemSped.resumo.alertas.filter((a) => a.nivel !== 'info').map((a) => a.mensagem),
+        conferencia: conferirComE110(origemSped, resumo, {
+          saidasIcms: registroSaidas?.totais.valorIcms ?? 0,
+          entradasIcms: registroEntradas?.totais.valorIcms ?? 0,
+        }),
+      }
+    : null;
+
   return {
     id: apuracao.id,
     periodo: apuracao.periodo,
+    spedOrigem,
     empresaAnalisadaNome: apuracao.empresaAnalisadaNome,
     empresaAnalisadaCnpj: apuracao.empresaAnalisadaCnpj,
     empresaAnalisadaUf: apuracao.empresaAnalisadaUf,

@@ -1019,6 +1019,10 @@ model AnaliseFiscalApuracaoIcms {
   empresaAnalisadaNome String?
   empresaAnalisadaCnpj String?
   empresaAnalisadaUf   String?
+  // Apuração gerada a partir de um arquivo SPED Fiscal (EFD ICMS/IPI) importado no navegador: guarda só o
+  // resumo mensal (OrigemSped em lib/efd-icms/para-apuracao.ts, poucos KB) — o arquivo não é gravado.
+  // Quando presente, as tabelas por CFOP e os itens 001/005 vêm daqui em vez das análises de Entradas/Saídas.
+  spedOrigem          Json?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   company             Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)

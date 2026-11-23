@@ -10,6 +10,7 @@ type ApuracaoResumo = {
   createdAt: string;
   entradaApuracaoId: string | null;
   saidaApuracaoId: string | null;
+  viaSped?: boolean;
   empresaAnalisadaNome: string | null;
   empresaAnalisadaCnpj: string | null;
   empresaAnalisadaUf: string | null;
@@ -81,10 +82,13 @@ export default function HistoricoApuracaoFiscalPage() {
                       {a.empresaAnalisadaNome} ({a.empresaAnalisadaUf})
                     </span>
                   )}
-                  {!a.entradaApuracaoId && (
+                  {a.viaSped && (
+                    <span className="ml-2 text-[10px] bg-sky-100 text-sky-800 rounded-full px-2 py-0.5">SPED Fiscal</span>
+                  )}
+                  {!a.viaSped && !a.entradaApuracaoId && (
                     <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">sem Entradas</span>
                   )}
-                  {!a.saidaApuracaoId && (
+                  {!a.viaSped && !a.saidaApuracaoId && (
                     <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">sem Saídas</span>
                   )}
                   {a.resumo && a.resumo.impostoARecolher > 0 && (
